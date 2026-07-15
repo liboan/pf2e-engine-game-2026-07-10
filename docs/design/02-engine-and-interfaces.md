@@ -14,18 +14,18 @@ client -> focused query -> typed command -> engine -> result + compact delta
                                   rule modules  geometry
 ```
 
-- The **compiler** type-checks content, resolves references, derives capability dependencies, and produces immutable definitions. It does not resolve PF2e rules.
+- The **compiler** type-checks content, resolves references, derives dependencies, and emits immutable definitions. It does not resolve PF2e rules.
 - The **engine** owns legality, timing, rule procedures, transactions, and canonical encounter state. It knows PF2e concepts but never selects behavior by creature or encounter identity.
 - **Rule modules** implement bounded exceptional behavior through a sealed interface.
 - The **geometry component** answers pure spatial questions under a declared geometry capability.
 - The **service API** owns encounter identity, revisions, retries, persistence, and projections. It contains no rule calculations.
 - The **client** collects intent and displays choices, events, and state. It does not infer legality.
 
-Rules and packaging are defined in [01-rules-and-content.md](01-rules-and-content.md). Evidence and budgets are defined in [03-verification-strategy.md](03-verification-strategy.md) and [04-performance-and-observability.md](04-performance-and-observability.md).
+Rules and packaging: [01](01-rules-and-content.md). Evidence: [03](03-verification-strategy.md). Budgets: [04](04-performance-and-observability.md).
 
 ## Canonical state
 
-Canonical encounter state contains only facts needed to continue play:
+Canonical state stores only facts needed to continue play:
 
 - exact rules profile, content, compiler, and module versions;
 - stable instances referencing immutable definitions;
@@ -33,40 +33,40 @@ Canonical encounter state contains only facts needed to continue play:
 - current revision and any suspended resolution stack;
 - deterministic random-provider identity, version, and exact position or state.
 
-Definitions, projections, action menus, caches, traces, and source prose are not copied into state. Every actor, item, effect, hazard, and area is a typed instance rather than a loosely shaped dictionary.
+Definitions, projections, menus, caches, traces, and source prose are not copied into state. Actors, items, effects, hazards, and areas are typed instances, not loose dictionaries.
 
-Checks and modifiers, ordered damage stages, effects and durations, targeting, movement, and resource costs are engine-owned procedures. A narrow first release may support only some variants, but it cannot replace these with content-shaped shortcuts.
+Checks, modifier and damage stages, effects, durations, targeting, movement, and costs are engine procedures. Stride, Step, and Strike are core engine code—not declarative definitions or rule modules. Plans may invoke registered symbols with immutable weapon or Strike profiles; content cannot redefine their semantics. Narrow releases may support fewer variants, never content-shaped shortcuts.
 
 ## Commands and closed outcomes
 
-A command carries intent, a unique command ID, expected revision, acting subject, and typed inputs. Clients submit choices and proposed paths, never calculated outcomes.
+A command carries intent, unique ID, expected revision, acting subject, and typed inputs. Clients submit choices and paths, never outcomes.
 
 Every command returns exactly one public outcome:
 
 - **Committed:** resolution completed; returns the new revision, rules events, and state delta.
-- **Suspended:** a legal prefix committed and resolution now needs a typed choice, roll, or reaction; returns the new revision, committed events and delta, an opaque continuation ID, and one focused prompt.
+- **Suspended:** a legal prefix committed and needs a typed choice, roll, or reaction; returns its revision, events, delta, continuation ID, and one prompt.
 - **Rejected:** understood but illegal, unavailable, stale, or malformed; returns the unchanged revision and a stable reason code.
 - **Unsupported:** the requested semantics are outside the loaded support boundary; returns the unchanged revision and missing capability details.
 
-Rejected and unsupported commands never mutate state. Suspension is different: PF2e may spend a cost or complete movement before a reaction or later choice. Those completed steps are canonical, the revision advances, and a typed resolution frame records only what remains. The client must not treat suspension as rollback.
+Rejected and unsupported commands never mutate state. Suspension may follow a spent cost or completed movement. That prefix is canonical, the revision advances, and a typed frame records only the remainder; suspension is not rollback.
 
-An invariant violation is not a fifth rules outcome. The service publishes nothing, records a diagnostic, and marks the encounter for investigation.
+An invariant violation is not a fifth outcome. The service publishes nothing, records a diagnostic, and marks the encounter for investigation.
 
-Each dispatch is transactional between commit points: it publishes its whole journal and suspended frame or nothing. Mandatory unsupported content is caught at load; finding it after a committed prefix is an invariant failure.
+Between commit points, a dispatch publishes its whole journal and suspended frame or nothing. Mandatory unsupported content is caught at load; finding it after a committed prefix is an invariant failure.
 
-A continuation response supplies a new command ID, expected revision, continuation ID, and only the requested input. Continuations are revision-bound, one-use, and validated against the stored frame. Save/restore preserves them exactly.
+A continuation supplies a new command ID, expected revision, continuation ID, and requested input. It is revision-bound, one-use, frame-validated, and preserved exactly by save/restore.
 
 ## Randomness
 
-The engine issues typed random requests with request ID, rules purpose such as attack check, save, damage, or flat check, dice expression, and frame reference. Provider consumption is journaled: it advances only when outcome and receipt commit. Rejection or invariant abort consumes nothing; suspension commits only draws in its committed prefix. Tests may supply exact typed results. Save/restore preserves provider identity and position; receipt-based retry never draws again.
+The engine issues typed random requests with ID, purpose, dice expression, and frame. The provider advances only with a committed outcome and receipt. Rejection or invariant abort consumes nothing; suspension consumes only committed-prefix draws. Tests may supply typed results. Save/restore preserves provider identity and position; receipt retry never redraws.
 
 ## Resolution frames and timing
 
 A resolution frame names its procedure and version, source and targets, current step, completed commit points, remaining typed plan, consulted inputs, and parent frame. Frames contain no executable closures or unrestricted module state, so they serialize deterministically.
 
-Rules expose named moments such as action proposed, movement segment entered, check result proposed, damage about to apply, effect expiring, and turn ending. Each moment defines allowed contributions and ordering. Registration order and string matching never decide PF2e timing.
+### `MomentSpec` contract
 
-After a child frame resolves, its parent revalidates assumptions that could have changed: target availability, position, reach, remaining movement, resources, and cancellation state.
+A `MomentSpec` is an engine-owned, named, versioned, reaction-neutral phase contract. It declares one closed immutable input type, its allowed output union and callable engine operations, deterministic ordering, and whether its facts are provisional or committed. Provisional facts are projections: evaluation cannot publish them. The engine validates outputs and publishes only at the spec's commit point. When a child may intervene, the spec also names the parent facts and cancellation status that the parent must re-read after the child commits, plus the closed revalidation outcomes allowed before continuing; revalidation never rolls back a committed child. Trigger discovery is one consumer. Examples include action proposed, movement segment entered, check result proposed, damage pending, effect expiring, and turn ending. Registration order and string matching never decide timing.
 
 ## Rule-module contract
 
@@ -82,21 +82,15 @@ Each named moment exposes its own closed subset. Modifier collection accepts onl
 
 Modules receive opaque instance references plus typed facts such as traits, size, position, and resources. They may carry a reference into an operation or compare references for a rule relationship such as source equals target. They cannot inspect names or raw IDs, or select behavior because a particular instance or definition ID matches. They also cannot mutate state, choose randomness, read files or networks, or use wall-clock time.
 
-Initial modules are trusted first-party code compiled into the service and selected from a fixed registry; there is no runtime loading or uploaded code. Each declares exact moment and capability dependencies and receives only those typed interfaces. The build compares linked capability symbols with the declaration; registration and contract tests reject unavailable dependencies or disallowed results.
+Initial modules are trusted first-party code outside the core engine and injected from a fixed build registry; there is no runtime loading or uploaded code. An external versioned descriptor binds the exact module artifact digest to reviewed authority and its allowed engine interface. Checks reject undeclared imports, dependencies, symbols, moments, capabilities, or results. Descriptor and acyclic evidence details are in [Content format and rule-module detail](details/content-format-and-rule-modules.md#module-authority-descriptor-and-evaluation).
 
 ## Reaction resolution
 
-The engine, not individual reaction modules, owns this algorithm:
+Trigger windows consume `MomentSpec` inputs; they never define moments. The engine, not modules, owns stable offers, ordering, action accounting, child frames, and parent revalidation. Reactions and triggered free actions share the mechanism but retain typed action kinds. Each offer declares resource claims and a per-creature response claim: triggered free actions spend no standard reaction, while either kind consumes the right to one response to that trigger.
 
-1. Enter a named trigger moment with its cause, subjects, current commit boundary, and stable window ID.
-2. Ask registered modules for typed trigger declarations; validate current eligibility and reaction resources.
-3. Give every offer a stable ID derived from its window, trigger, reacting instance, and module; order eligible offers using the rules profile's timing and tie policy. If a player or GM must choose, suspend with one focused prompt.
-4. Record pass or selection against that window so the same offer is not repeated. On selection, resolve the reaction as a child frame and spend its resource at the source-defined commit point.
-5. Resolve any nested windows in stack order, then commit the child result.
-6. Recompute eligibility from canonical state and revalidate the parent after every child.
-7. Resume, modify, or cancel the parent; close the moment when no eligible offer remains.
+Every choice or pass commits a serializable decision scope, and every selected child resolves on the stored frame stack. A committed child is never rolled back; the parent recomputes eligibility and receives only a closed revalidation result. Profile policies own simultaneous ordering, choice ownership, same-trigger equivalence, and the reviewed nesting bound. Registration order is never a fallback. Repeated cycle signatures, inconsistent offer reuse, or an exceeded bound abort only the unpublished journal of the current dispatch and never revert an earlier published prefix.
 
-The profile must define simultaneous-trigger ordering and when choice belongs to a player or GM. Module registration order is never a fallback. The engine tracks a signature of parent step, window kind, rules-relevant state, and ordered eligible offer IDs. Repeating a signature, reusing an offer ID inconsistently, or exceeding the reviewed nesting bound is an engine invariant failure: abort the current dispatch without publishing its journal and surface a diagnostic. Never skip a legal reaction or break a loop silently. This algorithm is tested at every suspension and restoration boundary.
+The fixed offer, accounting, frame, ordering, and verification shapes are in [Reaction resolution detail](details/reaction-resolution.md), which separates approved architecture direction from PF2e timing questions marked **UNSETTLED—HUMAN REVIEW REQUIRED**.
 
 ## Geometry boundary
 

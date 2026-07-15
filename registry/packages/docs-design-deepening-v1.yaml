@@ -1,0 +1,65 @@
+schema: pf2e-successor-work-package.v1
+
+id: docs-design-deepening-v1
+state: verify
+type: documentation
+evidence_risk_tier: not-a-capability-claim
+operational_risk:
+  level: low
+  reason: Documentation-only clarification of proposed contracts; no runtime exists.
+support_promotion_requested: false
+owner: codex-root-coordinator
+independent_verifier: context-free-review-agents
+base_commit: fa8e89d3b73373918d6a2a5727da1cd030673cb7
+dependencies: []
+return_state_if_blocked: proposed
+
+result: >-
+  Deepen the proposed reaction, behavior-inventory, definition/package, content-format,
+  rule-module, model-routing, and registry designs with source-grounded examples and
+  independent coherence review.
+
+in_scope:
+  - Add linked companion design documents for reactions, behavior inventories, definitions/packages, and declarative content/rule modules.
+  - Record the product owner's approved reaction architecture principles and unresolved human-review questions.
+  - Replace placeholder model families with exact Codex model slugs and supported reasoning settings available on 2026-07-15.
+  - Append a compact illustrative registry example without making support claims.
+
+out_of_scope:
+  - Engine, compiler, service, client, content-package, schema implementation, or generated artifacts.
+  - Approval of unresolved reaction or PF2e oracle decisions.
+  - Creation of a supported rules profile, capability, definition, or encounter.
+
+allowed_files:
+  - STATUS.md
+  - docs/design/01-rules-and-content.md
+  - docs/design/02-engine-and-interfaces.md
+  - docs/design/03-verification-strategy.md
+  - docs/design/05-codex-delivery.md
+  - docs/design/details/
+  - registry/README.md
+  - registry/project.yaml
+  - registry/packages/docs-design-deepening-v1.yaml
+
+selected_gates:
+  - id: links-and-structure
+    evidence_owner: codex-root-coordinator
+    result: pass
+  - id: source-grounding-and-boundary
+    evidence_owner: context-free-write-agents
+    result: pass
+  - id: independent-coherence-review
+    evidence_owner: context-free-review-agents
+    result: pass
+  - id: current-model-slug-verification
+    evidence_owner: codex-root-coordinator
+    result: pass
+  - id: bloat-and-duplication-review
+    evidence_owner: context-free-review-agents
+    result: pass
+
+stop_conditions:
+  - A proposed example silently becomes an approved rules oracle or support claim.
+  - A companion document contradicts the owning numbered design chapter.
+  - Source-grounded examples require an unresolved PF2e interpretation to be presented as settled.
+  - Model identifiers cannot be verified against the current Codex thread-creation capability.

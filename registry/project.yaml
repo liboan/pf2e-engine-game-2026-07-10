@@ -41,6 +41,9 @@ vocabularies:
     - candidate
     - supported
     - retired
+  behavior_inventory_subject_kind:
+    - definition
+    - core-procedure
   evidence_dimensions:
     - source-reviewed
     - isolated
@@ -54,8 +57,9 @@ vocabularies:
 routes:
   rules_profiles: registry/rules-profiles/
   source_records: registry/source-records/
+  core_procedures: registry/core-procedures/
   oracles: registry/oracles/
-  behavior_inventory_template: registry/definitions/{definition_id}/behavior-inventory.yaml
+  behavior_inventories: registry/behavior-inventories/{inventory_id}.yaml
   capability_support: registry/capabilities/
   packages: registry/packages/
   live_ledger: registry/project.yaml#/live_ledger
@@ -78,10 +82,12 @@ record_shapes:
 indexes:
   rules_profiles: []
   source_records: []
+  core_procedures: []
   oracles: []
   behavior_inventories: []
   capabilities: []
-  packages: []
+  packages:
+    - docs-design-deepening-v1
   approvals: []
   durable_evidence_manifests: []
   verifier_holdouts: []
@@ -90,12 +96,19 @@ live_ledger:
   integration_commit: null
   rules_profile_id: null
   production_package_ids: []
-  work_packages: []
+  work_packages:
+    - id: docs-design-deepening-v1
+      owner: codex-root-coordinator
+      state: verify
+      dependency_ids: []
+      base_commit: fa8e89d3b73373918d6a2a5727da1cd030673cb7
+      record: registry/packages/docs-design-deepening-v1.yaml
 
 production_gate:
   allowed_definition_lifecycle:
     - supported
   require_closed_behavior_inventory: true
+  require_closed_core_procedure_inventories: true
   forbidden_clause_dispositions:
     - unsupported
   require_exact_profile_content_module_and_approval_digests: true

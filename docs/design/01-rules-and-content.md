@@ -6,13 +6,13 @@
 
 ## Purpose
 
-The simulator claims fidelity only against a frozen rules profile and a reviewed inventory of what each content definition requires. Common behavior is composed from a small data format. Exceptional printed behavior uses restricted typed modules. Content loads as playable only when every mandatory rule clause is accounted for.
+The simulator claims fidelity only against a frozen rules profile and a reviewed inventory of what each rules subject requires. Universal procedures are typed engine behavior; common printed content composes them through a small data format, while bounded printed exceptions use restricted typed modules. Content loads as playable only when every mandatory rule clause is accounted for.
 
 The product promise is in [00-product-charter.md](00-product-charter.md); execution boundaries are in [02-engine-and-interfaces.md](02-engine-and-interfaces.md); evidence obligations are in [03-verification-strategy.md](03-verification-strategy.md). Canonical record routes and vocabularies are in the [project registry](../../registry/README.md).
 
 ## Rules-profile gate
 
-Archives of Nethys (AoN) is the sole working rules authority for this private tool. The initial profile uses AoN as retrieved through **2026-07-10**. It does not reconcile AoN against PDFs, printings, or a separate Paizo errata stream. A later retrieval that changes rules-bearing facts creates a new profile.
+Archives of Nethys (AoN) is the sole working rules authority for this private tool. The initial profile uses AoN as retrieved through **2026-07-10**. It does not reconcile AoN against PDFs, printings, or a separate Paizo errata stream.
 
 The initial Remaster content allowlist is:
 
@@ -23,9 +23,9 @@ The initial Remaster content allowlist is:
 
 This allowlist controls imported player, creature, item, spell, feat, and similar content. Core encounter procedures may be sourced from other AoN pages when they are required to execute allowlisted content. Record each such dependency, but do not treat this as permission for a bulk *GM Core* or general-catalog import.
 
-Legacy rules and content are outside the initial profile. A later decision may add them only through a separate profile; they are never mixed into the Remaster profile as silent fallbacks.
+Legacy rules and content are outside the initial profile and are never mixed into it as silent fallbacks. Adding them is outside this design and requires a new human source-policy decision.
 
-No PF2e definition becomes supported until the exact profile is approved. Provisional rules code may be developed as a candidate when its unresolved assumptions remain explicit.
+No definition is supported and no core procedure enters production before exact profile approval. Candidate rules code may proceed only with explicit unresolved assumptions.
 
 The approved immutable profile record contains:
 
@@ -38,9 +38,9 @@ The approved immutable profile record contains:
 - private-use boundary;
 - approval entry ID.
 
-Changing the retrieval cutoff or any rules-bearing field creates a new profile. Saved games and compiled packages retain the old profile ID; migration is explicit.
+Accepted profile bytes are immutable and always referenced by exact ID and digest. A candidate correction replaces the candidate record; correcting an accepted record requires an explicitly reviewed replacement. Nothing silently mutates or follows later AoN changes. Any future source-policy change is outside this design and requires a new human decision.
 
-Foundry PF2e data may be used as an optional engineering cross-check for identifiers, structure, or coverage. It is never required, never rules authority, and never changes an expected result that differs from AoN.
+Foundry PF2e data is an optional engineering cross-check for identifiers, structure, or coverage. It is neither required nor rules authority and cannot change an AoN result.
 
 ## Ambiguity and GM judgment
 
@@ -52,7 +52,7 @@ When resolution depends on unbounded narrative judgment, the engine either suspe
 
 ## Source records
 
-Every executable definition and reusable capability points to a compact source record. It stores facts needed to reproduce a decision:
+Every executable definition, engine-owned core procedure, and reusable capability points to a compact source record. It stores facts needed to reproduce a decision:
 
 - rules profile and stable record ID;
 - exact AoN URL, page title or kind, and numeric AoN ID when available;
@@ -66,38 +66,44 @@ Quote only the minimum text necessary to resolve ambiguity. Do not store researc
 
 ## Independent behavior inventories
 
+See [Behavior inventory contract](details/behavior-inventories.md) for the fixed record shape, reconciliation algorithm, and immutability rules; this companion is subordinate to this section and approves no profile, inventory, oracle, or support claim.
+
 A content package cannot certify itself by listing only the capabilities its implementation happens to use.
 
 Before implementation, a rules reader creates a **behavior inventory** from the source record. Each material clause receives exactly one disposition:
 
-- `mapped` — implemented by a named capability and exact version or by a named unique rule module;
+- `mapped` — implemented by an exact core procedure or its semantic key, capability, or unique rule module;
 - `non-executable` — presentation text with no rules behavior;
 - `excluded` — deliberately outside the supported use and made mechanically unavailable; or
 - `unsupported` — required behavior is missing, which blocks playable status.
 
-The implementer separately writes the executable definition. The compiler derives dependencies from the constructs and module references it actually compiles; it does not trust a hand-written `requires` list. Promotion requires an independent verifier to reconcile the reviewed `mapped` clauses, compiler-derived dependencies, and tests. Any mismatch or approximation fails the gate.
+Definitions map clauses to exact core-procedure, capability, or module dependencies. Core-procedure inventories instead map each clause to a versioned semantic key in that procedure; its build binds every key to code and separately derives lower-level dependencies. Neither path accepts authored `requires`. Independent review reconciles mappings, manifests, and tests; mismatch or approximation fails.
 
-Inventory and executable definition have separate digests and approval entries. A compiler or model may suggest an inventory, but cannot approve the inventory it will later satisfy.
+Inventory and its implementation have separate digests and approval entries. A compiler or model may suggest an inventory, but cannot approve the inventory it will later satisfy.
 
 An inventory is **closed** only when every source clause has one disposition, every `mapped` clause reconciles, every `excluded` clause is enforced and disclosed, and no clause is `unsupported`. “The scripted encounter never chooses it” is not an exclusion.
 
 ## Definitions, instances, and packages
 
-A **definition** is immutable content such as a Strike profile, spell, feat, creature, hazard, item, or rule module. An **instance** is mutable encounter state such as current HP, position, resources, conditions, and ownership. Test fixtures may create and place instances; they may not redefine rule meaning.
+See [Definitions, instances, and packages](details/definitions-instances-packages.md) for the package, loading, and save-reference contract; this companion is subordinate to this section and its source-grounded examples remain candidate-only.
+
+A **definition** is immutable content such as an attack profile, spell, feat, creature, hazard, item, or module configuration. An **instance** is mutable encounter state such as current HP, position, resources, conditions, and ownership. Test fixtures may create and place instances; they may not redefine rule meaning.
 
 Ship definitions in small versioned packages containing:
 
 - rules-profile, source-record, and inventory digests;
 - immutable definition IDs and content digests;
 - compiler-derived capability dependencies;
-- registered module IDs and versions;
+- registered module IDs, versions, and digests;
 - definition lifecycle and allowed use cases.
 
-Every executable definition has one lifecycle: `candidate`, `supported`, or `retired`. A `candidate` may run only in verification. Production loads only `supported` definitions with closed inventories. A `retired` definition cannot start or join production play; saved-game handling requires an explicit migration. Packages reference approval entry IDs rather than copying reviewer names and dates into every definition.
+Every executable definition has one lifecycle: `candidate`, `supported`, or `retired`. A `candidate` may run only in verification. Production loads only `supported` definitions with closed inventories. A `retired` definition cannot start or join production play; saved-game handling requires an explicit migration. Packages bind exact prerequisite-approval IDs and digests rather than copying reviewer names and dates into every definition; promotion approval remains an external registry join to the integrated package digest.
 
 At load time, verify schema and profile compatibility, exact references, module availability, inventory closure, definition lifecycle, and definition digests. Any `unsupported` clause or non-`supported` definition blocks production launch with a precise report.
 
 ## Small data format and typed modules
+
+See [Content format and rule-module detail](details/content-format-and-rule-modules.md) for the proposed closed YAML, compiler, fixed-registry, and typed-module shapes; this section remains authoritative and the companion approves no operation, module, definition, or support claim.
 
 The declarative format is deliberately closed. It may compose engine-owned operations for:
 
@@ -110,7 +116,9 @@ The declarative format is deliberately closed. It may compose engine-owned opera
 
 The compiler parses, type-checks, resolves references, and emits compact immutable definitions. It does not implement PF2e procedures, accept arbitrary callbacks, or grow loops and unrestricted mutation.
 
-Printed behavior that does not fit cleanly becomes a source-cited typed rule module written in normal code. A module observes named engine moments and returns only the closed result types defined in [02-engine-and-interfaces.md](02-engine-and-interfaces.md). It cannot mutate state directly, select randomness, access files or networks, use wall-clock time, or select behavior by inspecting a name or raw identifier.
+Stride, Step, Strike, and other universal rules procedures are typed, engine-owned core procedures. They are neither DSL-authored definitions nor typed rule modules. Content may supply immutable profiles or configuration, and a closed plan may invoke a fixed compiler-known core-procedure symbol such as `core.stride@1`; content cannot define, override, or replace that symbol's semantics.
+
+Bounded printed exceptions that do not fit cleanly become source-cited typed rule modules written in normal code. A module observes named engine moments and returns only the closed result types defined in [02-engine-and-interfaces.md](02-engine-and-interfaces.md). It cannot mutate state directly, select randomness, access files or networks, use wall-clock time, or select behavior by inspecting a name or raw identifier.
 
 A unique ability may remain unique. Generalize only after unrelated printed consumers demonstrate the same rule concept. Similar wording is not enough.
 
@@ -121,7 +129,7 @@ Adopt one capability-sized slice at a time:
 1. Approve its source record, interpretation, behavior inventory, and risk tier.
 2. Select unlike published adopters and any required independent holdout.
 3. Implement the smallest primitive, declarative construct, or typed module.
-4. Reconcile compiler-derived dependencies with the inventory.
+4. Reconcile the subject-specific implementation manifest with the inventory.
 5. Pass the required conformance, transformation, save/resume, continuous-play, and performance evidence.
 6. Move only the proven definition use cases from `candidate` to `supported`; retain explicit `excluded` clauses.
 

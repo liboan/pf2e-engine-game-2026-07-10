@@ -83,6 +83,10 @@ Use the smallest combination that satisfies the assigned tier.
 
 **Continuation matrices** exercise every response: choose, pass, invalid input, stale revision, save before response, restore and answer, retry the same command ID, and nested suspension where supported. They also distinguish same-identity crash recovery from loading a snapshot as a new encounter identity. Committed prefixes and random draws must execute exactly once.
 
+### Foundational contract matrices
+
+The required Tier 3 matrices live with the subordinate [reaction contract](details/reaction-resolution.md#verification-matrix) and [content boundary](details/content-format-and-rule-modules.md#verification-matrix). They cover accounting, suspension, retry, no rollback, revalidation, cycles, strict compilation, dependency reconciliation, identity independence, module sealing, the fixed registry, and production rejection. They add obligations without approving an example or unsettled oracle answer.
+
 ## Encounter portfolio
 
 The walking skeleton in [00-product-charter.md](00-product-charter.md) proves the product path with only single-cell actors, clear or blocked cells, adjacency, and basic submitted paths. The later semantic-stress portfolio adds short authentic sentinels for an interrupting reaction; a spell or duration boundary; footprints, obstacles, reach, terrain, and areas as they enter scope; a basic-save area effect; and a specialized printed ability when introduced.

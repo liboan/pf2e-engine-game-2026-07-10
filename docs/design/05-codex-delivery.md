@@ -66,14 +66,18 @@ Parallelize source extraction, independent holdout design, disjoint rule modules
 
 Choose the least expensive route that reliably passes the package gate:
 
-| Work | Starting route |
-| --- | --- |
-| Architecture, ambiguous PF2e interpretation, cross-system failures, adversarial design review | **Sol or GPT-5.6, high reasoning** |
-| Normal implementation, focused debugging, integration synthesis, substantive code review | **GPT-5.6, medium reasoning** |
-| Bounded extraction, test execution, structured comparison, simple coordination | **Terra, low or medium reasoning** |
-| Deterministic clerical work such as formatting or exact renames | **Luna, low reasoning, only if available**; otherwise Terra low |
+| Work | Model slug | Starting reasoning effort |
+| --- | --- | --- |
+| Architecture, ambiguous PF2e interpretation, cross-system failures, adversarial design review | `gpt-5.6-sol` | `high` |
+| Normal implementation, focused debugging, integration synthesis, substantive code review | `gpt-5.6-terra` | `medium` |
+| Bounded extraction, test execution, structured comparison, simple coordination | `gpt-5.6-terra` | `low` |
+| Deterministic clerical work such as formatting or exact renames | `gpt-5.6-luna` | `low` |
 
-Do not use Luna for rule interpretation or code judgment. Escalate after evidence of a missed source, unstable design, repeated test error, unresolved interaction, or weak review—not merely because the package is important. Model availability can vary; preserve the role and reasoning standard if a named model is unavailable.
+**Availability snapshot (2026-07-15):** the callable new-task schema on this host offered `gpt-5.6-sol` and `gpt-5.6-terra` with efforts `{low, medium, high, xhigh, max, ultra}`; `gpt-5.6-luna` with efforts `{low, medium, high, xhigh, max}`; and `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.3-codex-spark` with efforts `{low, medium, high, xhigh}`. This is an availability note, not a permanent contract. Immediately before launch, the coordinator must revalidate both the exact slug and effort against the current `create_thread` schema; if either is unavailable, stop and update the routing record rather than guessing a replacement.
+
+This table applies only when a coordinator creates a new durable task through a `create_thread` interface that accepts model and reasoning selections. The current collaboration `spawn_agent` interface exposes neither selection, so a subagent cannot choose or switch to another route; sending a later message also does not apply this table retroactively.
+
+Do not use `gpt-5.6-luna` for rule interpretation or code judgment. Escalate after evidence of a missed source, unstable design, repeated test error, unresolved interaction, or weak review—not merely because the package is important.
 
 ## Branches, reviews, and integration
 

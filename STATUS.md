@@ -1,13 +1,13 @@
 # Project status
 
-**Updated:** 2026-07-10  
+**Updated:** 2026-07-15
 **State:** Design baseline only; implementation has not begun.
 
 ## Current values
 
 - Accepted rules profiles: **0**
 - Supported capabilities, content definitions, and encounters: **0**
-- Packages in `active` or `verify`: **0**
+- Packages in `active` or `verify`: **1** (`docs-design-deepening-v1` in `verify`)
 - Packages `merged` or `support-accepted`: **0**
 - Executable engine, public API, client, and benchmark baseline: **none**
 
