@@ -13,7 +13,7 @@ source-backed definition -> minimal compiler -> engine -> save/resume
 -> public API -> headless client -> inspectors and benchmarks -> encounter conclusion
 ```
 
-Use authentic definitions under the selected rules profile. The slice needs only initiative, the three-action economy, Step or Stride, Strike, multiple attack penalty, typed damage, Hit Points, and defeat. Actors occupy one cell. The map distinguishes only clear and blocked cells, tests adjacency, and validates a basic submitted path; it has no larger footprints, reach, terrain costs, area shapes, or obstacle objects. Deterministic rolls and choices make it replayable. A minimal command-line or plain web client is enough, but it must use the same API intended for later play.
+Use authentic definitions under the selected rules profile. The slice needs only initiative, the three-action economy, Step or Stride, Strike, multiple attack penalty, typed damage, Hit Points, and defeat. Its scene binds immutable topology bytes by digest. The general spatial contract does not assume one-cell, land-only, flat-world play, but this first capability supports only one-cell actors, clear or blocked cells, adjacency, and a basic submitted path. Other variants fail closed. Deterministic rolls and choices make it replayable. A minimal command-line or plain web client is enough, but it must use the same API intended for later play.
 
 The skeleton also includes revisions, distinct `rejected` and `unsupported` results, atomic state changes, one intentional committed suspension saved and restored before continuation, focused inspection, and latency and payload measurement. Unknown required behavior blocks launch. It does not include a broad catalog, general expression language, specialized ability framework, polished UI, or compatibility with the predecessor.
 
@@ -25,9 +25,17 @@ The rationale for this order comes from [predecessor lessons](../lessons/predece
 
 Milestones are dependency gates, not calendar estimates. Each milestone is implemented through the package state machine in [05-codex-delivery.md](05-codex-delivery.md).
 
+### 0. Foundational rules contracts
+
+**Design:** Approve four small contracts before runtime work: a transitive semantic-closure graph; typed grants, claims, and commit receipts; a shared frame/choice/revalidation protocol used by separate engine-owned staged procedures; and immutable scene plus spatial/information boundaries. Define only the walking-skeleton variants of action accounting, checks/degrees, damage/healing, health transition, and scene identity. Design the broader spatial interface now, but do not implement unsupported geometry.
+
+**Exit:** Stress probes S01–S06 in the [rules/design review](details/rules-design-stress-test.md#appendix-a-reproducible-scenario-index) trace unambiguously through compilation, canonical state, frames, save/retry, API projection, and evidence. The DSL supplies data and invokes registered procedures; it does not define stage order, accounting, geometry algorithms, or mutation. Modules remain bounded contributors at named moments.
+
+**Stop or redesign:** A generic rule interpreter, arbitrary resource map, identity dispatch, module-owned transaction, or content-authored phase order is required.
+
 ### 1. Walking skeleton
 
-**Build:** Approve the rules profile and a few oracle cases; create the isolated repository; choose language and package layout; implement the path above; add a benchmark harness and tiered CI.
+**Build:** Approve the rules profile and selected oracle cases; implement the approved v1 contracts through the path above; add a local benchmark and evidence harness.
 
 **Exit:** One encounter starts legally and reaches its declared conclusion only through public commands. Clear, blocked, adjacent, and basic submitted-path cases behave as reviewed. Direct-engine and API results match. Rejected commands do not mutate state. Save/restore preserves the outcome. Default responses and normal commands meet provisional budgets.
 
@@ -35,7 +43,7 @@ Milestones are dependency gates, not calendar estimates. Each milestone is imple
 
 ### 2. Prove reuse and stabilize the core
 
-**Build:** Test the walking-skeleton capabilities against a second structurally different adopter, an interaction adopter, and a verifier-held published holdout. Harden immutable definitions versus mutable instances, ordered checks and damage, transaction boundaries, exact version/digest records, and focused state inspectors.
+**Build:** Test the walking-skeleton capabilities against a second structurally different adopter, an interaction adopter, and a verifier-held published holdout. Harden immutable definitions versus mutable instances, the approved staged procedures and transaction boundaries, exact version/digest records, and focused state inspectors.
 
 **Exit:** Renaming, reordering, changed speed/path length/damage, property tests, and deliberate rules mutations catch plausible overfitting. Adding already-covered content changes definitions and tests, not engine, API, or client rules. The narrow capability set may now move from `merged` to `support-accepted` at its assigned risk tier.
 
@@ -43,7 +51,7 @@ Milestones are dependency gates, not calendar estimates. Each milestone is imple
 
 ### 3. Timing and lifecycle sentinel
 
-**Build:** Add named timing moments, typed resumable frames, one reaction that interrupts and resumes movement or an action, and one effect with a turn-relative duration. Introduce a bounded rule module only when the printed behavior cannot be expressed by existing primitives. Modules are versioned with the deployed engine and use typed operations; there is no arbitrary embedded scripting.
+**Build:** Extend the v1 health transition into the approved effect/turn lifecycle schedule. Add one reaction that interrupts and resumes movement or an action, resolving the unsettled reaction oracles it requires. Introduce a bounded rule module only when printed behavior cannot use existing primitives.
 
 **Exit:** Positive, negative, ordering, holdout, save-at-every-pause, and parent-revalidation cases pass. A short authentic encounter completes continuously through the public client within budgets.
 
@@ -51,7 +59,7 @@ Milestones are dependency gates, not calendar estimates. Each milestone is imple
 
 ### 4. Geometry and basic-save area sentinel
 
-**Build:** Broaden the walking-skeleton geometry only as selected cases require: multi-cell footprints, obstacle geometry, reach, terrain costs, and one area shape. Add one save-based area effect using the PF2e basic-save results. Elevation and flight remain explicitly unsupported.
+**Build:** Activate selected parts of the predesigned spatial contract: multi-cell footprints, obstacle geometry, reach, terrain costs, and one area shape. Add viewer-safe target projection and the fixed area dependency order before one save-based area effect. Elevation and flight remain unsupported.
 
 **Exit:** Translation, rotation where valid, size/reach changes, illegal-path cases, movement reactions, area targeting, all four basic-save degrees, and typed damage pass. The encounter completes continuously with focused queries and compact payloads.
 
@@ -88,7 +96,7 @@ Capability and encounter acceptance follows the independent evidence dimensions 
 - Bulk content import or an “all PF2e” claim.
 - Compatibility with predecessor runtime, schema, or reports.
 - A universal rules DSL, arbitrary content scripts, strategy AI, or automated GM judgment.
-- Geometry beyond each milestone’s selected two-dimensional rules; elevation and flight.
+- Runtime support for geometry beyond each milestone’s selected rules; elevation and flight remain unimplemented until explicitly selected.
 - Polished art, account systems, encounter building, or broad character creation.
 
 ## Current decisions

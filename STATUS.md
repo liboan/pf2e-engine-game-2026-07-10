@@ -1,6 +1,6 @@
 # Project status
 
-**Updated:** 2026-07-15
+**Updated:** 2026-07-29
 **State:** Design baseline only; implementation has not begun.
 
 ## Current values
@@ -14,9 +14,12 @@
 ## Accepted baseline
 
 - Product: **private, single-client tool**. Public distribution and multi-client operation are outside the initial target.
+- Implementation: **Python monorepo**, canonical **JSON snapshots**, and unique command/retry IDs with committed receipts. Development and validation run locally on **macOS**; GitHub Actions is outside scope.
 - Rules authority: **Archives of Nethys as retrieved through 2026-07-10**. The initial Remaster content allowlist is *Player Core* (AoN 216), *Player Core 2* (227), *Monster Core* (221), and *NPC Core* (236). The immutable profile record has not yet been created, so accepted rules profiles remain at zero.
 - Rules dependencies: core encounter procedures may come from other AoN pages when required to execute allowlisted content. This does not authorize a bulk import of *GM Core* or any other source's content. Foundry is optional engineering reference only.
 - Rules judgment: the product owner is the final authority for ambiguous interpretations. Agents may propose and implement visible provisional choices; bounded GM discretion may use a named, versioned policy. Narrative judgment is never guessed silently.
+- Human approval: the product owner is the sole human approver. Rules readers, implementers, and independent verifiers may be delegated evidence roles but cannot confer human approval.
+- Geometry: design the general contract for footprints, placements, reach, terrain costs, blocking edges and objects, areas, elevation, and movement modes before implementation. The walking skeleton implements only its declared narrow subset; unsupported variants fail closed rather than shaping the data model.
 
 The accepted rationale is recorded in [decision 0001](docs/decisions/0001-initial-product-and-rules-boundary.md).
 
@@ -24,21 +27,22 @@ The [canonical registry](registry/README.md) is the source of truth for these va
 
 ## Current gate
 
-The next gate is one end-to-end walking skeleton from the [roadmap](docs/design/07-roadmap.md):
+The next gate is the foundational-contract gate in the [roadmap](docs/design/07-roadmap.md), followed by one end-to-end walking skeleton:
 
 ```text
 source record -> minimal compiler -> engine -> save/resume
               -> public API -> headless client -> inspectors and benchmarks
 ```
 
-It must finish one small encounter through public commands with compact responses and reproducible evidence. It is an architecture probe, not a support claim. The first implementation package cannot become `ready` until its applicable decisions below, oracle, owner, verifier, base commit, and selected gates are recorded.
+The contract gate closes the P0 gaps identified by the [rules/design stress test](docs/design/details/rules-design-stress-test.md) without adding a general rules DSL. The walking skeleton must then finish one small encounter through public commands with compact responses and reproducible evidence. It is an architecture probe, not a support claim. The first implementation package cannot become `ready` until its applicable decisions below, oracle, owner, verifier, base commit, and selected gates are recorded.
 
 ## Unresolved decisions
 
-1. **Implementation:** language, package layout, canonical snapshot/persistence format, and retry identity format.
-2. **Initial geometry:** confirm single-cell actors, adjacency, clear-or-blocked cells, and basic submitted paths for the walking skeleton. Larger footprints, obstacles, reach, terrain costs, areas, elevation, and flight remain outside that gate.
-3. **Content and evidence:** walking-skeleton definition and oracle; unlike adopters; verifier-held holdout; and the ordinary-combat, timing/lifecycle, and geometry/basic-save-area sentinels.
-4. **Performance and CI:** reference hardware, provisional-budget calibration rule, CI artifact store, retention enforcement, and release-evidence access.
-5. **Human roles:** named approvers for foundational architecture, player acceptance, support promotion, and any future licensing decision; who may issue exact batched approvals for routine in-envelope records.
+1. **Semantic closure:** confirm that definitions are graph roots, core procedures and fixed rule modules are executable semantic nodes, and capability records are support claims over an exact closed graph rather than runtime dispatch objects.
+2. **Execution contracts:** approve typed grants/claims/receipts and versioned engine-owned staged procedures; the DSL may invoke them but cannot define accounting, stage order, commit points, or state mutation.
+3. **Walking-skeleton rules:** select the encounter, actor categories and zero-HP policy, diagonal-movement boundary, source records, oracle cases, unlike adopters, and verifier-held holdout.
+4. **Later contracts:** decide when viewer-relative information, area resolution, effect scheduling, and spell/item provenance become required detailed designs; their foundational state and interface boundaries must not be contradicted earlier.
+5. **Performance and evidence:** choose the reference Mac, provisional-budget calibration rule, local evidence location, retention enforcement, and release-evidence access.
+6. **Approval records:** choose the product owner's stable registry principal ID and whether routine in-envelope approvals may be recorded in coherent batches.
 
 Resolve a question through a decision packet and record the authoritative approval in the canonical registry. Remove the question here when the owning document and registry have been updated.

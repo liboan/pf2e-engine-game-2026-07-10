@@ -16,14 +16,16 @@ return_state_if_blocked: proposed
 
 result: >-
   Deepen the proposed reaction, behavior-inventory, definition/package, content-format,
-  rule-module, model-routing, and registry designs with source-grounded examples and
-  independent coherence review.
+  rule-module, model-routing, registry, adversarial rules-review, and implementation-roadmap
+  designs with source-grounded examples and independent coherence review.
 
 in_scope:
   - Add linked companion design documents for reactions, behavior inventories, definitions/packages, and declarative content/rule modules.
   - Record the product owner's approved reaction architecture principles and unresolved human-review questions.
   - Replace placeholder model families with exact Codex model slugs and supported reasoning settings available on 2026-07-15.
   - Append a compact illustrative registry example without making support claims.
+  - Stress-test the complete design against interacting AoN rules cases and record prioritized findings.
+  - Integrate those findings as one concise foundational-contract gate before implementation.
 
 out_of_scope:
   - Engine, compiler, service, client, content-package, schema implementation, or generated artifacts.
@@ -56,6 +58,12 @@ selected_gates:
     result: pass
   - id: bloat-and-duplication-review
     evidence_owner: context-free-review-agents
+    result: pass
+  - id: adversarial-rules-design-review
+    evidence_owner: independent-rules-stress-test-thread
+    result: pass
+  - id: roadmap-integration
+    evidence_owner: codex-root-coordinator
     result: pass
 
 stop_conditions:
