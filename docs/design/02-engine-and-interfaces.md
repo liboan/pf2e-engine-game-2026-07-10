@@ -82,7 +82,7 @@ Each named moment exposes its own closed subset. Modifier collection accepts onl
 
 Modules receive opaque instance references plus typed facts such as traits, size, position, and resources. They may carry a reference into an operation or compare references for a rule relationship such as source equals target. They cannot inspect names or raw IDs, or select behavior because a particular instance or definition ID matches. They also cannot mutate state, choose randomness, read files or networks, or use wall-clock time.
 
-Initial modules are trusted first-party code outside the core engine and injected from a fixed build registry; there is no runtime loading or uploaded code. An external versioned descriptor binds the exact module artifact digest to reviewed authority and its allowed engine interface. Checks reject undeclared imports, dependencies, symbols, moments, capabilities, or results. Descriptor and acyclic evidence details are in [Content format and rule-module detail](details/content-format-and-rule-modules.md#module-authority-descriptor-and-evaluation).
+Initial modules are trusted first-party code outside the core engine and injected from a fixed build registry; there is no runtime loading or uploaded code. An external versioned descriptor binds the exact module artifact digest to reviewed authority and its allowed engine interface. Checks reject undeclared imports, dependencies, symbols, moments, semantic keys, or results. Descriptor and acyclic evidence details are in [Content format and rule-module detail](details/content-format-and-rule-modules.md#module-authority-descriptor-and-evaluation).
 
 ## Reaction resolution
 

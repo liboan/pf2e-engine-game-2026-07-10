@@ -10,7 +10,7 @@ The format composes engine-owned PF2e operations. It is not a scripting language
 
 ## Small fixed YAML
 
-One versioned document shape contains metadata plus exactly one definition. Scalar references resolve inside the package or to compiler-known capabilities. Predicates and operations are tagged unions; arbitrary expressions, loops, callbacks, imports, and string interpolation are invalid.
+One versioned document shape contains metadata plus exactly one definition. Scalar references resolve inside the package or to compiler-known core procedures and fixed modules. Predicates and operations are tagged unions; arbitrary expressions, loops, callbacks, imports, and string interpolation are invalid.
 
 ```yaml
 schema: pf2e-definition.v1
@@ -67,11 +67,11 @@ The binding supplies versioned data only. `action_kind` causes the trigger windo
 
 The compiler parses one exact schema version, rejects unknown fields, canonicalizes ordering, resolves typed references, and emits an immutable definition plus digest. It verifies:
 
-- profile, source-record, inventory, component, capability, and module references;
+- profile, source-record, inventory, component, core-procedure, and module references;
 - lifecycle and production eligibility without conflating them;
 - operation arguments, target types, traits, costs, predicates, duration anchors, and resource kinds;
 - module configuration against that module's closed schema;
-- that linked module configuration, moments, capabilities, operations, and result variants equal compiler-derived dependencies; and
+- that linked module configuration, moments, engine symbols, operations, and result variants equal compiler-derived dependencies; and
 - that no data path can choose behavior from a creature, encounter, fixture, display name, or raw ID.
 
 The compiler never “best-effort” drops a field or converts unknown prose into behavior. A new operation or predicate is a shared Tier 3 contract change, not a content-local escape hatch.
@@ -110,9 +110,9 @@ The actual signatures use immutable inputs and the named moment's narrower outpu
 
 Rules authority never lives in module code or comments. Citations and normalized facts live in approved source records, expected behavior in an approved oracle, and clause coverage plus mapping to a logical module key/version in independently reviewed behavior inventories. Comments may explain an invariant but cannot approve or replace those external records.
 
-Every code-based module version has one external fixed-registry descriptor. It binds the module key/version and exact code artifact digest to source-record IDs/digests, behavior-inventory IDs/digests, oracle ID/digest, accepted `MomentSpec` key/version pairs, configuration-schema ID/digest, declared build imports and dependencies, engine procedure/capability symbols, and allowed result variants. The descriptor grants no dynamic discovery: the module remains first-party code outside the core engine, imported by an explicit build table, and neither engine nor module may dispatch on content or instance identity.
+Every code-based module version has one external fixed-registry descriptor. It binds the module key/version and exact code artifact digest to source-record IDs/digests, behavior-inventory IDs/digests, oracle ID/digest, accepted `MomentSpec` key/version pairs, configuration-schema ID/digest, declared build imports and dependencies, engine procedure and interface symbols, and allowed result variants. The descriptor grants no dynamic discovery: the module remains first-party code outside the core engine, imported by an explicit build table, and neither engine nor module may dispatch on content or instance identity.
 
-Build analysis and contract tests reconcile the module's actual import/dependency closure, linked engine symbols, registered moments, and emitted result variants with the descriptor in both directions. For each compiled definition that binds the module, compiler-derived module, moment, operation, capability, configuration, and result dependencies must also reconcile with the descriptor and independent inventory. Missing and extra dependencies both fail. Tests evaluate behavior against the external oracle; evidence and registry promotion remain external and cannot be inferred from a build, descriptor, comment, or passing test.
+Build analysis and contract tests reconcile the module's actual import/dependency closure, linked engine symbols, registered moments, and emitted result variants with the descriptor in both directions. For each compiled definition that binds the module, compiler-derived module, moment, operation, engine-symbol, configuration, and result dependencies must also reconcile with the descriptor and independent inventory. Missing and extra dependencies both fail. Tests evaluate behavior against the external oracle; evidence and registry promotion remain external and cannot be inferred from a build, descriptor, comment, or passing test.
 
 The digest graph is acyclic. The code artifact digest covers code; the descriptor digest is the package-facing module digest and binds that artifact plus the exact upstream authority records, but excludes evidence and promotion. Inventories and oracles target the logical module key/version, not the later descriptor digest. A package binds the frozen descriptor digest and thus the artifact; evidence manifests cite that package; promotion cites the package and evidence. No upstream record hashes downstream evidence or approval.
 
@@ -120,17 +120,17 @@ The digest graph is acyclic. The code artifact digest covers code; the descripto
 
 | Case | Minimum assertions |
 | --- | --- |
-| Schema and references | Unknown field, operation, version, typed reference, capability, module, or config fails closed. |
+| Schema and references | Unknown field, operation, version, typed reference, core procedure, module, or config fails closed. |
 | Authority binding | Descriptor binds the exact artifact, source, inventory, oracle, configuration schema, and allowed interface digests. |
 | Dependency derivation | Actual imports/dependencies, symbols, moments, and results reconcile with the descriptor; compiled dependencies reconcile with it and the independent inventory. |
 | Identity independence | Renaming or reordering package, definition, component, and instance IDs changes only opaque references. |
-| Module sealing | State patches, randomness, I/O, clock access, undeclared imports/dependencies, moments/capabilities, and disallowed results fail build or contract tests. |
+| Module sealing | State patches, randomness, I/O, clock access, undeclared imports/dependencies, moments/engine symbols, and disallowed results fail build or contract tests. |
 | Fixed registry | Only build-registered module/version pairs load; filesystem additions and runtime discovery have no effect. |
 | Production boundary | Candidate lifecycle, unsupported clauses, digest mismatch, or unapproved versions cannot enter production. |
 
 ## Closed operations and versioning
 
-Initial operation families are fixed: invoke the engine-owned check, Strike, Stride/Step, damage/healing, condition/effect, and resource procedures, or a registered module. Each family owns its input version and allowed moments/results. The DSL selects registered symbols; it does not define procedure semantics. Definitions pin schema, profile, capability, compiler, and module versions. Contract changes compile to new versions; unreleased candidates are rebuilt rather than supported by compatibility fallbacks. Saves retain exact compiled-package digests.
+Initial operation families are fixed: invoke the engine-owned check, Strike, Stride/Step, damage/healing, condition/effect, and resource procedures, or a registered module. Each family owns its input version and allowed moments/results. The DSL selects registered symbols; it does not define procedure semantics. Definitions pin schema, profile, semantic-node, compiler, and module versions. Contract changes compile to new versions; unreleased candidates are rebuilt rather than supported by compatibility fallbacks. Saves retain exact compiled-package digests.
 
 ## Proposed monorepo placement
 

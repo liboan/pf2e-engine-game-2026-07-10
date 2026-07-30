@@ -42,6 +42,7 @@ allowed_files:
   - docs/design/details/
   - docs/design/07-roadmap.md
   - docs/decisions/README.md
+  - docs/decisions/0001-initial-product-and-rules-boundary.md
   - docs/decisions/0002-foundational-rules-contracts.md
   - registry/README.md
   - registry/project.yaml

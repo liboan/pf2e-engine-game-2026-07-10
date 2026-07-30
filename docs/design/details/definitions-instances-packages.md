@@ -11,7 +11,7 @@ Archives of Nethys (AoN) is the sole rules source. The examples use live pages r
 
 A definition is the compiler's immutable, typed meaning for a published or engine-owned thing. Its stable `definition_id` identifies the concept; its `definition_digest` identifies one exact compiled payload. The payload contains rules-profile and source references, typed statistics and traits, declarative constructs, registered-module configuration, and compiler source maps. It contains no current HP, position, spent resources, owner, initiative, active conditions, or encounter identity.
 
-The authoring file is input, not the loadable definition. Compilation resolves all references, type-checks the closed data format, links fixed-registry modules, and derives capability dependencies from constructs and linked symbols. Authors cannot add a trusted `requires` field. Any semantic edit produces a new definition digest; an existing digest is never rebuilt to different bytes.
+The authoring file is input, not the loadable definition. Compilation resolves all references, type-checks the closed data format, links fixed-registry modules, and derives executable semantic-node dependencies from constructs and linked symbols. Authors cannot add a trusted `requires` field. Any semantic edit produces a new definition digest; an existing digest is never rebuilt to different bytes.
 
 Lifecycle is registry/package metadata with exactly three values:
 
@@ -62,14 +62,14 @@ definitions:
     source_records: [{id: <ID>, digest: "sha256:<digest>"}]
     inventory: {id: <ID>, digest: "sha256:<digest>"}
     allowed_use_cases: [<reviewed boundary ID>]
-    derived_capabilities: [{id: <ID>, version: <exact version>}]
+    semantic_dependencies: [{kind: core-procedure | rule-module, id: <ID>, version: <exact version>, semantic_keys: [<key>]}]
     derived_modules: [{id: <ID>, version: <version>, digest: "sha256:<digest>"}]
 modules: [{id: <ID>, version: <version>, digest: "sha256:<digest>"}]
 prerequisite_approval_refs: [{id: <registry approval ID>, digest: "sha256:<digest>"}]
 manifest_digest: "sha256:<digest>"
 ```
 
-Unknown keys and missing keys fail validation. Definition digests hash canonical compiler output. `manifest_digest` hashes the canonical JSON manifest with that field omitted; package bytes are separately content-addressed if an archive exists. Source, inventory, profile, compiler, module, prerequisite-approval, and dependency digests are retained even when their IDs are stable. Derived capabilities and modules come from compiler output; the package-level module list is their exact sorted union, so the package author cannot add, omit, or edit a dependency.
+Unknown keys and missing keys fail validation. Definition digests hash canonical compiler output. `manifest_digest` hashes the canonical JSON manifest with that field omitted; package bytes are separately content-addressed if an archive exists. Source, inventory, profile, compiler, module, prerequisite-approval, and dependency digests are retained even when their IDs are stable. Semantic dependencies and modules come from compiler output; the package-level module list is the exact sorted union of rule-module dependencies, so the package author cannot add, omit, or edit one.
 
 Promotion evidence and the promotion approval are deliberately not embedded in this manifest: both are produced against an integration commit containing the manifest, so embedding them would create a self-invalidating digest cycle. The canonical registry instead joins the exact `manifest_digest` and integration commit to all seven evidence dimensions and the exact promotion-approval ID and digest. Only `generalization` may be `N/A`, with a reason. A candidate package can therefore be structurally valid without that acceptance join and still remain ineligible for production.
 
@@ -77,7 +77,7 @@ Small packages limit the review and migration blast radius. A package may depend
 
 ## Illustrative candidate definitions
 
-The live [Electric Arc](https://2e.aonprd.com/Spells.aspx?ID=1509) entry from *Player Core* currently supplies activation traits, target/range, basic Reflex defense, electricity damage, and heightening facts. A candidate compiled definition might derive exact versions of `spell-activation`, `trait-semantics`, `spell-targeting`, `basic-save`, `typed-damage`, and `rank-heightening`. These capabilities are derived from compiled fields; the list is not an assertion that any capability exists today.
+The live [Electric Arc](https://2e.aonprd.com/Spells.aspx?ID=1509) entry from *Player Core* currently supplies activation traits, target/range, basic Reflex defense, electricity damage, and heightening facts. A candidate compiler would need exact core-procedure or fixed-module semantic nodes for activation, trait effects, targeting, basic saves, typed damage, and heightening. None is asserted to exist today, so its inventory remains unsupported rather than mapping to capability names.
 
 The live [Reactive Strike](https://2e.aonprd.com/Feats.aspx?ID=5832) entry from *Player Core 2* currently identifies several trigger categories, a melee Strike against the triggering creature, a critical-hit disruption case for a manipulate trigger, and a multiple-attack-penalty exception. A candidate definition could configure one registered typed module. Compilation would derive reaction-window, reach, Strike, degree, disruption, and MAP dependencies from the linked module and configuration. It remains `candidate` until its exact trigger timing, module contract, inventory, oracle, and evidence are independently accepted; this example settles none of those interpretations.
 

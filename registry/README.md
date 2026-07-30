@@ -91,7 +91,7 @@ behavior_inventories:
     clauses:
       - id: example-candidate-clause-1
         disposition: unsupported
-        unsupported: {missing_semantic_id: example-capability-candidate-gap-v1}
+        unsupported: {missing_semantic_id: example-core-procedure-candidate-gap-v1}
     digest: sha256:EXAMPLE_INVENTORY_CANDIDATE
   - id: example-inventory-supported-v1
     subject: {kind: definition, id: example-definition-supported-v1}
@@ -99,13 +99,14 @@ behavior_inventories:
     clauses:
       - id: example-supported-clause-1
         disposition: mapped
-        mapping_targets: [{kind: capability, id: example-capability-action-v1, version: 1}]
+        mapping_targets: [{kind: core-procedure, id: example-core-procedure-action-v1, version: 1, semantic_key: resolve}]
     digest: sha256:EXAMPLE_INVENTORY_SUPPORTED
     approval_id: example-approval-rules
     approval_digest: sha256:EXAMPLE_APPROVAL_RULES
 
 capability:
   id: example-capability-action-v1
+  semantic_roots: [{kind: core-procedure, id: example-core-procedure-action-v1, version: 1, semantic_key: resolve}]
   profile_id: example-profile-remaster-v1
   oracle_id: example-oracle-action-v1
   source_record_ids: [example-source-action-v1]

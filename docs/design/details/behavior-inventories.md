@@ -40,16 +40,16 @@ clauses:
     source_fact_digest: sha256:<64 lowercase hex>
     disposition: mapped | non-executable | excluded | unsupported
     mapping_targets:
-      - kind: core-procedure | capability | rule-module
+      - kind: core-procedure | rule-module
         id: <registry ID>
         version: <exact version>
-        semantic_key: <core-procedure semantic key or null>
+        semantic_key: <reviewed semantic key>
     reason_code: <fixed reason code or null>
     exclusion:
       boundary_id: <supported-use boundary ID or null>
       enforcement_policy_id: <versioned compiler/load/runtime policy ID or null>
     unsupported:
-      missing_semantic_id: <capability/module/decision ID or null>
+      missing_semantic_id: <semantic-node/decision ID or null>
       blocker_note: <concise note or null>
 ```
 
@@ -63,7 +63,7 @@ Each fact digest hashes canonical JSON: UTF-8, sorted object keys, preserved lis
 
 ## Dispositions and independent control
 
-- `mapped` requires nonempty `mapping_targets`. For a `definition` subject, each target is an exact core procedure, capability, or module dependency and `semantic_key` is null. For a `core-procedure` subject, each target repeats that subject's ID and exact version with a nonnull semantic key; those keys name reviewed procedure semantics, not DSL constructs or modules. `reason_code` and every exclusion/unsupported value are null.
+- `mapped` requires nonempty `mapping_targets`. For a `definition` subject, each target is an exact core-procedure or fixed-module semantic node. For a `core-procedure` subject, each target repeats that subject's ID and exact version. Every target has a nonnull reviewed semantic key; capabilities are support claims over closed graphs, never mapping targets. `reason_code` and every exclusion/unsupported value are null.
 - `non-executable` requires `mapping_targets: []`, `reason_code: presentation-only`, and null exclusion/unsupported values. The fact affects neither rules nor availability.
 - `excluded` requires `mapping_targets: []`, `reason_code: outside-reviewed-use`, a boundary, a versioned enforcement policy, and null unsupported values. The policy blocks the behavior across compilation, loading, queries, and commands; scenario non-use is not enforcement.
 - `unsupported` requires `mapping_targets: []`, `reason_code: missing-semantic` or `unresolved-decision`, a nonnull `missing_semantic_id`, and null exclusion values. It always blocks playable closure and cannot carry a speculative mapping.
@@ -139,15 +139,15 @@ For a larger coverage example, the [Electric Arc](https://2e.aonprd.com/Spells.a
 
 | Clause | Fact digest prefix | Disposition | Exact target or reason |
 | --- | --- | --- | --- |
-| `clause:electric-arc.activation` | `31f4c36589aa` | `mapped` | `capability:spell-activation@1`, `capability:trait-semantics@1` |
-| `clause:electric-arc.access` | `39b35b1e69f4` | `mapped` | `capability:definition-access@1` |
-| `clause:electric-arc.targeting` | `379daa999a64` | `mapped` | `capability:spell-targeting@1` |
-| `clause:electric-arc.defense` | `4d564d3cbcc9` | `mapped` | `capability:basic-save@1` |
-| `clause:electric-arc.damage` | `25144b4f172d` | `mapped` | `capability:typed-damage@1` |
-| `clause:electric-arc.heightening` | `57d8d02fce22` | `mapped` | `capability:rank-heightening@1` |
+| `clause:electric-arc.activation` | `31f4c36589aa` | `unsupported` | `missing-semantic:spell-activation` |
+| `clause:electric-arc.access` | `39b35b1e69f4` | `unsupported` | `missing-semantic:definition-access` |
+| `clause:electric-arc.targeting` | `379daa999a64` | `unsupported` | `missing-semantic:spell-targeting` |
+| `clause:electric-arc.defense` | `4d564d3cbcc9` | `unsupported` | `missing-semantic:basic-save` |
+| `clause:electric-arc.damage` | `25144b4f172d` | `unsupported` | `missing-semantic:typed-damage` |
+| `clause:electric-arc.heightening` | `57d8d02fce22` | `unsupported` | `missing-semantic:rank-heightening` |
 | `clause:electric-arc.presentation` | `be2fc2c70664` | `non-executable` | `presentation-only` |
 
-The row set is complete only relative to its reviewed source record. If, for example, targeting or heightening were absent from executable content, reconciliation would fail; relabeling either `excluded` requires an explicitly reviewed boundary and enforcement policy.
+The row set is complete only relative to its reviewed source record. It correctly blocks playable closure until exact executable semantic nodes exist. Relabeling a row `excluded` requires an explicitly reviewed boundary and enforcement policy.
 
 ## Record immutability and corrections
 

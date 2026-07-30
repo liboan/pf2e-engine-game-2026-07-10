@@ -52,7 +52,7 @@ When resolution depends on unbounded narrative judgment, the engine either suspe
 
 ## Source records
 
-Every executable definition, engine-owned core procedure, and reusable capability points to a compact source record. It stores facts needed to reproduce a decision:
+Every executable definition, engine-owned core procedure, fixed rule module, and reusable capability support claim points to a compact source record. It stores facts needed to reproduce a decision:
 
 - rules profile and stable record ID;
 - exact AoN URL, page title or kind, and numeric AoN ID when available;
@@ -72,7 +72,7 @@ A content package cannot certify itself by listing only the capabilities its imp
 
 Before implementation, a rules reader creates a **behavior inventory** from the source record. Each material clause receives exactly one disposition:
 
-- `mapped` — implemented by an exact core procedure or its semantic key, capability, or unique rule module;
+- `mapped` — implemented by an exact core-procedure or fixed-module semantic node;
 - `non-executable` — presentation text with no rules behavior;
 - `excluded` — deliberately outside the supported use and made mechanically unavailable; or
 - `unsupported` — required behavior is missing, which blocks playable status.
@@ -93,7 +93,7 @@ Ship definitions in small versioned packages containing:
 
 - rules-profile, source-record, and inventory digests;
 - immutable definition IDs and content digests;
-- compiler-derived capability dependencies;
+- compiler-derived semantic-node dependencies;
 - registered module IDs, versions, and digests;
 - definition lifecycle and allowed use cases.
 
