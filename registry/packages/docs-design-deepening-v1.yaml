@@ -26,6 +26,7 @@ in_scope:
   - Append a compact illustrative registry example without making support claims.
   - Stress-test the complete design against interacting AoN rules cases and record prioritized findings.
   - Integrate those findings as one concise foundational-contract gate before implementation.
+  - Record the product owner's foundational architecture, diagonal-movement, and zero-HP boundary decisions.
 
 out_of_scope:
   - Engine, compiler, service, client, content-package, schema implementation, or generated artifacts.
@@ -39,6 +40,9 @@ allowed_files:
   - docs/design/03-verification-strategy.md
   - docs/design/05-codex-delivery.md
   - docs/design/details/
+  - docs/design/07-roadmap.md
+  - docs/decisions/README.md
+  - docs/decisions/0002-foundational-rules-contracts.md
   - registry/README.md
   - registry/project.yaml
   - registry/packages/docs-design-deepening-v1.yaml

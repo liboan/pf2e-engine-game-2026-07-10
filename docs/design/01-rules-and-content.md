@@ -77,7 +77,7 @@ Before implementation, a rules reader creates a **behavior inventory** from the 
 - `excluded` — deliberately outside the supported use and made mechanically unavailable; or
 - `unsupported` — required behavior is missing, which blocks playable status.
 
-Definitions map clauses to exact core-procedure, capability, or module dependencies. Core-procedure inventories instead map each clause to a versioned semantic key in that procedure; its build binds every key to code and separately derives lower-level dependencies. Neither path accepts authored `requires`. Independent review reconciles mappings, manifests, and tests; mismatch or approximation fails.
+Definitions are graph roots whose clauses map to exact core-procedure or fixed-module semantic nodes. Each node exposes versioned semantic keys and typed dependency edges; closure traverses the exact acyclic graph to source-reviewed leaves. Capabilities describe support over closed graphs and are never runtime dispatch objects. Neither path accepts authored `requires`.
 
 Inventory and its implementation have separate digests and approval entries. A compiler or model may suggest an inventory, but cannot approve the inventory it will later satisfy.
 

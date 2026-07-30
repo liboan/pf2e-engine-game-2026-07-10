@@ -29,13 +29,13 @@ Canonical state stores only facts needed to continue play:
 
 - exact rules profile, content, compiler, and module versions;
 - stable instances referencing immutable definitions;
-- positions, initiative, resources, active effects, and duration anchors;
+- positions, initiative, typed grants and claims, committed receipts, active effects, and duration anchors;
 - current revision and any suspended resolution stack;
 - deterministic random-provider identity, version, and exact position or state.
 
 Definitions, projections, menus, caches, traces, and source prose are not copied into state. Actors, items, effects, hazards, and areas are typed instances, not loose dictionaries.
 
-Checks, modifier and damage stages, effects, durations, targeting, movement, and costs are engine procedures. Stride, Step, and Strike are core engine code—not declarative definitions or rule modules. Plans may invoke registered symbols with immutable weapon or Strike profiles; content cannot redefine their semantics. Narrow releases may support fewer variants, never content-shaped shortcuts.
+Checks, damage, health, targeting, movement, costs, and other universal rules are versioned staged engine procedures. The DSL can invoke them but cannot define accounting, stage order, commits, or mutation. Stride, Step, and Strike are core code; content supplies immutable profiles, never replacement semantics.
 
 ## Commands and closed outcomes
 

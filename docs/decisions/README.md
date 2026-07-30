@@ -25,3 +25,4 @@ To replace a decision, create a new packet, mark the old one `superseded`, cross
 | ID | Decision requested | Packet state | Registry approval | Owning document |
 | --- | --- | --- | --- | --- |
 | [0001](0001-initial-product-and-rules-boundary.md) | Initial product and rules boundary | `resolved` | Pending initial integration commit | [Charter](../design/00-product-charter.md), [rules/content](../design/01-rules-and-content.md) |
+| [0002](0002-foundational-rules-contracts.md) | Foundational semantic/execution contracts and walking-skeleton boundaries | `resolved` | Pending integration commit and stable approver ID | [Status](../../STATUS.md), [rules/content](../design/01-rules-and-content.md), [engine](../design/02-engine-and-interfaces.md), [roadmap](../design/07-roadmap.md) |
