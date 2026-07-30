@@ -1,7 +1,7 @@
 schema: pf2e-successor-work-package.v1
 
 id: docs-design-deepening-v1
-state: verify
+state: merged
 type: documentation
 evidence_risk_tier: not-a-capability-claim
 operational_risk:
@@ -11,6 +11,8 @@ support_promotion_requested: false
 owner: codex-root-coordinator
 independent_verifier: context-free-review-agents
 base_commit: fa8e89d3b73373918d6a2a5727da1cd030673cb7
+head_commit: 87bd81f7dba0d41c853abda162af644fcfe90783
+integration_commit: 87bd81f7dba0d41c853abda162af644fcfe90783
 dependencies: []
 return_state_if_blocked: proposed
 

@@ -7,8 +7,9 @@
 
 - Accepted rules profiles: **0**
 - Supported capabilities, content definitions, and encounters: **0**
-- Packages in `active` or `verify`: **1** (`docs-design-deepening-v1` in `verify`)
-- Packages `merged` or `support-accepted`: **0**
+- Packages in `active` or `verify`: **0**
+- Packages `merged`: **1** (`docs-design-deepening-v1`)
+- Packages `support-accepted`: **0**
 - Executable engine, public API, client, and benchmark baseline: **none**
 
 ## Accepted baseline
@@ -44,6 +45,6 @@ The contract gate closes the P0 gaps identified by the [rules/design stress test
 1. **Walking-skeleton content and evidence:** select the encounter, source records, oracle cases, unlike adopters, and verifier-held holdout.
 2. **Later contracts:** decide when viewer-relative information, area resolution, effect scheduling, and spell/item provenance become required detailed designs; their foundational state and interface boundaries must not be contradicted earlier.
 3. **Performance and evidence:** choose the reference Mac, provisional-budget calibration rule, local evidence location, retention enforcement, and release-evidence access.
-4. **Approval records:** choose the product owner's stable registry principal ID and whether routine in-envelope approvals may be recorded in coherent batches; formalize decisions 0001 and 0002 after integration.
+4. **Approval records:** choose the product owner's stable registry principal ID and whether routine in-envelope approvals may be recorded in coherent batches; decisions 0001 and 0002 are integrated but await registry approval entries.
 
 Resolve a question through a decision packet and record the authoritative approval in the canonical registry. Remove the question here when the owning document and registry have been updated.

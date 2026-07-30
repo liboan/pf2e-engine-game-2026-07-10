@@ -93,15 +93,16 @@ indexes:
   verifier_holdouts: []
 
 live_ledger:
-  integration_commit: null
+  integration_commit: 87bd81f7dba0d41c853abda162af644fcfe90783
   rules_profile_id: null
   production_package_ids: []
   work_packages:
     - id: docs-design-deepening-v1
       owner: codex-root-coordinator
-      state: verify
+      state: merged
       dependency_ids: []
       base_commit: fa8e89d3b73373918d6a2a5727da1cd030673cb7
+      integration_commit: 87bd81f7dba0d41c853abda162af644fcfe90783
       record: registry/packages/docs-design-deepening-v1.yaml
 
 production_gate:

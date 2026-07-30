@@ -1,12 +1,12 @@
 # 0002: Foundational rules contracts and walking-skeleton boundaries
 
-This record captures product-owner decisions made after the adversarial rules/design review. The owning current documents state the accepted direction. Registry formalization remains pending until the documentation branch is integrated and the product owner's stable registry principal ID is selected.
+This record captures product-owner decisions made after the adversarial rules/design review. The owning current documents state the accepted direction at integration commit `87bd81f7dba0d41c853abda162af644fcfe90783`. Registry formalization awaits the product owner's stable registry principal ID.
 
 **Packet state:** `resolved`
 **Date:** 2026-07-29
 **Decision owner:** Product owner
 **Owning current documents:** [Status](../../STATUS.md), [rules and content](../design/01-rules-and-content.md), [engine and interfaces](../design/02-engine-and-interfaces.md), and [roadmap](../design/07-roadmap.md)
-**Registry approval entry:** Pending integration commit and stable approver ID
+**Registry approval entry:** Pending stable approver ID
 **Supersedes / superseded by:** none
 
 ## Resolved decision
@@ -35,5 +35,6 @@ Create a superseding decision if an unrelated second adopter requires identity d
 
 - [x] Record the product-owner answers.
 - [x] Update the owning current documents and decision index.
+- [x] Bind the decision to integration commit `87bd81f7dba0d41c853abda162af644fcfe90783`.
 - [ ] Write the detailed foundational contract packets and approve their exact schemas and algorithms.
-- [ ] Add the registry approval entry after integration with the stable approver ID and exact affected records.
+- [ ] Add the registry approval entry with the stable approver ID and exact affected records.

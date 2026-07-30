@@ -1,12 +1,12 @@
 # 0001: Initial product and rules boundary
 
-This record captures a product-owner decision made before the repository's first integration commit. The owning current documents state the accepted policy. Registry formalization is pending until an exact commit exists.
+This record captures a product-owner decision made before the repository's first integration commit. The owning current documents state the accepted policy at commit `fa8e89d3b73373918d6a2a5727da1cd030673cb7`. Registry formalization awaits the product owner's stable principal ID.
 
 **Packet state:** `resolved`  
 **Date:** 2026-07-10  
 **Decision owner:** Product owner  
 **Owning current documents:** [Product charter](../design/00-product-charter.md), [rules and content](../design/01-rules-and-content.md), and [project status](../../STATUS.md)  
-**Registry approval entry:** Pending initial integration commit  
+**Registry approval entry:** Pending stable approver ID
 **Supersedes / superseded by:** none
 
 ## Resolved decision
@@ -30,5 +30,6 @@ Create a superseding decision if the tool will be distributed, a second simultan
 
 - [x] Update the owning current documents.
 - [x] Add this packet to the decision index.
-- [ ] Add the registry approval entry with the exact first integration commit.
+- [x] Bind the decision to integration commit `fa8e89d3b73373918d6a2a5727da1cd030673cb7`.
+- [ ] Add the registry approval entry after selecting the stable approver ID.
 - [ ] Create the immutable AoN profile and source records from this accepted boundary.
