@@ -1,48 +1,50 @@
-# PF2e encounter simulator successor
+# PF2e Python engine
 
-This repository is the design baseline for a new Pathfinder Second Edition encounter simulator. It promises **rules-faithful behavior inside an explicit, versioned support boundary**, continuous play through the same public interface a client uses, and interactive response times.
+This is a local Python PF2e engine with a numbered terminal interface. You choose actions for every actor on both teams and resolve each choice; opponent turns are not automated.
 
-**Current status:** strategy only. No rules capability, content package, encounter, or runtime is supported yet. See [STATUS.md](STATUS.md) before starting work.
+## Run locally
 
-## Five non-negotiables
+Use Python 3.11 or newer. From the repository root:
 
-1. **Name the rules being implemented.** Every executable rule belongs to one exact rules profile and reusable source record. Ambiguity is recorded before code: agents may implement a visible provisional candidate, but human approval is required before support.
-2. **Fail closed.** Content must account for every rule-relevant source element. Unknown or incomplete mandatory behavior is unsupported; it is never ignored, approximated, or treated as illegal play.
-3. **Use one production path.** A source-backed definition must travel through the compiler, engine, save/resume path, public API, and headless client. Test-only state repair does not prove playability.
-4. **Prove different claims separately.** Rule correctness, reuse across content, and uninterrupted encounter play are independent evidence. All required evidence and player-flow performance budgets must pass before support is claimed.
-5. **Keep the system small.** Shared code contains PF2e concepts, never creature or encounter identities. Generated evidence expires outside Git; current documents replace superseded prose; work packages and handoffs stay compact.
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+python -m pf2e play s3 --seed 13
+python -m pf2e play s2_fleet_diagonal_assault --seed 13
+python -m pf2e play s3_long_lane_crossfire --seed 13
+```
 
-## Terms in plain language
+Each run starts with initiative Hero Point choices; resolve each before the first turn. Choose `Quit` in the menu to exit.
 
-- **Support boundary:** the exact capabilities, variants, rules profile, and content the release has earned the right to run.
-- **Rule oracle:** a reviewed record of what a rule should do, including legal and illegal examples, written independently of engine output.
-- **Clause disposition:** each source clause is `mapped`, `non-executable`, `excluded`, or `unsupported`. This says what happened to the clause, not whether a definition is released.
-- **Definition lifecycle:** a definition is `candidate`, `supported`, or `retired`. Production loads only supported definitions with closed clause inventories.
-- **Evidence dimensions:** separate records for `source-reviewed`, `isolated`, `generalization`, `production-path`, `continuous`, `client`, and `performance`; only generalization may be `N/A` with a reason.
-- **Adopter:** published content used to show that a rule implementation works beyond one example. A **holdout** is an independently selected adopter not used to shape the first implementation.
-- **Declarative content:** a small data format that combines common engine operations. It is not a general programming language.
-- **Rule module:** source-cited first-party code for unusual printed behavior. It receives an immutable view and may return only validated, typed operations.
-- **Continuous encounter:** play from legal setup to the stated end through public commands, without checkpoints, hidden mutation, or repairs.
-- **Merged:** code is on the integration branch. **Support-accepted:** independent evidence and required human approval have promoted the capability or content for production use. Merged is not accepted.
+The S2 and S3 catalogs each add eight named interaction encounters, bringing the fixed catalog to 21 setups. They reuse the supported low-level Fighter, Warpriest, Guard Dog, and rank-1 spell rules, with Fleet/shortsword Fighter and elite Guard Dog variants in S2, and a rapier Fighter in S3. The encounters cover movement, MAP, weapon traits, flanking, Pack Attack, reactions, knockout/recovery, ranged attacks, cover, spell choices, healing, and effects. All sides remain manually controlled. Two S3 encounters use a 15-by-5 open grid for range and emanation boundaries; the other encounters use a 7-by-5 grid. Modified or ad hoc setups are still rejected.
 
-## Read by task
+The original S3 setup remains a level-1 melee Fighter M, shortbow Fighter R, and Iomedaean Warpriest C against three Guard Dogs. Its selected actions and rank-1 Heal, Divine Lance, Void Warp, Guidance, and Stabilize spells are supported. Read Aura remains on the cleric's sheet but is unavailable in encounters because it takes one minute to cast. Shield Block remains on the sheets but cannot be used with these shield-free loadouts. This is a narrow content boundary, not support for every PF2e class, creature, or action. Positive damage to a stable, unconscious PC at 0 HP, including nonlethal damage, remains unsupported pending a product ruling.
 
-Read [STATUS.md](STATUS.md) first for every workflow. “Required” means the owning thread must read it; “optional” means consult it only when the named concern is affected.
+An encounter ends when a team has no conscious, living combat-capable actors. If no team retains one, the encounter ends with no winner. An unconscious PC remains in the encounter and can be healed while a conscious teammate keeps their team active. A nonlethal PC knockout can therefore end a one-on-one fight without marking that PC dead or defeated.
 
-| Workflow | Required | Optional when affected |
-| --- | --- | --- |
-| Decide scope or plan a milestone | [Charter](docs/design/00-product-charter.md), [roadmap](docs/design/07-roadmap.md) | [Predecessor lessons](docs/lessons/predecessor.md) |
-| Implement a rule module | [Rules/content](docs/design/01-rules-and-content.md), [engine](docs/design/02-engine-and-interfaces.md), [verification](docs/design/03-verification-strategy.md), [oracle](docs/templates/rule-oracle.md), [work package](docs/templates/work-package.md) | [Performance](docs/design/04-performance-and-observability.md) |
-| Add published content | [Rules/content](docs/design/01-rules-and-content.md), [verification](docs/design/03-verification-strategy.md), [registry](registry/README.md), [work package](docs/templates/work-package.md) | [Engine](docs/design/02-engine-and-interfaces.md) for a new semantic need |
-| Verify or promote a capability | [Verification](docs/design/03-verification-strategy.md), its oracle, [registry](registry/README.md), [work package](docs/templates/work-package.md) | [Performance](docs/design/04-performance-and-observability.md) |
-| Profile an API or player flow | [Engine](docs/design/02-engine-and-interfaces.md), [performance](docs/design/04-performance-and-observability.md), [work package](docs/templates/work-package.md) | [Verification](docs/design/03-verification-strategy.md) for semantic equivalence |
-| Coordinate implementation or integration | [Codex delivery](docs/design/05-codex-delivery.md), [AGENTS.md](AGENTS.md), [registry](registry/README.md), [work package](docs/templates/work-package.md) | [Bloat/review](docs/design/06-bloat-and-human-review.md) |
-| Request a human decision | [Bloat/review](docs/design/06-bloat-and-human-review.md), [decision proposal](docs/templates/decision-record.md), owning design section | [Decision history](docs/decisions/README.md) |
+The terminal accepts short aliases `s1`, `s2`, and `s3`, as well as catalogued setup IDs such as `s2_fleet_diagonal_assault` and `s3_long_lane_crossfire`.
 
-Every implementation starts with a work package. Add a rule oracle when rules truth is involved and a decision proposal when human judgment is requested. Canonical operational records live in the [registry](registry/README.md); durable decision rationale is indexed in [docs/decisions](docs/decisions/README.md).
+`--seed` selects repeatable automatic rolls. For controlled checks, the public `Encounter.start(setup, rolls=...)` API accepts individual die faces in draw order. For example, `rolls=(20, 19, 20, 4, 1)` on `S2_PC_DUEL_SETUP` supplies Fighter A's and Fighter B's initiative d20s, then a Strike d20, its fist d4 damage roll, and the next Strike d20. Queries and rejected commands do not consume faces. Saves preserve the sequence cursor, so `Encounter.load(path)` resumes at the next face. If a requested roll exhausts the sequence, the action is rejected and the cursor stays put; the engine does not fall back to random dice.
 
-## Authority and conflicts
+## Tests
 
-The product charter owns the promise. Each numbered design document owns its named concern; the roadmap owns ordering; `STATUS.md` owns current values and unresolved decisions; the registry owns operational records. Decision packets preserve proposals and rationale; a registry approval entry records authority, and the owning design document states the resulting rule.
+The 16 added encounter routes are split across five focused modules so a changed rule family can be checked without running every fight. Run one named test while iterating, the relevant module after a coherent change, and the full suite at an integration checkpoint:
 
-If two current documents conflict, stop implementation and reconcile the conflict in the owning document. Do not choose the convenient interpretation or add a compatibility layer. Git history preserves old text; only the current active document is authoritative.
+```sh
+.venv/bin/python -m pytest -q tests/test_s2_interaction_encounters.py tests/test_s2_interaction_recovery.py tests/test_s3_interaction_encounters.py tests/test_s3_interaction_effects.py tests/test_s3_interaction_reactions.py
+.venv/bin/python -m pytest -q
+```
+
+## Current direction
+
+- [Product and interface](docs/plan/01-product-and-interface.md)
+- [Engine and content](docs/plan/02-engine-and-content.md)
+- [Rules and stages](docs/plan/03-rules-and-stages.md)
+- [Delivery and checks](docs/plan/04-delivery-and-checks.md)
+
+## Project records
+
+- [Current status](STATUS.md)
+- [Work log](docs/work-log/README.md)
+- [Archived browser and contract plan](docs/archive/2026-09-15-browser-and-contract-plan/ARCHIVE.md)

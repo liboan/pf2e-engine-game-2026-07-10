@@ -1,0 +1,3199 @@
+{
+  "schema_version": 1,
+  "scope": "The local-Python plan reset requested on 2026-09-15; earlier exploratory runs are excluded.",
+  "usage_source": "Identified local session configuration and token_count metadata only",
+  "cached_input_semantics": "cached_input_tokens is a subset of input_tokens, not an additional token total",
+  "runs": [
+    {
+      "run_id": "plan-reset-supervisor",
+      "thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "role": "supervisor",
+      "task": "Synthesize research, author the integrated plan and durable log, coordinate archive and validation",
+      "status": "complete",
+      "usage_status": "unavailable",
+      "model": null,
+      "reasoning_effort": null,
+      "start_cumulative": null,
+      "end_cumulative": null,
+      "delta": null,
+      "reason": "No start snapshot exists for this earlier completed supervisor run; later work shares its session, so exact run usage is unavailable.",
+      "telemetry_reason": "No per-run start snapshot was stored. The reused session now includes later S1-S3 work, so its cumulative counters cannot be safely attributed to the plan-reset supervisor run.",
+      "result": "Integrated plan, archive and independent documentation review completed; exact supervisor usage boundary unavailable."
+    },
+    {
+      "run_id": "plan-reset-audit",
+      "thread_id": "01a0a4fb-8c57-7120-8508-9d0cceec40b5",
+      "role": "subagent",
+      "task": "Audit the baseline and propose exact archive disposition and active-document structure",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 700477,
+        "cached_input_tokens": 636032,
+        "output_tokens": 3676
+      },
+      "delta": {
+        "input_tokens": 700477,
+        "cached_input_tokens": 636032,
+        "output_tokens": 3676
+      },
+      "reason": "Awaiting final metadata collection; full-history fork requires excluding inherited counters and contexts.",
+      "result": "Found 27 documentation/metadata files, no runtime, clean baseline; provided archive inventory; no P0.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-12-24-01a0a4fb-8c57-7120-8508-9d0cceec40b5.jsonl",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:14:52.431Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a4fb-8cb5-7a43-8eeb-ae801c4fce38",
+          "timestamp": "2026-09-15T12:12:25.426Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:30:44Z",
+      "session_started_at": "2026-09-15T12:12:24.099Z"
+    },
+    {
+      "run_id": "plan-reset-architecture",
+      "thread_id": "01a0a4fb-f846-7ba0-93bf-4b3097bbbe1a",
+      "role": "subagent",
+      "task": "Define small Python components, action/choice flow, content integration, persistence, and staged implementation",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 242613,
+        "cached_input_tokens": 190080,
+        "output_tokens": 4520
+      },
+      "delta": {
+        "input_tokens": 242613,
+        "cached_input_tokens": 190080,
+        "output_tokens": 4520
+      },
+      "reason": "Awaiting final metadata collection.",
+      "result": "Specified direct procedures and explicit state; supervisor omitted unnecessary whole-engine revisions and speculative stress budgets.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-12-51-01a0a4fb-f846-7ba0-93bf-4b3097bbbe1a.jsonl",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:15:33.550Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a4fb-f8c9-7f51-8c6e-58e219c6de1e",
+          "timestamp": "2026-09-15T12:12:53.288Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:30:44Z",
+      "session_started_at": "2026-09-15T12:12:51.840Z"
+    },
+    {
+      "run_id": "plan-reset-rules",
+      "thread_id": "01a0a4fc-2d63-7741-b8ce-323a554fae5e",
+      "role": "subagent",
+      "task": "Research core rule/content families, source-backed constraints, staged coverage, and scope boundaries",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 710830,
+        "cached_input_tokens": 629888,
+        "output_tokens": 4648
+      },
+      "delta": {
+        "input_tokens": 710830,
+        "cached_input_tokens": 629888,
+        "output_tokens": 4648
+      },
+      "reason": "Awaiting final metadata collection.",
+      "result": "Reviewed AoN sources on 2026-09-15; supplied staged rule/content families and admission criteria; no initial roster falsely claimed reviewed.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-13-05-01a0a4fc-2d63-7741-b8ce-323a554fae5e.jsonl",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:16:01.483Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a4fc-2de8-74c0-ae7b-ee29ce5821d6",
+          "timestamp": "2026-09-15T12:13:07.134Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:30:44Z",
+      "session_started_at": "2026-09-15T12:13:05.436Z"
+    },
+    {
+      "run_id": "plan-reset-usage-tool",
+      "thread_id": "01a0a4fc-59b2-7172-99fb-59f4970aac72",
+      "role": "subagent",
+      "task": "Build a narrow metadata-only usage collector and verify token-accounting boundaries",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 3837281,
+        "cached_input_tokens": 3637760,
+        "output_tokens": 47357
+      },
+      "delta": {
+        "input_tokens": 3837281,
+        "cached_input_tokens": 3637760,
+        "output_tokens": 47357
+      },
+      "reason": "Run still active.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-13-16-01a0a4fc-59b2-7172-99fb-59f4970aac72.jsonl",
+      "session_started_at": "2026-09-15T12:13:16.782Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:32:02.449Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a4fc-5a36-7f62-8e22-2ca34fb7add6",
+          "timestamp": "2026-09-15T12:13:18.054Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:32:06Z",
+      "result": "Implemented metadata-only usage collection with evidenced run boundaries; fixed existing-row enrichment; self-test, compilation, JSON, and whitespace checks passed."
+    },
+    {
+      "run_id": "plan-reset-archive",
+      "thread_id": "01a0a4fe-80a2-7ae3-a40e-71ab8083eeb3",
+      "role": "subagent",
+      "task": "Archive the old baseline and replace active README, STATUS, AGENTS, and PR template",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 510515,
+        "cached_input_tokens": 419072,
+        "output_tokens": 7467
+      },
+      "delta": {
+        "input_tokens": 510515,
+        "cached_input_tokens": 419072,
+        "output_tokens": 7467
+      },
+      "reason": "Awaiting final metadata collection.",
+      "result": "Archived 27/27 files byte-for-byte, removed obsolete active originals, replaced four entrypoints; git diff --check passed.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-15-37-01a0a4fe-80a2-7ae3-a40e-71ab8083eeb3.jsonl",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:18:07.647Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a4fe-811d-77f2-aad1-47d1c9eb3131",
+          "timestamp": "2026-09-15T12:15:38.952Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:30:44Z",
+      "session_started_at": "2026-09-15T12:15:37.811Z"
+    },
+    {
+      "run_id": "plan-reset-review",
+      "thread_id": "01a0a504-8532-75a0-9285-264e4a007fe5",
+      "role": "subagent",
+      "task": "Independently review active-plan consistency, staged scope, source claims, links, and archive integration",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 1151328,
+        "cached_input_tokens": 1045760,
+        "output_tokens": 10123
+      },
+      "delta": {
+        "input_tokens": 1151328,
+        "cached_input_tokens": 1045760,
+        "output_tokens": 10123
+      },
+      "reason": "Review in progress; final counters will be collected after completion.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-22-12-01a0a504-8532-75a0-9285-264e4a007fe5.jsonl",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:26:19.377Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a504-85ba-7fd3-a903-d27717ea0c43",
+          "timestamp": "2026-09-15T12:22:13.538Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:30:44Z",
+      "result": "No P0/P1; active links and archive verified, selected rules checked live; S1 brief clarified. No runtime exists.",
+      "session_started_at": "2026-09-15T12:22:12.210Z"
+    },
+    {
+      "run_id": "plan-reset-final-doc-check",
+      "thread_id": "01a0a50b-37cc-7051-bb93-123d1710db87",
+      "role": "subagent",
+      "task": "Finalize current status and check active documentation links, ledger JSON, and whitespace",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 986944,
+        "cached_input_tokens": 933376,
+        "output_tokens": 13472
+      },
+      "delta": {
+        "input_tokens": 986944,
+        "cached_input_tokens": 933376,
+        "output_tokens": 13472
+      },
+      "reason": "Final check running; session identity and usage will be collected from metadata.",
+      "result": "Updated README/STATUS; active links and anchors across nine Markdown files, eight-row ledger JSON, active inventory, and git diff --check passed.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-29-31-01a0a50b-37cc-7051-bb93-123d1710db87.jsonl",
+      "session_started_at": "2026-09-15T12:29:31.148Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:34:25.083Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a50b-3853-71a3-94d8-5bfe3d85f4a7",
+          "timestamp": "2026-09-15T12:29:32.637Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T12:34:44Z"
+    },
+    {
+      "run_id": "s1-s3-impl-supervisor",
+      "thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "role": "supervisor",
+      "task": "Coordinate and integrate S1 implementation and S2/S3 admission work; verify the local playable engine.",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "result": "Supervised S1\u2013S3 implementation, independent rules and complete-play reviews, local delivery, one-time process cleanup, and test-memory optimization. Maintained the integrated plan, status, and per-run ledger from delegated findings.",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "usage_status": "partial",
+      "start_cumulative": {
+        "input_tokens": 7466847,
+        "cached_input_tokens": 7265408,
+        "output_tokens": 46664
+      },
+      "end_cumulative": {
+        "input_tokens": 43795700,
+        "cached_input_tokens": 42810112,
+        "output_tokens": 217050
+      },
+      "delta": {
+        "input_tokens": 36328853,
+        "cached_input_tokens": 35544704,
+        "output_tokens": 170386
+      },
+      "telemetry_reason": "Measured interval only: the starting snapshot was captured after implementation supervision began, and the ending snapshot precedes final closeout edits and the final response. Earlier unmeasured work and this final suffix are excluded; these counters are not the full supervisor-turn total.",
+      "parent_thread_id": null,
+      "session_file": "rollout-2026-09-15T04-53-39-01a0a4ea-653e-7fe0-b902-044bc77b041f.jsonl",
+      "session_started_at": "2026-09-15T11:53:40.790Z",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "ultra",
+          "turn_id": "01a0a4f0-3254-7cd2-9007-4a22bca3a1b4",
+          "timestamp": "2026-09-15T12:00:00.111Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "ultra",
+          "turn_id": "01a0a4fb-52ae-7a23-8edc-99fb4762b03b",
+          "timestamp": "2026-09-15T12:12:09.762Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "ultra",
+          "turn_id": "01a0a518-0053-73d1-9244-5e7d04f14669",
+          "timestamp": "2026-09-15T12:43:28.773Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "ultra",
+          "turn_id": "01a0a518-0053-73d1-9244-5e7d04f14669",
+          "timestamp": "2026-09-15T13:22:02.666Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "ultra",
+          "turn_id": "01a0a518-0053-73d1-9244-5e7d04f14669",
+          "timestamp": "2026-09-15T15:02:30.498Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "ultra",
+          "turn_id": "01a0a518-0053-73d1-9244-5e7d04f14669",
+          "timestamp": "2026-09-15T16:34:53.785Z"
+        }
+      ],
+      "model": "gpt-6-astra",
+      "reasoning_effort": "ultra",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T12:50:56Z",
+      "latest_token_count_at": "2026-09-15T16:37:18.197Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "run_completed_at": "2026-09-15T16:37:24Z"
+    },
+    {
+      "run_id": "s1-s3-impl-readiness",
+      "thread_id": "01a0a518-338c-7b71-ab42-4bdf22345571",
+      "role": "subagent",
+      "task": "Assess S1-S3 readiness, dependencies, ownership sequence, and validation gates.",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "result": "Readiness assessment delivered to supervisor.",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 204621,
+        "cached_input_tokens": 165888,
+        "output_tokens": 2635
+      },
+      "delta": {
+        "input_tokens": 204621,
+        "cached_input_tokens": 165888,
+        "output_tokens": 2635
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-43-41-01a0a518-338c-7b71-ab42-4bdf22345571.jsonl",
+      "session_started_at": "2026-09-15T12:43:42.110Z",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a518-344f-7012-8f8d-239566e9c770",
+          "timestamp": "2026-09-15T12:43:44.334Z"
+        }
+      ],
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:45:27.356Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "telemetry_collected_at": "2026-09-15T12:50:56Z"
+    },
+    {
+      "run_id": "s1-s3-impl-rules-roster",
+      "thread_id": "01a0a518-6b61-70e3-9209-f52f05137636",
+      "role": "subagent",
+      "task": "Select and source-check the proposed rules/content roster and dependencies for the staged implementation.",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "result": "Authored source-linked S1-S3 rules note with exact fighter/warpriest/Guard Dog builds, health, reactions, equipment, spell effects and expected cases; no P0/P1.",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 5117150,
+        "cached_input_tokens": 4888448,
+        "output_tokens": 19411
+      },
+      "delta": {
+        "input_tokens": 5117150,
+        "cached_input_tokens": 4888448,
+        "output_tokens": 19411
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-43-56-01a0a518-6b61-70e3-9209-f52f05137636.jsonl",
+      "session_started_at": "2026-09-15T12:43:56.308Z",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a518-6be0-7930-b904-a180acb3fe7a",
+          "timestamp": "2026-09-15T12:43:57.569Z"
+        }
+      ],
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:57:35.433Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "telemetry_collected_at": "2026-09-15T12:58:31Z"
+    },
+    {
+      "run_id": "s1-s3-impl-core",
+      "thread_id": "01a0a519-e126-7193-a09c-5ebbd4381315",
+      "role": "subagent",
+      "task": "Implement the bounded S1 Python rules and encounter-engine core with focused tests.",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "result": "S1 core passed 75 full tests, CLI smoke, source-based run, save validation and independent review. Editable installation remains unverified.",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 5770251,
+        "cached_input_tokens": 5617664,
+        "output_tokens": 62212
+      },
+      "delta": {
+        "input_tokens": 5770251,
+        "cached_input_tokens": 5617664,
+        "output_tokens": 62212
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-31-01a0a519-e126-7193-a09c-5ebbd4381315.jsonl",
+      "session_started_at": "2026-09-15T12:45:32.004Z",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a519-e1ac-7fc1-88d5-4dd7a9dba1b1",
+          "timestamp": "2026-09-15T12:45:33.628Z"
+        }
+      ],
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:14:21.277Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "telemetry_collected_at": "2026-09-15T13:15:18Z"
+    },
+    {
+      "run_id": "s1-s3-impl-terminal",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Implement the S1 terminal interface and benchmark around the public engine operations.",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "result": "S1 terminal and benchmark complete; 27 terminal tests, then-current 46 full-suite tests and CLI smoke passed; p95 0.077 ms.",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 6563396,
+        "cached_input_tokens": 6414848,
+        "output_tokens": 43164
+      },
+      "delta": {
+        "input_tokens": 6563396,
+        "cached_input_tokens": 6414848,
+        "output_tokens": 43164
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a51a-23ed-7441-916c-ed5e1671b205",
+          "timestamp": "2026-09-15T12:45:51.519Z"
+        }
+      ],
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:05:18.149Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "telemetry_collected_at": "2026-09-15T13:06:19Z"
+    },
+    {
+      "run_id": "s1-s3-impl-runlog-start",
+      "thread_id": "01a0a518-9a06-7271-bac8-51b0777fed04",
+      "role": "subagent",
+      "task": "Register this implementation batch, establish usage boundaries, and provide maintenance commands.",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "result": "Registered this implementation batch using existing collector; recorded observed configurations and prior supervisor boundary limitation.",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 878577,
+        "cached_input_tokens": 794368,
+        "output_tokens": 19425
+      },
+      "delta": {
+        "input_tokens": 878577,
+        "cached_input_tokens": 794368,
+        "output_tokens": 19425
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-44-08-01a0a518-9a06-7271-bac8-51b0777fed04.jsonl",
+      "session_started_at": "2026-09-15T12:44:08.253Z",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a518-9a86-7792-8515-2d3ac79fc597",
+          "timestamp": "2026-09-15T12:44:09.546Z"
+        }
+      ],
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T12:51:52.072Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "telemetry_collected_at": "2026-09-15T12:57:26Z"
+    },
+    {
+      "run_id": "s1-s3-impl-health",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a520-6578-74a1-a8e6-02a448ee7646",
+      "role": "subagent",
+      "task": "Implement pure PC health, dying, healing, and heroic recovery calculations for later S2 integration",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 1711297,
+        "cached_input_tokens": 1646336,
+        "output_tokens": 18640
+      },
+      "delta": {
+        "input_tokens": 1711297,
+        "cached_input_tokens": 1646336,
+        "output_tokens": 18640
+      },
+      "reason": "Run active; session identity and final counters will be collected.",
+      "result": "Pure health helper and 19 cases written; not integrated. Stable-zero damage no-op disputed and awaiting user ruling after independent source review.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-52-38-01a0a520-6578-74a1-a8e6-02a448ee7646.jsonl",
+      "session_started_at": "2026-09-15T12:52:39.163Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:02:18.995Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a520-6641-7de0-a7b8-122e2447cf23",
+          "timestamp": "2026-09-15T12:52:40.909Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:06:19Z"
+    },
+    {
+      "run_id": "s1-s3-impl-health-rule-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a529-e283-7cc3-845c-2ce839c62f89",
+      "role": "subagent",
+      "task": "Resolve the source gap for lethal damage to stabilized unconscious PCs at 0 HP",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 646414,
+        "cached_input_tokens": 572928,
+        "output_tokens": 2482
+      },
+      "delta": {
+        "input_tokens": 646414,
+        "cached_input_tokens": 572928,
+        "output_tokens": 2482
+      },
+      "reason": "Final telemetry pending.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-03-00-01a0a529-e283-7cc3-845c-2ce839c62f89.jsonl",
+      "session_started_at": "2026-09-15T13:03:00.952Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:04:56.221Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a529-e321-7da2-a63d-d0474419028a",
+          "timestamp": "2026-09-15T13:03:03.119Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:06:19Z"
+    },
+    {
+      "run_id": "s1-s3-impl-s1-play-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a52b-c00b-74f0-a731-a5bc50074b60",
+      "role": "subagent",
+      "task": "Execute and independently source-check S1 engine, supplied dice, terminal, persistence, and performance",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 5857766,
+        "cached_input_tokens": 5694592,
+        "output_tokens": 19098
+      },
+      "delta": {
+        "input_tokens": 5857766,
+        "cached_input_tokens": 5694592,
+        "output_tokens": 19098
+      },
+      "reason": "Final telemetry pending.",
+      "result": "S1 accepted: 56 reviewed S1/terminal tests, interactive fight, 25 reproducible varied-policy fights, exact dice and malformed-save checks. Only nonblocking terminal event-order issue.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-05-03-01a0a52b-c00b-74f0-a731-a5bc50074b60.jsonl",
+      "session_started_at": "2026-09-15T13:05:03.232Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:14:10.655Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a52b-c0c7-7fa3-ac27-4e9a91eb760e",
+          "timestamp": "2026-09-15T13:05:04.921Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:15:18Z"
+    },
+    {
+      "run_id": "s1-s3-impl-health-guard",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a520-6578-74a1-a8e6-02a448ee7646",
+      "role": "subagent",
+      "task": "Replace unverified stable-zero lethal-damage no-op with an explicit unresolved-rule guard pending user ruling",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 1711297,
+        "cached_input_tokens": 1646336,
+        "output_tokens": 18640
+      },
+      "end_cumulative": {
+        "input_tokens": 2380555,
+        "cached_input_tokens": 2217216,
+        "output_tokens": 21510
+      },
+      "delta": {
+        "input_tokens": 669258,
+        "cached_input_tokens": 570880,
+        "output_tokens": 2870
+      },
+      "reason": "Follow-up baseline being captured before dispatch.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-52-38-01a0a520-6578-74a1-a8e6-02a448ee7646.jsonl",
+      "session_started_at": "2026-09-15T12:52:39.163Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T13:09:29Z",
+      "telemetry_reason": null,
+      "result": "Unverified stable-zero damage no-op replaced by UnsupportedHealthRuleError; 65 then-current tests passed. User ruling remains pending.",
+      "latest_token_count_at": "2026-09-15T13:10:41.690Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a52f-f7d8-7db2-ae81-b1358b9cbed0",
+          "timestamp": "2026-09-15T13:09:39.493Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T13:15:18Z"
+    },
+    {
+      "run_id": "s1-s3-impl-s2-design",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a530-8270-7063-9853-d80bde5a1edd",
+      "role": "subagent",
+      "task": "Design minimal S2 health/check-choice and reaction integration against actual S1 code",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 465703,
+        "cached_input_tokens": 401280,
+        "output_tokens": 4226
+      },
+      "delta": {
+        "input_tokens": 465703,
+        "cached_input_tokens": 401280,
+        "output_tokens": 4226
+      },
+      "reason": "Telemetry pending.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-10-14-01a0a530-8270-7063-9853-d80bde5a1edd.jsonl",
+      "session_started_at": "2026-09-15T13:10:15.154Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:12:55.268Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a530-8325-7c82-af4d-8531d07bfacf",
+          "timestamp": "2026-09-15T13:10:16.672Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:15:18Z"
+    },
+    {
+      "run_id": "s1-s3-impl-s2-health-flow",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a519-e126-7193-a09c-5ebbd4381315",
+      "role": "subagent",
+      "task": "Integrate PC health, initiative/turn timing, Hero Point choices, and saved continuation while preserving S1",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 5770251,
+        "cached_input_tokens": 5617664,
+        "output_tokens": 62212
+      },
+      "end_cumulative": {
+        "input_tokens": 17640540,
+        "cached_input_tokens": 17248256,
+        "output_tokens": 146323
+      },
+      "delta": {
+        "input_tokens": 11870289,
+        "cached_input_tokens": 11630592,
+        "output_tokens": 84111
+      },
+      "reason": "Telemetry pending.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-31-01a0a519-e126-7193-a09c-5ebbd4381315.jsonl",
+      "session_started_at": "2026-09-15T12:45:32.004Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T13:15:18Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T13:49:38.572Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:15:46.086Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:19:48.858Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:49:04.715Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T13:50:27Z",
+      "result": "S2A health/check-choice flow implemented: 10 focused and 129 full tests pass; 100-sample p95 command/query 0.112 ms. Independent review found nonlethal attack trait not yet wired; required correction in S2B before admission."
+    },
+    {
+      "run_id": "s1-s3-impl-s2-content-terminal",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Add reviewed S2 roster and terminal choice/health/ability presentation while preserving S1",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 6563396,
+        "cached_input_tokens": 6414848,
+        "output_tokens": 43164
+      },
+      "end_cumulative": {
+        "input_tokens": 11832689,
+        "cached_input_tokens": 11559424,
+        "output_tokens": 78238
+      },
+      "delta": {
+        "input_tokens": 5269293,
+        "cached_input_tokens": 5144576,
+        "output_tokens": 35074
+      },
+      "reason": "Follow-up baseline being captured before dispatch.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T13:16:34Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T13:32:34.765Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:16:56.182Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:26:10.460Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T13:33:11Z",
+      "result": "Reviewed S2 roster and saved-choice presentation delivered and gated; 8 S2 tests and 6 rendering checks passed. Combined suite exposed reaction-availability save bug reported to core."
+    },
+    {
+      "run_id": "s1-s3-impl-packaging",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a537-2b56-7a63-b68a-05acfd17b550",
+      "role": "subagent",
+      "task": "Verify local editable installation and document runnable S1 startup",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 663231,
+        "cached_input_tokens": 631040,
+        "output_tokens": 9999
+      },
+      "delta": {
+        "input_tokens": 663231,
+        "cached_input_tokens": 631040,
+        "output_tokens": 9999
+      },
+      "result": "Editable install and module startup verified in workspace venv; README updated; 75 then-current tests passed.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-17-31-01a0a537-2b56-7a63-b68a-05acfd17b550.jsonl",
+      "session_started_at": "2026-09-15T13:17:31.613Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:21:39.606Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a537-2c23-7071-b17a-5acc24b20147",
+          "timestamp": "2026-09-15T13:17:32.871Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:23:00Z"
+    },
+    {
+      "run_id": "s1-s3-impl-s3-design",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a530-8270-7063-9853-d80bde5a1edd",
+      "role": "subagent",
+      "task": "Specify a minimal S3 ranged/caster integration and independent helper boundaries using the reviewed roster",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 465703,
+        "cached_input_tokens": 401280,
+        "output_tokens": 4226
+      },
+      "end_cumulative": {
+        "input_tokens": 938982,
+        "cached_input_tokens": 859392,
+        "output_tokens": 9206
+      },
+      "delta": {
+        "input_tokens": 473279,
+        "cached_input_tokens": 458112,
+        "output_tokens": 4980
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-10-14-01a0a530-8270-7063-9853-d80bde5a1edd.jsonl",
+      "session_started_at": "2026-09-15T13:10:15.154Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T13:23:44Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T13:27:38.564Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a53d-0b1d-7df2-ac3e-55131b06bbb5",
+          "timestamp": "2026-09-15T13:23:56.391Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T13:27:53Z",
+      "result": "Specified small ranged/caster integration using S2 continuations; separated pure spell and geometry helper work; no new P0/P1 uncertainty."
+    },
+    {
+      "run_id": "s1-s3-impl-spell-helpers",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a53d-e40e-7501-a733-820d391d6e4c",
+      "role": "subagent",
+      "task": "Implement direct pure S3 spell numeric helpers and emanation boundaries in disjoint files",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 2177321,
+        "cached_input_tokens": 2085632,
+        "output_tokens": 17504
+      },
+      "delta": {
+        "input_tokens": 2177321,
+        "cached_input_tokens": 2085632,
+        "output_tokens": 17504
+      },
+      "reason": "Fresh session identity and evidenced zero baseline will be collected after completion.",
+      "result": "Pure S3 spell metadata/calculations delivered; 23 focused spell and 10 existing pure checks passed. Shared-engine integration tests deferred during concurrent S2 edits; not S3 completion.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-24-51-01a0a53d-e40e-7501-a733-820d391d6e4c.jsonl",
+      "session_started_at": "2026-09-15T13:24:52.046Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:31:00.160Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a53d-e494-7de1-bd57-bb18fb8ee6ce",
+          "timestamp": "2026-09-15T13:24:53.401Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:31:18Z"
+    },
+    {
+      "run_id": "s1-s3-impl-geometry",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a53f-9936-7fb1-8929-6023efc94031",
+      "role": "subagent",
+      "task": "Implement pure flanking and lesser-creature-cover geometry in the existing spatial module",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 977186,
+        "cached_input_tokens": 922624,
+        "output_tokens": 18167
+      },
+      "delta": {
+        "input_tokens": 977186,
+        "cached_input_tokens": 922624,
+        "output_tokens": 18167
+      },
+      "reason": "Fresh-session identity and final counters pending.",
+      "result": "Pure flanking and creature-cover geometry delivered using exact rational clipping; 15 focused cases passed. Broader S1 failures belong to active core turn/save integration.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-26-43-01a0a53f-9936-7fb1-8929-6023efc94031.jsonl",
+      "session_started_at": "2026-09-15T13:26:44.029Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:32:29.156Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a53f-9a01-7e11-b816-20a95a4cf651",
+          "timestamp": "2026-09-15T13:26:45.303Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:33:11Z"
+    },
+    {
+      "run_id": "s1-s3-impl-s2-health-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a552-8ba7-7bf0-b6c8-c9f07ae243b4",
+      "role": "subagent",
+      "task": "Independently execute and source-check S2 health, saved choices, Hero Points, and deterministic dice",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 3398084,
+        "cached_input_tokens": 3285248,
+        "output_tokens": 20423
+      },
+      "delta": {
+        "input_tokens": 3398084,
+        "cached_input_tokens": 3285248,
+        "output_tokens": 20423
+      },
+      "result": "Independent health review: 129 snapshot tests and continuous public play passed; found nonlethal-attack integration and inconsistent saved-check defects for core correction. No other P0/P1.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-47-25-01a0a552-8ba7-7bf0-b6c8-c9f07ae243b4.jsonl",
+      "session_started_at": "2026-09-15T13:47:25.820Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T13:59:07.987Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a552-8cc1-7860-91c7-96051adeae4a",
+          "timestamp": "2026-09-15T13:47:27.442Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T13:59:47Z"
+    },
+    {
+      "run_id": "s1-s3-impl-s2-reactions",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a519-e126-7193-a09c-5ebbd4381315",
+      "role": "subagent",
+      "task": "Implement S2 reactions, positioning/equipment, Vicious Swing/Pack Attack, and correct nonlethal attack integration",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 17640540,
+        "cached_input_tokens": 17248256,
+        "output_tokens": 146323
+      },
+      "end_cumulative": {
+        "input_tokens": 41095072,
+        "cached_input_tokens": 40218112,
+        "output_tokens": 280289
+      },
+      "delta": {
+        "input_tokens": 23454532,
+        "cached_input_tokens": 22969856,
+        "output_tokens": 133966
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-31-01a0a519-e126-7193-a09c-5ebbd4381315.jsonl",
+      "session_started_at": "2026-09-15T12:45:32.004Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T13:50:27Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T14:47:22.681Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:15:46.086Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:19:48.858Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:49:04.715Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a555-c13e-7463-b0f6-25a2fb5555c4",
+          "timestamp": "2026-09-15T13:50:55.841Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a555-c13e-7463-b0f6-25a2fb5555c4",
+          "timestamp": "2026-09-15T14:13:58.952Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a555-c13e-7463-b0f6-25a2fb5555c4",
+          "timestamp": "2026-09-15T14:38:33.439Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T14:48:03Z",
+      "result": "S2B implemented with selectable saved reactions, equipment/positioning, activities, nonlethal and save-context fixes; 147 tests pass, public complete/alternate flows pass, actual S2 cycle p95 1.161 ms (100 samples). Admission awaits independent review."
+    },
+    {
+      "run_id": "s1-s3-impl-s2-controls",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Expose S2 reaction and equipment/activity commands in terminal and verify starter admission",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 11832689,
+        "cached_input_tokens": 11559424,
+        "output_tokens": 78238
+      },
+      "end_cumulative": {
+        "input_tokens": 16262771,
+        "cached_input_tokens": 15844608,
+        "output_tokens": 98935
+      },
+      "delta": {
+        "input_tokens": 4430082,
+        "cached_input_tokens": 4285184,
+        "output_tokens": 20697
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T13:51:08Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T14:00:03.317Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:16:56.182Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:26:10.460Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a556-2bac-73c3-89fe-c01c8f65c960",
+          "timestamp": "2026-09-15T13:51:23.120Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T14:00:34Z",
+      "result": "S2 action/attack/equipment controls wired to agreed engine options; 12 focused plus 2 S1 terminal checks passed. Admission remains gated pending core end-to-end readiness and later actual CLI flow."
+    },
+    {
+      "run_id": "s1-s3-impl-s2-terminal-play",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Run actual S2 terminal reaction/choice/save flow against the newly runnable core and fix bounded presentation issues",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 16262771,
+        "cached_input_tokens": 15844608,
+        "output_tokens": 98935
+      },
+      "end_cumulative": {
+        "input_tokens": 19490814,
+        "cached_input_tokens": 18917376,
+        "output_tokens": 131859
+      },
+      "delta": {
+        "input_tokens": 3228043,
+        "cached_input_tokens": 3072768,
+        "output_tokens": 32924
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T14:14:49Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T14:27:37.452Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:16:56.182Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:26:10.460Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a556-2bac-73c3-89fe-c01c8f65c960",
+          "timestamp": "2026-09-15T13:51:23.120Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:15:06.555Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:27:01.184Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T14:28:29Z",
+      "result": "Actual S2 terminal flow passed through round two, with initiative, Swing, accepted/declined reactions and saves at reaction/nested Hero prompts; 13 S2 and 27 S1 terminal checks passed. Reaction lifetime bug was found and core-fixed; admission remains gated."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-integration-seams",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a530-8270-7063-9853-d80bde5a1edd",
+      "role": "subagent",
+      "task": "Map the existing S3 design to actual S2 continuation functions without a new framework or broad redesign",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 938982,
+        "cached_input_tokens": 859392,
+        "output_tokens": 9206
+      },
+      "end_cumulative": {
+        "input_tokens": 1568216,
+        "cached_input_tokens": 1375744,
+        "output_tokens": 11351
+      },
+      "delta": {
+        "input_tokens": 629234,
+        "cached_input_tokens": 516352,
+        "output_tokens": 2145
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-10-14-01a0a530-8270-7063-9853-d80bde5a1edd.jsonl",
+      "session_started_at": "2026-09-15T13:10:15.154Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T14:41:05Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T14:42:36.116Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a53d-0b1d-7df2-ac3e-55131b06bbb5",
+          "timestamp": "2026-09-15T13:23:56.391Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a583-d94f-7163-8d32-32b3e81863f8",
+          "timestamp": "2026-09-15T14:41:16.830Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T14:45:14Z",
+      "result": "Mapped S3 directly to current continuation functions; identified small shared check/health extractions and save invariants that must recognize spell action counts, basic-save damage and deadly dice. No new framework needed."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-core",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a519-e126-7193-a09c-5ebbd4381315",
+      "role": "subagent",
+      "task": "Integrate S3 bow equipment, prepared casting, selected spells, durations and saved check/health continuation",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 41095072,
+        "cached_input_tokens": 40218112,
+        "output_tokens": 280289
+      },
+      "end_cumulative": {
+        "input_tokens": 77254183,
+        "cached_input_tokens": 75792128,
+        "output_tokens": 417564
+      },
+      "delta": {
+        "input_tokens": 36159111,
+        "cached_input_tokens": 35574016,
+        "output_tokens": 137275
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-31-01a0a519-e126-7193-a09c-5ebbd4381315.jsonl",
+      "session_started_at": "2026-09-15T12:45:32.004Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T14:48:03Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:47:23.797Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:15:46.086Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:19:48.858Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a535-8f0f-7f91-917b-73bb8236f7e1",
+          "timestamp": "2026-09-15T13:49:04.715Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a555-c13e-7463-b0f6-25a2fb5555c4",
+          "timestamp": "2026-09-15T13:50:55.841Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a555-c13e-7463-b0f6-25a2fb5555c4",
+          "timestamp": "2026-09-15T14:13:58.952Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a555-c13e-7463-b0f6-25a2fb5555c4",
+          "timestamp": "2026-09-15T14:38:33.439Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a58c-1409-7a90-ac5f-af93f5a61cda",
+          "timestamp": "2026-09-15T14:50:15.978Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a58c-1409-7a90-ac5f-af93f5a61cda",
+          "timestamp": "2026-09-15T15:03:57.653Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a58c-1409-7a90-ac5f-af93f5a61cda",
+          "timestamp": "2026-09-15T15:29:35.661Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:47:36Z",
+      "result": "S3 core complete; final helper extraction aligned with independent frozen snapshot (172tests pass), 64focused coretests pass; 500actual S3sequences mean2.4518ms. Spell/health choices and KO\u2192Heal\u2192Stand\u2192retrieve implemented; independent play review remains."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-content-terminal",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Author reviewed ranged/caster content and expose S3 casting/equipment/choice controls",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 19490814,
+        "cached_input_tokens": 18917376,
+        "output_tokens": 131859
+      },
+      "end_cumulative": {
+        "input_tokens": 23527622,
+        "cached_input_tokens": 22854400,
+        "output_tokens": 158813
+      },
+      "delta": {
+        "input_tokens": 4036808,
+        "cached_input_tokens": 3937024,
+        "output_tokens": 26954
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T14:48:03Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:03:49.565Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:16:56.182Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:26:10.460Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a556-2bac-73c3-89fe-c01c8f65c960",
+          "timestamp": "2026-09-15T13:51:23.120Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:15:06.555Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:27:01.184Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a58d-0021-7e11-a02d-d5df9b50562f",
+          "timestamp": "2026-09-15T14:51:16.416Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:03:54Z",
+      "result": "Reviewed ranged fighter/warpriest content and S3 terminal controls; 50 focused S1-S3 content/terminal tests pass. Actual S3 play remains pending core integration; gates remain false."
+    },
+    {
+      "run_id": "s1-s3-impl-s2-reaction-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a552-8ba7-7bf0-b6c8-c9f07ae243b4",
+      "role": "subagent",
+      "task": "Independently execute and source-check S2 reactions, abilities, positioning/equipment and corrected health/save defects",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 3398084,
+        "cached_input_tokens": 3285248,
+        "output_tokens": 20423
+      },
+      "end_cumulative": {
+        "input_tokens": 10320484,
+        "cached_input_tokens": 9946112,
+        "output_tokens": 46760
+      },
+      "delta": {
+        "input_tokens": 6922400,
+        "cached_input_tokens": 6660864,
+        "output_tokens": 26337
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-47-25-01a0a552-8ba7-7bf0-b6c8-c9f07ae243b4.jsonl",
+      "session_started_at": "2026-09-15T13:47:25.820Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T14:48:03Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:06:07.811Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a58a-7ef0-7973-b3f2-e3501887f259",
+          "timestamp": "2026-09-15T14:48:33.073Z"
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a58a-7ef0-7973-b3f2-e3501887f259",
+          "timestamp": "2026-09-15T15:00:20.591Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:06:19Z",
+      "result": "147 snapshot tests and two complete public S2 encounters pass; saved nested deterministic dice/reactions verified. Conditional admission after dead-only Pack Attack regression; stow correction acknowledged, bonus-die and fatal-recovery narration corrections assigned."
+    },
+    {
+      "run_id": "s1-s3-impl-simplicity-audit",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a530-8270-7063-9853-d80bde5a1edd",
+      "role": "subagent",
+      "task": "Bounded structural critique of implemented engine complexity against the local playable-engine goal",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 1568216,
+        "cached_input_tokens": 1375744,
+        "output_tokens": 11351
+      },
+      "end_cumulative": {
+        "input_tokens": 2058186,
+        "cached_input_tokens": 1848448,
+        "output_tokens": 13342
+      },
+      "delta": {
+        "input_tokens": 489970,
+        "cached_input_tokens": 472704,
+        "output_tokens": 1991
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-10-14-01a0a530-8270-7063-9853-d80bde5a1edd.jsonl",
+      "session_started_at": "2026-09-15T13:10:15.154Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T15:11:45Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:13:11.984Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a53d-0b1d-7df2-ac3e-55131b06bbb5",
+          "timestamp": "2026-09-15T13:23:56.391Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a583-d94f-7163-8d32-32b3e81863f8",
+          "timestamp": "2026-09-15T14:41:16.830Z"
+        },
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a59f-e3ce-7d32-bb46-8a74489857f3",
+          "timestamp": "2026-09-15T15:11:54.576Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:13:26Z",
+      "result": "Architecture remains ordinary Python with bounded options and no identity-selected rules. Found speed-specific diagonal save bound; correction assigned. Deferred recovery completion duplication and broader continuation payload cleanup."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-rules-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5a4-2561-7a53-8cad-635a6f4f9df5",
+      "agent_path": "/root/s3_rules_review",
+      "role": "subagent",
+      "task": "Independent primary-source and stable pure/content checks of selected S3 bow, prepared spell, targeting and effect rules",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 4125870,
+        "cached_input_tokens": 3943680,
+        "output_tokens": 12616
+      },
+      "delta": {
+        "input_tokens": 4125870,
+        "cached_input_tokens": 3943680,
+        "output_tokens": 12616
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T08-16-33-01a0a5a4-2561-7a53-8cad-635a6f4f9df5.jsonl",
+      "session_started_at": "2026-09-15T15:16:33.432Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T15:22:25.497Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5a4-25d9-7440-a4b3-ea24d3acb313",
+          "timestamp": "2026-09-15T15:16:34.754Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T15:22:32Z",
+      "result": "Primary-source S3 review: 26 pure/content checks pass; spell, bow, combat and resource facts agree. Religion corrected to+7; omitted inactive proficiencies assigned. Integrated runtime review remains."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-terminal-play",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Run actual S3 terminal choices through public engine, starting with saved Guidance and expanding to runnable bow/casting checkpoints",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 23527622,
+        "cached_input_tokens": 22854400,
+        "output_tokens": 158813
+      },
+      "end_cumulative": {
+        "input_tokens": 28560284,
+        "cached_input_tokens": 27813120,
+        "output_tokens": 185436
+      },
+      "delta": {
+        "input_tokens": 5032662,
+        "cached_input_tokens": 4958720,
+        "output_tokens": 26623
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T15:16:58Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:27:48.307Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:16:56.182Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:26:10.460Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a556-2bac-73c3-89fe-c01c8f65c960",
+          "timestamp": "2026-09-15T13:51:23.120Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:15:06.555Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:27:01.184Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a58d-0021-7e11-a02d-d5df9b50562f",
+          "timestamp": "2026-09-15T14:51:16.416Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5a4-b27e-7040-981b-10eace32601d",
+          "timestamp": "2026-09-15T15:17:09.391Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:28:03Z",
+      "result": "Actual terminal Guidance/save/use and deterministic post-load dice pass; Divine Lance critical14 and bow saved Hero, one-arrow cost, deadly critical15 pass. Religion/proficiency corrections delivered. 53 focused terminal/content tests pass; full S3 casting/encounter review remains."
+    },
+    {
+      "run_id": "s1-s3-impl-s2-admission-docs",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a537-2b56-7a63-b68a-05acfd17b550",
+      "role": "subagent",
+      "task": "Enable independently reviewed S2 normal terminal entrypoint and document current runnable local engine and supplied dice",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 663231,
+        "cached_input_tokens": 631040,
+        "output_tokens": 9999
+      },
+      "end_cumulative": {
+        "input_tokens": 2695115,
+        "cached_input_tokens": 2574080,
+        "output_tokens": 24592
+      },
+      "delta": {
+        "input_tokens": 2031884,
+        "cached_input_tokens": 1943040,
+        "output_tokens": 14593
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-17-31-01a0a537-2b56-7a63-b68a-05acfd17b550.jsonl",
+      "session_started_at": "2026-09-15T13:17:31.613Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T15:30:45Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:35:55.465Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5b1-5868-7a43-96b4-25c3ba0bb834",
+          "timestamp": "2026-09-15T15:30:58.347Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:36:17Z",
+      "result": "S2 normal CLI enabled and real startup/initiative/quit smoke passed. README deterministic-face example verified cursor preservation, query/rejection atomicity and exhaustion. Seven focused content tests pass; S3 remains gated."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-terminal-completion",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a51a-2369-7321-8457-1d9bbce1bc55",
+      "role": "subagent",
+      "task": "Exercise actual S3 Heal/Void Warp terminal choices and complete a mixed-party encounter; verify normal terminal admission after review",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 28560284,
+        "cached_input_tokens": 27813120,
+        "output_tokens": 185436
+      },
+      "end_cumulative": {
+        "input_tokens": 35249369,
+        "cached_input_tokens": 34338560,
+        "output_tokens": 230136
+      },
+      "delta": {
+        "input_tokens": 6689085,
+        "cached_input_tokens": 6525440,
+        "output_tokens": 44700
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T05-45-48-01a0a51a-2369-7321-8457-1d9bbce1bc55.jsonl",
+      "session_started_at": "2026-09-15T12:45:48.968Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T15:40:10Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T15:57:22.908Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:16:56.182Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a536-a1ac-78e1-957b-4cbcf2b88e2a",
+          "timestamp": "2026-09-15T13:26:10.460Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a556-2bac-73c3-89fe-c01c8f65c960",
+          "timestamp": "2026-09-15T13:51:23.120Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:15:06.555Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a56b-e101-76c2-920c-3f9e8453ca6c",
+          "timestamp": "2026-09-15T14:27:01.184Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a58d-0021-7e11-a02d-d5df9b50562f",
+          "timestamp": "2026-09-15T14:51:16.416Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5a4-b27e-7040-981b-10eace32601d",
+          "timestamp": "2026-09-15T15:17:09.391Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5b9-fe70-7342-b5e1-6fd759844044",
+          "timestamp": "2026-09-15T15:40:25.137Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5b9-fe70-7342-b5e1-6fd759844044",
+          "timestamp": "2026-09-15T15:46:05.871Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T15:57:36Z",
+      "result": "Actual runner covers Heal modes and saved willingness/self choices, VoidWarp target Hero save/load, and a complete mixed S3 fight. HeroPoints0 display corrected. 51focused terminal tests pass; S3 gate awaits independent review."
+    },
+    {
+      "run_id": "s1-s3-impl-s3-runtime-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5a4-2561-7a53-8cad-635a6f4f9df5",
+      "role": "subagent",
+      "task": "Independent frozen-snapshot S3 runtime play, selected core-rule boundaries, deterministic saved choices and performance validation",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 4125870,
+        "cached_input_tokens": 3943680,
+        "output_tokens": 12616
+      },
+      "end_cumulative": {
+        "input_tokens": 9405737,
+        "cached_input_tokens": 8925952,
+        "output_tokens": 48379
+      },
+      "delta": {
+        "input_tokens": 5279867,
+        "cached_input_tokens": 4982272,
+        "output_tokens": 35763
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T08-16-33-01a0a5a4-2561-7a53-8cad-635a6f4f9df5.jsonl",
+      "session_started_at": "2026-09-15T15:16:33.432Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T15:44:10Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T16:03:17.642Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5bd-c235-78b3-a178-be5505837adc",
+          "timestamp": "2026-09-15T15:44:32.103Z"
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5bd-c235-78b3-a178-be5505837adc",
+          "timestamp": "2026-09-15T15:46:36.251Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T16:04:18Z",
+      "result": "Admit S3: no P0/P1 found. 172snapshot tests,12focused regressions,two complete publicfights and supplied-dice/save/ammo/slot/disruption/effect/health boundaries pass. 500sequence median2.6444ms p952.8115ms. Fixedmap uses firstbowincrement; larger-range probe assignedfinalverification."
+    },
+    {
+      "run_id": "s1-s3-impl-final-admission-docs",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a537-2b56-7a63-b68a-05acfd17b550",
+      "role": "subagent",
+      "task": "Enable reviewed S3, update final startup/API/support documentation, and run final CLI/full-suite/document hygiene verification",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 2695115,
+        "cached_input_tokens": 2574080,
+        "output_tokens": 24592
+      },
+      "end_cumulative": {
+        "input_tokens": 4655941,
+        "cached_input_tokens": 4490496,
+        "output_tokens": 42848
+      },
+      "delta": {
+        "input_tokens": 1960826,
+        "cached_input_tokens": 1916416,
+        "output_tokens": 18256
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T06-17-31-01a0a537-2b56-7a63-b68a-05acfd17b550.jsonl",
+      "session_started_at": "2026-09-15T13:17:31.613Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T16:03:05Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T16:10:14.241Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5b1-5868-7a43-96b4-25c3ba0bb834",
+          "timestamp": "2026-09-15T15:30:58.347Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5ce-fde4-78a0-83dc-596f374d657c",
+          "timestamp": "2026-09-15T16:03:22.491Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T16:10:52Z",
+      "result": "S3 enabled;177current tests, installedCLI3initiativechoices/Inspect/Quit, documented deterministicdice example, compileall/diffcheck and35links across11files pass. Catalogued7x5setup rejectsmodifiedlargermaps; longrangepublicprobe outofcurrent scope. Archiveinventory27payloads+manifest preserved."
+    },
+    {
+      "run_id": "s1-s3-impl-test-memory-fix",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5d8-5eb4-7dc3-9119-2336ae76ea8d",
+      "agent_path": "/root/test_memory_fix",
+      "role": "subagent",
+      "task": "Identify and stop unused task-owned Python test processes, diagnose and fix excessive test memory, verify correctness and bounded cleanup",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 2319314,
+        "cached_input_tokens": 2163456,
+        "output_tokens": 17568
+      },
+      "delta": {
+        "input_tokens": 2319314,
+        "cached_input_tokens": 2163456,
+        "output_tokens": 17568
+      },
+      "result": "Confirmed2staleS3pytestprocesses, sentTERM, immediatepsshowedgone. AddedboundedS3transcripts+failuretest;16S3tests and178fulltests pass; peakRSS50,429,952B/peakfootprint40,240,832B. Historic multiGBcauseunproven; capture riskbounded. Independentguardreview follows.",
+      "execution_note": "One logical task interrupted and resumed; usage covers both execution segments.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T09-13-35-01a0a5d8-5eb4-7dc3-9119-2336ae76ea8d.jsonl",
+      "session_started_at": "2026-09-15T16:13:36.119Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T16:23:26.453Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5d8-5f87-7fd2-9630-402e905a2e85",
+          "timestamp": "2026-09-15T16:13:37.518Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5df-bb6a-7923-8118-26e66a09486c",
+          "timestamp": "2026-09-15T16:21:38.336Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T16:25:09Z"
+    },
+    {
+      "run_id": "s1-s3-impl-memory-process-cleanup",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5dd-c13a-7922-9f02-c4fff34f737e",
+      "agent_path": "/root/memory_process_cleanup",
+      "role": "subagent",
+      "task": "Urgently identify and stop the two reported unused task-owned Python processes; bounded process cleanup only",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 232659,
+        "cached_input_tokens": 227712,
+        "output_tokens": 1415
+      },
+      "delta": {
+        "input_tokens": 232659,
+        "cached_input_tokens": 227712,
+        "output_tokens": 1415
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T09-19-28-01a0a5dd-c13a-7922-9f02-c4fff34f737e.jsonl",
+      "session_started_at": "2026-09-15T16:19:28.948Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T16:20:18.611Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5dd-c1e4-74e3-8416-540cec16b665",
+          "timestamp": "2026-09-15T16:19:31.449Z"
+        }
+      ],
+      "telemetry_reason": null,
+      "telemetry_collected_at": "2026-09-15T16:21:08Z",
+      "result": "Both reported Python PIDs had exited before inspection; repeated narrow ps checks found no rows. No signals sent by this cleanup run."
+    },
+    {
+      "run_id": "s1-s3-impl-one-time-browser-process-cleanup",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5dd-c13a-7922-9f02-c4fff34f737e",
+      "role": "subagent",
+      "task": "One-time attribution and cleanup of orphan Node/Playwright/Chrome processes from closed or completed subagents",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 232659,
+        "cached_input_tokens": 227712,
+        "output_tokens": 1415
+      },
+      "end_cumulative": {
+        "input_tokens": 1692381,
+        "cached_input_tokens": 1642496,
+        "output_tokens": 13437
+      },
+      "delta": {
+        "input_tokens": 1459722,
+        "cached_input_tokens": 1414784,
+        "output_tokens": 12022
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T09-19-28-01a0a5dd-c13a-7922-9f02-c4fff34f737e.jsonl",
+      "session_started_at": "2026-09-15T16:19:28.948Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T16:21:08Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T16:27:24.753Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5df-892b-77e1-b1e4-82bb695aff97",
+          "timestamp": "2026-09-15T16:21:25.471Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T16:28:46Z",
+      "result": "Sent SIGTERM to Playwright MCP PIDs 77393 and 77416 and verified exit. Attribution used start time and process grouping relative to a completed source-review session. No Chrome or headless browser found. Retained PIDs 85571/85679 and other Node services because exclusive ownership was unproven. One-time pass closed."
+    },
+    {
+      "run_id": "s1-s3-impl-memory-guard-review",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5a4-2561-7a53-8cad-635a6f4f9df5",
+      "role": "subagent",
+      "task": "Independently verify test-memory guardrails preserve correctness and cover scripted terminal failure paths",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "start_cumulative": {
+        "input_tokens": 9405737,
+        "cached_input_tokens": 8925952,
+        "output_tokens": 48379
+      },
+      "end_cumulative": {
+        "input_tokens": 11400346,
+        "cached_input_tokens": 10878848,
+        "output_tokens": 56062
+      },
+      "delta": {
+        "input_tokens": 1994609,
+        "cached_input_tokens": 1952896,
+        "output_tokens": 7683
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T08-16-33-01a0a5a4-2561-7a53-8cad-635a6f4f9df5.jsonl",
+      "session_started_at": "2026-09-15T15:16:33.432Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T16:25:09Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T16:29:37.681Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5bd-c235-78b3-a178-be5505837adc",
+          "timestamp": "2026-09-15T15:44:32.103Z"
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5bd-c235-78b3-a178-be5505837adc",
+          "timestamp": "2026-09-15T15:46:36.251Z"
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a5e3-2dc5-7da2-962d-bb98a7247cda",
+          "timestamp": "2026-09-15T16:25:24.202Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T16:30:18Z",
+      "result": "Approved the S3 guard: it fails before excess capture, with no truncation or hidden failures. All 52 focused tests passed. Normal S3 captures peaked at 135 entries and 42,124 characters, below the 4,096-entry and 1,048,576-character limits. Identified one S2 dynamic capture gap for the shared helper; S1 finite-input tests were bounded. The historical multi-gigabyte cause remains unproven."
+    },
+    {
+      "run_id": "s1-s3-impl-shared-memory-guard",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5d8-5eb4-7dc3-9119-2336ae76ea8d",
+      "role": "subagent",
+      "task": "Share the bounded transcript helper across dynamic S2/S3 terminal tests and verify bounded failure, full correctness and final process cleanup",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 2319314,
+        "cached_input_tokens": 2163456,
+        "output_tokens": 17568
+      },
+      "end_cumulative": {
+        "input_tokens": 3199301,
+        "cached_input_tokens": 3025152,
+        "output_tokens": 22807
+      },
+      "delta": {
+        "input_tokens": 879987,
+        "cached_input_tokens": 861696,
+        "output_tokens": 5239
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T09-13-35-01a0a5d8-5eb4-7dc3-9119-2336ae76ea8d.jsonl",
+      "session_started_at": "2026-09-15T16:13:36.119Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T16:28:46Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T16:31:00.152Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5df-bb6a-7923-8118-26e66a09486c",
+          "timestamp": "2026-09-15T16:21:38.336Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5e6-7c55-74d2-9f4b-c9111a4652a5",
+          "timestamp": "2026-09-15T16:29:00.938Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T16:32:07Z",
+      "result": "Shared tests/terminal_test_helpers.py now bounds dynamic S2/S3 capture. Repeated misrouted S2 input fails at 32 entries; existing assertions remain. All 18 focused and 179 full-suite tests passed. Peak RSS was 49,512,448 bytes; peak footprint was 39,339,648 bytes. No production changes or background work."
+    },
+    {
+      "run_id": "s1-s3-impl-final-process-check",
+      "batch": "s1-s3-implementation-2026-09-15",
+      "thread_id": "01a0a5d8-5eb4-7dc3-9119-2336ae76ea8d",
+      "role": "subagent",
+      "task": "Final read-only process-exit and test-helper hygiene check after memory optimization",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "start_cumulative": {
+        "input_tokens": 3199301,
+        "cached_input_tokens": 3025152,
+        "output_tokens": 22807
+      },
+      "end_cumulative": {
+        "input_tokens": 3779005,
+        "cached_input_tokens": 3597056,
+        "output_tokens": 27428
+      },
+      "delta": {
+        "input_tokens": 579704,
+        "cached_input_tokens": 571904,
+        "output_tokens": 4621
+      },
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T09-13-35-01a0a5d8-5eb4-7dc3-9119-2336ae76ea8d.jsonl",
+      "session_started_at": "2026-09-15T16:13:36.119Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T16:32:07Z",
+      "telemetry_reason": null,
+      "latest_token_count_at": "2026-09-15T16:37:28.224Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5df-bb6a-7923-8118-26e66a09486c",
+          "timestamp": "2026-09-15T16:21:38.336Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5e6-7c55-74d2-9f4b-c9111a4652a5",
+          "timestamp": "2026-09-15T16:29:00.938Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a5ec-0337-79f0-8fbf-62f4fc991939",
+          "timestamp": "2026-09-15T16:35:03.703Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T16:37:34Z",
+      "result": "Fresh checks found PIDs 82927, 83479, 77393 and 77416 absent and no repository pytest process remaining. Left one older Python stdin process (76947, approximately 7 MiB RSS) untouched because ownership by the completed test runs was unproven. Whitespace check passed; no further issues reported."
+    },
+    {
+      "run_id": "encounter-coverage-inventory-2026-09-15",
+      "batch": "encounter-coverage-answer-2026-09-15",
+      "role": "subagent",
+      "agent": "/root/encounter_coverage_inventory",
+      "thread_id": "01a0a643-bfb5-7220-acff-3ae1fc182f11",
+      "task": "Count shipped encounters and map actual rules/interactions evidence, distinguishing continuous play from isolated tests",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 463254,
+        "cached_input_tokens": 394624,
+        "output_tokens": 2480
+      },
+      "delta": {
+        "input_tokens": 463254,
+        "cached_input_tokens": 394624,
+        "output_tokens": 2480
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T11-10-53-01a0a643-bfb5-7220-acff-3ae1fc182f11.jsonl",
+      "session_started_at": "2026-09-15T18:10:53.051Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T18:12:36.704Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a643-c018-7683-80f3-90554dbd0438",
+          "timestamp": "2026-09-15T18:10:56.615Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T18:12:59Z",
+      "result": "Read-only inventory found 3 terminal encounters and 2 additional catalogued Python diagnostic setups, all on open 7\u00d75 maps. Found 9 retained complete-fight regression cases (7 S1, 1 S2, 1 S3), plus historical independent runs of existing setups. Mapped public-command interaction sequences and identified limited map/monster variety, short victory routes, and focused-only coverage. No new tests or play sessions were run."
+    },
+    {
+      "run_id": "interaction-design-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/interaction_encounter_design",
+      "thread_id": "01a0a682-54f2-7df0-bbc1-e8fb8964aafb",
+      "role": "subagent",
+      "task": "Design 8 additional S2 and 8 additional S3 interaction encounters, select supported low-level content, and research exact relevant sources",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 1098688,
+        "cached_input_tokens": 1053056,
+        "output_tokens": 6311
+      },
+      "delta": {
+        "input_tokens": 1098688,
+        "cached_input_tokens": 1053056,
+        "output_tokens": 6311
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-19-14-01a0a682-54f2-7df0-bbc1-e8fb8964aafb.jsonl",
+      "session_started_at": "2026-09-15T19:19:14.485Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T19:24:10.126Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a682-554f-7252-b186-aa26057ac144",
+          "timestamp": "2026-09-15T19:19:17.109Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T19:27:42Z",
+      "result": "Delivered sourced matrix of eight new S2 and eight new S3 encounters, Fleet shortsword fighter, rapier fighter and elite Guard Dog. Two15\u00d75 cases exercise range/emanation boundaries. Exact catalog admission retained; no new rule blocker, tests or persistent processes."
+    },
+    {
+      "run_id": "modular-test-design-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/modular_test_design",
+      "thread_id": "01a0a682-85cf-7103-a438-cb58b23cf6e2",
+      "role": "subagent",
+      "task": "Design small modular encounter-test organization, bounded execution and process ownership/cleanup for the interaction stage",
+      "requested_model": "gpt-6-astra",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 882014,
+        "cached_input_tokens": 850816,
+        "output_tokens": 3034
+      },
+      "delta": {
+        "input_tokens": 882014,
+        "cached_input_tokens": 850816,
+        "output_tokens": 3034
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-19-26-01a0a682-85cf-7103-a438-cb58b23cf6e2.jsonl",
+      "session_started_at": "2026-09-15T19:19:26.995Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T19:21:32.476Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-6-astra",
+      "reasoning_effort": "high",
+      "observed_configs": [
+        {
+          "model": "gpt-6-astra",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a682-8627-7772-950a-7136c66f659f",
+          "timestamp": "2026-09-15T19:19:28.196Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T19:22:12Z",
+      "result": "Recommended small shared public-command helpers, independent S2/S3 scenario modules, file/node focused selection, one bounded pytest process, and integration/full-suite checks at meaningful checkpoints. Confirmed exact-catalog map admission can extend to 15\u00d75 without a persistence redesign. No tests or background probes launched."
+    },
+    {
+      "run_id": "interaction-test-helpers-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/interaction_test_helpers",
+      "thread_id": "01a0a684-d0ed-7ed1-8053-52dc455cbb62",
+      "role": "subagent",
+      "task": "Implement small bounded public-command test helpers and meaningful failure-limit checks",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 1580538,
+        "cached_input_tokens": 1513728,
+        "output_tokens": 12046
+      },
+      "delta": {
+        "input_tokens": 1580538,
+        "cached_input_tokens": 1513728,
+        "output_tokens": 12046
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-21-57-01a0a684-d0ed-7ed1-8053-52dc455cbb62.jsonl",
+      "session_started_at": "2026-09-15T19:21:57.294Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T19:26:43.030Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a684-d141-71d0-976a-fafcfabdd90a",
+          "timestamp": "2026-09-15T19:22:00.233Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T19:27:58Z",
+      "result": "Implemented EncounterHarness with checked public commands/choices, inspections, save/load, bounded initialization/end-turn and outcome assertions. Defaults160 commands,40 choices,12 rounds,2000 events. Two focused tests passed with45-second CPU/60-second wall bounds; all sessions completed inline and no background tests remain."
+    },
+    {
+      "run_id": "interaction-catalog-integration-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/interaction_catalog_integration",
+      "thread_id": "01a0a685-9ce6-74e0-813a-1d5c5014ba21",
+      "role": "subagent",
+      "task": "Integrate sixteen new catalog setups, source-backed definitions, larger catalogued map, terminal commands and active project instructions",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 22502979,
+        "cached_input_tokens": 22089728,
+        "output_tokens": 89995
+      },
+      "delta": {
+        "input_tokens": 22502979,
+        "cached_input_tokens": 22089728,
+        "output_tokens": 89995
+      },
+      "telemetry_reason": null,
+      "scope_note": "Owns narrow spell-parent reaction validator correction in encounter.py, tests/test_spell_reaction_persistence.py, and coherent conscious-combatant encounter outcome predicate shared with persistence validation. model.py permitted only for a small purpose-specific predicate; preserve dead/defeated semantics used elsewhere. No schema or continuation framework redesign.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-22-49-01a0a685-9ce6-74e0-813a-1d5c5014ba21.jsonl",
+      "session_started_at": "2026-09-15T19:22:49.513Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T20:06:48.913Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a685-9d3a-7f20-b44e-cd8c4a895cd0",
+          "timestamp": "2026-09-15T19:22:50.865Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a685-9d3a-7f20-b44e-cd8c4a895cd0",
+          "timestamp": "2026-09-15T19:51:18.941Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T20:08:26Z",
+      "result": "Registered21 setups and larger catalogued maps, exposed CLI names, updated working model/docs, fixed nested spell-parent save validation and conscious-team outcomes without changing general defeated semantics. Focused checks:31 reaction/persistence/outcome/S3,6 catalog,2 terminal notices. Actual newS2/S3 terminal save/load passed. No full suite yet; all processes exited."
+    },
+    {
+      "run_id": "s2-interaction-encounters-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/s2_interaction_encounters",
+      "thread_id": "01a0a685-dd6d-7633-a22d-43e64487d8ac",
+      "role": "subagent",
+      "task": "Implement eight S2 setups, Fleet/elite definitions, and the first four complete encounter tests; last four tests have a separate owner",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 13859998,
+        "cached_input_tokens": 13664768,
+        "output_tokens": 55641
+      },
+      "delta": {
+        "input_tokens": 13859998,
+        "cached_input_tokens": 13664768,
+        "output_tokens": 55641
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-23-06-01a0a685-dd6d-7633-a22d-43e64487d8ac.jsonl",
+      "session_started_at": "2026-09-15T19:23:06.033Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T19:48:46.626Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a685-ddc6-7090-8c8e-e7195516b836",
+          "timestamp": "2026-09-15T19:23:07.279Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T19:50:15Z",
+      "result": "Authored eight S2 setups and Fleet/elite definitions; four complete interaction routes plus content check passed (5 tests in0.11s). Mixed-pack measured104 commands,45 choices,8 rounds,207 events and explicit50-choice limit. Synchronous processes exited. Independent review subsequently requested three stronger milestone assertions in a separate follow-up."
+    },
+    {
+      "run_id": "s3-interaction-encounters-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/s3_interaction_encounters",
+      "thread_id": "01a0a686-15b6-76e3-9212-ff8a4b310028",
+      "role": "subagent",
+      "task": "Implement eight S3 setups, rapier definition, and the first four complete encounter tests; last four tests have a separate owner",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 11065086,
+        "cached_input_tokens": 10729728,
+        "output_tokens": 70932
+      },
+      "delta": {
+        "input_tokens": 11065086,
+        "cached_input_tokens": 10729728,
+        "output_tokens": 70932
+      },
+      "telemetry_reason": null,
+      "result": "Authored all eight S3 setups and sourced rapier fighter; completed four range/cover/rescue/stabilization routes. Five module tests pass in0.23s. Independent checks verify actual hit/miss ammo costs, saved range/MAP/cover, covered Divine Lance, Heal modes, wounded/prone/equipment and outcome. Stabilize setup simplified to one ordinary dog while preserving its full recovery sequence. All processes exited.",
+      "reported_thread_id": "01a0a686-15b6-76e3-9212-2ff8a4b31028",
+      "identity_note": "Worker reported a mistyped UUID. Corrected from session_meta matching agent_path /root/s3_interaction_encounters and parent thread; no transcript content read.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-23-20-01a0a686-15b6-76e3-9212-ff8a4b310028.jsonl",
+      "session_started_at": "2026-09-15T19:23:20.444Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T19:59:13.615Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a686-160d-7270-bd59-1c764714eb4a",
+          "timestamp": "2026-09-15T19:23:21.772Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a686-160d-7270-bd59-1c764714eb4a",
+          "timestamp": "2026-09-15T19:46:23.852Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T20:04:53Z"
+    },
+    {
+      "run_id": "interaction-independent-review-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/interaction_independent_review",
+      "thread_id": "01a0a68e-0a8c-7182-b957-4482de2f00a8",
+      "role": "subagent",
+      "task": "Independently review new content and interactions against sources, then execute sixteen integrated encounters and alternate public-command routes with save/resource/performance checks",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 26172616,
+        "cached_input_tokens": 25571200,
+        "output_tokens": 56074
+      },
+      "delta": {
+        "input_tokens": 26172616,
+        "cached_input_tokens": 25571200,
+        "output_tokens": 56074
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-32-01-01a0a68e-0a8c-7182-b957-4482de2f00a8.jsonl",
+      "session_started_at": "2026-09-15T19:32:01.873Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T20:25:58.790Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a68e-0ae3-7022-a9cb-2e6c796d1a22",
+          "timestamp": "2026-09-15T19:32:03.287Z"
+        },
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a68e-0ae3-7022-a9cb-2e6c796d1a22",
+          "timestamp": "2026-09-15T19:53:46.555Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T20:26:31Z",
+      "result": "Accepted all16 encounters with no remaining matrix omissions. Five-module collection18passed in0.41s; wrapper0.6245s, peak childRSS47,923,200B. Four alternate complete routes passed. Source/content, catalog6, core correction7, stable-zero1 and harness failure1 checks passed. All owned children exited/reaped; no stale pytest/PF2e process. Full repository suite left to final integrator."
+    },
+    {
+      "run_id": "s2-interaction-recovery-tests-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/s2_interaction_recovery_tests",
+      "thread_id": "01a0a692-3666-7383-b33e-521001691082",
+      "role": "subagent",
+      "task": "Implement four S2 complete encounter tests for reaction relay, disrupted item handling, nonlethal passage and heroic recovery",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 9573799,
+        "cached_input_tokens": 9181440,
+        "output_tokens": 101664
+      },
+      "delta": {
+        "input_tokens": 9573799,
+        "cached_input_tokens": 9181440,
+        "output_tokens": 101664
+      },
+      "telemetry_reason": null,
+      "execution_note": "One logical run interrupted and immediately resumed after repeated unanswered progress requests. Owner confirmed no live test/probe process, one partially authored reaction-relay case, preserved edits, and continued the same four-case scope. Final usage includes both segments.",
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-36-35-01a0a692-3666-7383-b33e-521001691082.jsonl",
+      "session_started_at": "2026-09-15T19:36:35.240Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T20:15:07.364Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a692-36ba-7b40-9bee-0b0229c71af7",
+          "timestamp": "2026-09-15T19:36:36.551Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6a1-32d0-7321-a371-60fad6db7c7c",
+          "timestamp": "2026-09-15T19:52:57.352Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6a1-32d0-7321-a371-60fad6db7c7c",
+          "timestamp": "2026-09-15T20:03:25.087Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T20:16:48Z",
+      "result": "All four complete S2 reaction/recovery routes pass in0.11s; independent module review also passes4 in0.06s. Includes saved nested choices, disrupted item handling, nonlethal body-square transit, Heroic Recovery and exact initiative reorder, preserving stable PC through later turns. All runs synchronous and exited; worker sandbox could not list processes, but separate independent audit found no stale probes."
+    },
+    {
+      "run_id": "s3-interaction-effect-tests-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/s3_interaction_effect_tests",
+      "thread_id": "01a0a692-6d2c-7920-8fbb-2dd0b0a77008",
+      "role": "subagent",
+      "task": "Implement complete S3 emanation and void/finesse encounter tests; originally four cases, narrowed to two after the unwritten reaction cases were reassigned to a separate file",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 10069363,
+        "cached_input_tokens": 9731840,
+        "output_tokens": 97490
+      },
+      "delta": {
+        "input_tokens": 10069363,
+        "cached_input_tokens": 9731840,
+        "output_tokens": 97490
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-36-49-01a0a692-6d2c-7920-8fbb-2dd0b0a77008.jsonl",
+      "session_started_at": "2026-09-15T19:36:49.281Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T20:11:33.912Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a692-6d93-72e3-a74e-d3416a865492",
+          "timestamp": "2026-09-15T19:36:50.834Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a692-6d93-72e3-a74e-d3416a865492",
+          "timestamp": "2026-09-15T20:00:35.481Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T20:12:15Z",
+      "result": "Completed two public full-fight cases: void/finesse/Strength damage/expiry/deadly plus nonlethal PC outcome, and shared-roll emanation healing with injured outside target, saved inclusion, slot accounting and completion. Both module tests pass; all processes synchronous and exited."
+    },
+    {
+      "run_id": "s2-interaction-milestone-corrections-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/s2_interaction_encounters",
+      "thread_id": "01a0a685-dd6d-7633-a22d-43e64487d8ac",
+      "role": "subagent",
+      "task": "Close independent review gaps in first four S2 milestone assertions and align final outcome with accepted incapacitation policy",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 13859998,
+        "cached_input_tokens": 13664768,
+        "output_tokens": 55641
+      },
+      "end_cumulative": {
+        "input_tokens": 14735424,
+        "cached_input_tokens": 14506496,
+        "output_tokens": 62805
+      },
+      "delta": {
+        "input_tokens": 875426,
+        "cached_input_tokens": 841728,
+        "output_tokens": 7164
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-23-06-01a0a685-dd6d-7633-a22d-43e64487d8ac.jsonl",
+      "session_started_at": "2026-09-15T19:23:06.033Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T19:51:19Z",
+      "latest_token_count_at": "2026-09-15T19:55:24.512Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a69f-df6f-7981-93fd-028f0bf63c92",
+          "timestamp": "2026-09-15T19:51:30.469Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a69f-df6f-7981-93fd-028f0bf63c92",
+          "timestamp": "2026-09-15T19:52:38.964Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T19:55:44Z",
+      "result": "Added explicit Vicious Swing attack-count=2, second longsword MAP\u22125 versus shortsword\u22124, third shortsword\u22128, and flank-dependent hit/miss damage assertions. Three focused checks and five module tests pass. All processes exited synchronously; no core changes."
+    },
+    {
+      "run_id": "s3-interaction-reaction-tests-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/interaction_catalog_integration",
+      "thread_id": "01a0a685-9ce6-74e0-813a-1d5c5014ba21",
+      "role": "subagent",
+      "task": "Implement two complete S3 guided-reaction and interrupted-preparation encounters in a separately owned test module",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "superseded",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 22502979,
+        "cached_input_tokens": 22089728,
+        "output_tokens": 89995
+      },
+      "end_cumulative": {
+        "input_tokens": 23697525,
+        "cached_input_tokens": 23183104,
+        "output_tokens": 93549
+      },
+      "delta": {
+        "input_tokens": 1194546,
+        "cached_input_tokens": 1093376,
+        "output_tokens": 3554
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-22-49-01a0a685-9ce6-74e0-813a-1d5c5014ba21.jsonl",
+      "session_started_at": "2026-09-15T19:22:49.513Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T20:08:26Z",
+      "latest_token_count_at": "2026-09-15T20:15:27.998Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a685-9d3a-7f20-b44e-cd8c4a895cd0",
+          "timestamp": "2026-09-15T19:51:18.941Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6af-8faf-7420-86a9-46f5eb6d6ee6",
+          "timestamp": "2026-09-15T20:08:38.634Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6af-8faf-7420-86a9-46f5eb6d6ee6",
+          "timestamp": "2026-09-15T20:14:56.238Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T20:16:48Z",
+      "result": "Route-mapping work only; owner reported0 of2 cases authored and no test process. Root interrupted and reassigned the open-ended final play-route construction to a separate Sol/high author. Completed earlier core/catalog changes remain accepted. Recorded usage ends at interruption."
+    },
+    {
+      "run_id": "s3-final-reaction-playtests-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/s3_final_reaction_playtests",
+      "thread_id": "01a0a6b6-7a32-7700-a822-5881747f474d",
+      "role": "subagent",
+      "task": "Construct and implement final two complete S3 spell-reaction play routes with exact source-backed milestones and bounded execution",
+      "requested_model": "gpt-5.6-sol",
+      "requested_reasoning_effort": "high",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 3340543,
+        "cached_input_tokens": 3113984,
+        "output_tokens": 16532
+      },
+      "delta": {
+        "input_tokens": 3340543,
+        "cached_input_tokens": 3113984,
+        "output_tokens": 16532
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T13-16-11-01a0a6b6-7a32-7700-a822-5881747f474d.jsonl",
+      "session_started_at": "2026-09-15T20:16:11.893Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T20:23:55.106Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-sol",
+          "reasoning_effort": "high",
+          "turn_id": "01a0a6b6-7a87-7643-ae8c-08d8142a1228",
+          "timestamp": "2026-09-15T20:16:13.525Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T20:24:36Z",
+      "result": "Two complete bounded public-command S3 reaction encounters; 2 passed in 0.08s. Saved Guidance reroll and later Fleet check, critical spell disruption with retained costs and slot-safe cantrip, full outcomes. Narrow post-run audit found no pytest processes."
+    },
+    {
+      "run_id": "interaction-final-integration-2026-09-15",
+      "batch": "interaction-stage-2026-09-15",
+      "agent": "/root/interaction_catalog_integration",
+      "thread_id": "01a0a685-9ce6-74e0-813a-1d5c5014ba21",
+      "role": "subagent",
+      "task": "Final full-suite and memory measurement after independent acceptance; entrypoint docs, links, archive preservation and attributable process cleanup",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 23697525,
+        "cached_input_tokens": 23183104,
+        "output_tokens": 93549
+      },
+      "end_cumulative": {
+        "input_tokens": 24866553,
+        "cached_input_tokens": 24274944,
+        "output_tokens": 108765
+      },
+      "delta": {
+        "input_tokens": 1169028,
+        "cached_input_tokens": 1091840,
+        "output_tokens": 15216
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T12-22-49-01a0a685-9ce6-74e0-813a-1d5c5014ba21.jsonl",
+      "session_started_at": "2026-09-15T19:22:49.513Z",
+      "start_boundary": "observed cumulative snapshot",
+      "run_started_at": "2026-09-15T20:25:00Z",
+      "latest_token_count_at": "2026-09-15T20:31:36.403Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a685-9d3a-7f20-b44e-cd8c4a895cd0",
+          "timestamp": "2026-09-15T19:51:18.941Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6af-8faf-7420-86a9-46f5eb6d6ee6",
+          "timestamp": "2026-09-15T20:08:38.634Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6af-8faf-7420-86a9-46f5eb6d6ee6",
+          "timestamp": "2026-09-15T20:14:56.238Z"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6be-b69f-7af3-80f4-bc1d724618c3",
+          "timestamp": "2026-09-15T20:25:11.640Z"
+        }
+      ],
+      "run_completed_at": "2026-09-15T20:32:29Z",
+      "result": "Full suite211passed in0.69s, wrapper wall0.912s. Pytest exit0; timer wrapper exit1 from denied sysctl, no full-suite memory available and no rerun. Updated README/STATUS; AGENTS already current. All41internal links across11active Markdown files pass;27/27archived baseline payloads byte-match; ledgerJSON and gitdiffcheck pass. Process list blocked; own synchronous wrapper waited/reaped, all workers reported exit; latest independent audit found no owned leftovers. No processes signaled, no commit."
+    },
+    {
+      "run_id": "branch-commit-engine-only-2026-09-15",
+      "batch": "git-delivery-2026-09-15",
+      "agent": "/root/branch_commit_engine_only",
+      "thread_id": "01a0a6ea-004d-7891-9d4f-3cbf018bec4d",
+      "role": "subagent",
+      "task": "Create engine-only branch from current checkout and commit the completed authorized local engine, tests, documentation and archive",
+      "requested_model": "gpt-5.6-luna",
+      "requested_reasoning_effort": "xhigh",
+      "status": "complete",
+      "usage_status": "available",
+      "start_cumulative": {
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "output_tokens": 0
+      },
+      "end_cumulative": {
+        "input_tokens": 606796,
+        "cached_input_tokens": 565504,
+        "output_tokens": 5875
+      },
+      "delta": {
+        "input_tokens": 606796,
+        "cached_input_tokens": 565504,
+        "output_tokens": 5875
+      },
+      "telemetry_reason": null,
+      "parent_thread_id": "01a0a4ea-653e-7fe0-b902-044bc77b041f",
+      "session_file": "rollout-2026-09-15T14-12-28-01a0a6ea-004d-7891-9d4f-3cbf018bec4d.jsonl",
+      "session_started_at": "2026-09-15T21:12:28.718Z",
+      "start_boundary": "first post-session total equals last usage",
+      "latest_token_count_at": "2026-09-15T21:14:56.450Z",
+      "boundary_evidence": "first post-session total equals last usage; zero baseline verified",
+      "model": "gpt-5.6-luna",
+      "reasoning_effort": "xhigh",
+      "observed_configs": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "xhigh",
+          "turn_id": "01a0a6ea-00bf-7da1-a76e-e6de9c746221",
+          "timestamp": "2026-09-15T21:12:31.399Z"
+        }
+      ],
+      "telemetry_collected_at": "2026-09-15T21:15:31Z",
+      "result": "Created engine-only from detached checkout and committed81project files, preserving27historical archived payloads. Cached diff check and targeted credential-pattern scan passed; environments/caches/egg-info excluded. Worker reported clean status after commit. No tests rerun because implementation unchanged. Supervisor includes final usage/log through a log-only amendment."
+    }
+  ]
+}

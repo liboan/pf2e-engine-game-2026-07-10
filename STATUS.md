@@ -1,50 +1,60 @@
-# Project status
+# Current status
 
-**Updated:** 2026-07-29
-**State:** Design baseline only; implementation has not begun.
+## Delivered — 2026-09-15
 
-## Current values
+**S1–S3 are implemented, independently reviewed, and available for local play.** A person controls every side through Python calls or a numbered terminal interface. There is no browser or server.
 
-- Accepted rules profiles: **0**
-- Supported capabilities, content definitions, and encounters: **0**
-- Packages in `active` or `verify`: **0**
-- Packages `merged`: **1** (`docs-design-deepening-v1`)
-- Packages `support-accepted`: **0**
-- Executable engine, public API, client, and benchmark baseline: **none**
-
-## Accepted baseline
-
-- Product: **private, single-client tool**. Public distribution and multi-client operation are outside the initial target.
-- Implementation: **Python monorepo**, canonical **JSON snapshots**, and unique command/retry IDs with committed receipts. Development and validation run locally on **macOS**; GitHub Actions is outside scope.
-- Rules authority: **Archives of Nethys as retrieved through 2026-07-10**. The initial Remaster content allowlist is *Player Core* (AoN 216), *Player Core 2* (227), *Monster Core* (221), and *NPC Core* (236). The immutable profile record has not yet been created, so accepted rules profiles remain at zero.
-- Rules dependencies: core encounter procedures may come from other AoN pages when required to execute allowlisted content. This does not authorize a bulk import of *GM Core* or any other source's content. Foundry is optional engineering reference only.
-- Rules judgment: the product owner is the final authority for ambiguous interpretations. Agents may propose and implement visible provisional choices; bounded GM discretion may use a named, versioned policy. Narrative judgment is never guessed silently.
-- Human approval: the product owner is the sole human approver. Rules readers, implementers, and independent verifiers may be delegated evidence roles but cannot confer human approval.
-- Geometry: design the general contract for footprints, placements, reach, terrain costs, blocking edges and objects, areas, elevation, and movement modes before implementation. The walking skeleton implements only its declared narrow subset; unsupported variants fail closed rather than shaping the data model.
-- Semantic architecture: definitions are graph roots; core procedures and fixed rule modules are executable semantic nodes; capabilities are support claims over exact closed graphs, not runtime dispatch objects.
-- Execution architecture: spendable rights use typed grants, claims, and committed receipts. Versioned engine procedures own stage order, commits, and mutation; declarative content may invoke them but cannot redefine those semantics.
-- Walking-skeleton rules: include reviewed diagonal accounting that persists through save/resume. PC-category actors use dying/wounded rules, ordinary creatures are defeated at 0 HP, and significant-NPC exceptions remain unsupported.
-
-The accepted rationale is recorded in [decision 0001](docs/decisions/0001-initial-product-and-rules-boundary.md) and [decision 0002](docs/decisions/0002-foundational-rules-contracts.md).
-
-The [canonical registry](registry/README.md) is the source of truth for these values, package records, evidence, approvals, and support. The package state machine and work-in-progress limits are defined only in [Codex delivery](docs/design/05-codex-delivery.md).
-
-## Current gate
-
-The next gate is the foundational-contract gate in the [roadmap](docs/design/07-roadmap.md), followed by one end-to-end walking skeleton:
-
-```text
-source record -> minimal compiler -> engine -> save/resume
-              -> public API -> headless client -> inspectors and benchmarks
+```sh
+.venv/bin/python -m pf2e play s3 --seed 13
 ```
 
-The contract gate closes the P0 gaps identified by the [rules/design stress test](docs/design/details/rules-design-stress-test.md) without adding a general rules DSL. The walking skeleton must then finish one small encounter through public commands with compact responses and reproducible evidence. It is an architecture probe, not a support claim. The first implementation package cannot become `ready` until its applicable decisions below, oracle, owner, verifier, base commit, and selected gates are recorded.
+[README](README.md) contains installation steps, the Python API example, controls, and exact supported content.
 
-## Unresolved decisions
+## Delivered — S3i interaction expansion — 2026-09-15
 
-1. **Walking-skeleton content and evidence:** select the encounter, source records, oracle cases, unlike adopters, and verifier-held holdout.
-2. **Later contracts:** decide when viewer-relative information, area resolution, effect scheduling, and spell/item provenance become required detailed designs; their foundational state and interface boundaries must not be contradicted earlier.
-3. **Performance and evidence:** choose the reference Mac, provisional-budget calibration rule, local evidence location, retention enforcement, and release-evidence access.
-4. **Approval records:** choose the product owner's stable registry principal ID and whether routine in-envelope approvals may be recorded in coherent batches; decisions 0001 and 0002 are integrated but await registry approval entries.
+The catalog and terminal expose eight additional S2 and eight additional S3 setup IDs, bringing the fixed catalog to 21 setups while retaining exact-definition admission. The additions use the Fleet/shortsword Fighter and elite Guard Dog in S2, plus a rapier Fighter in S3. Two S3 setups use a 15-by-5 grid to test range and emanation boundaries. All encounters remain manually controlled.
 
-Resolve a question through a decision packet and record the authoritative approval in the canonical registry. Remove the question here when the owning document and registry have been updated.
+All 16 complete encounter routes passed in five focused scenario modules. Independent review accepted all 16 with no remaining scenario omissions or P0/P1 findings. The combined five-module selection passed 18 tests in 0.41 seconds (wrapper 0.6245 seconds; child peak RSS 45.70 MiB). Representative public-terminal checks also passed for an S2 shortsword Strike and a 65-foot S3 shortbow Strike, each followed by Save, Load, and clean exit.
+
+The shared outcome policy ends an encounter when a team has no conscious, living combat-capable actor; a downed PC remains available for rescue while an ally can continue. Finished saves use the same predicate. A focused regression covers a spell-triggered Reactive Strike saved at the nested Hero Point choice; a critical result disrupts Heal without repeating its paid actions or slot.
+
+## What works
+
+- Prototype and reviewed starter encounters, plus a mixed melee fighter / bow fighter / warpriest party against three Guard Dogs.
+- Turns, movement, attacks, reactions, equipment, ammunition, PC knockout/recovery, Hero Points, and the selected rank-1 spells and effects.
+- Sixteen additional source-backed encounters for interactions among movement, MAP, weapon traits, flanking, Pack Attack, reactions, recovery, range, cover, healing, and spell effects.
+- A team remains active while it has a conscious, living combat-capable actor. Unconscious PCs remain in state and can be rescued by an active ally; finished outcomes and load validation use the same rule.
+- Individual supplied dice for checks and damage, or seeded automatic rolls. Saves preserve pending choices, spent resources, and the next die. Queries, rejected commands, and exhausted scripts do not silently consume or substitute rolls.
+- Complete fights through both the public API and actual terminal, including saved spell/reaction decisions and knockout → Heal → Stand → retrieve.
+
+## Verification
+
+- **The pre-S3i baseline had 179 passing tests, including the shared S2/S3 memory guard.** Pytest exited **0** with **211 passed in 0.69 seconds** (wrapper wall time 0.912 seconds). The `/usr/bin/time -l` wrapper then exited 1 because the sandbox denied `sysctl kern.clockrate`; it returned no memory figures, so full-suite peak RSS and footprint are unavailable. The suite was not rerun.
+- All 16 added encounter routes passed individually across five focused modules. The combined five-module selection passed **18 tests in 0.41 seconds** (wrapper 0.6245 seconds; child peak RSS **45.70 MiB**). This is scoped to the five-module selection, not the full suite.
+- The central catalogue selection passed **6 tests** and the focused shared reaction/persistence/outcome/S3 casting selection passed **31 tests**:
+  ```sh
+  .venv/bin/python -m pytest -q tests/test_interaction_catalog.py
+  .venv/bin/python -m pytest -q tests/test_spell_reaction_persistence.py tests/test_s2_reactions.py tests/test_s2_encounter.py tests/test_s3_core.py
+  ```
+- The two admitted-scope S2 and S3 terminal summary checks passed.
+- Independent review passed 172 frozen-snapshot tests, decisive rule/save/resource boundaries, and two complete mixed-party fights with different seeds and routes. No P0/P1 implementation defect was found.
+- A representative S3 startup/initiative/Guidance/Divine Lance/choice sequence measured **2.6444 ms median / 2.8115 ms p95** over 500 runs on Python 3.11.1, macOS arm64. This measures that small local sequence, not arbitrary large encounters.
+- Compilation, `git diff --check`, and 35 local Markdown links/anchors across 11 active files pass. Archive inventory remains 27 preserved payload files plus its manifest.
+
+## Scope and pending ruling
+
+These are fixed catalogued builds and encounters on bright, flat **7×5 and 15×5 maps**, with manual control of all sides. Modified/ad hoc setups are rejected. Read Aura is unavailable during encounters; Shield Block is inactive with these shield-free loadouts. This is not whole-class or whole-book coverage.
+
+The 15×5 range encounter now exercises shortbow range increments through 65 feet; the 15×5 emanation encounter checks the 30-foot Heal boundary. These supported cases do not imply arbitrary map sizes or custom setups.
+
+**P1 user ruling remains pending:** whether further lethal damage to a stabilized, unconscious character at 0 HP causes a fresh knockout. Until that ruling is accepted, the engine rejects **any positive damage** to a stable unconscious PC at 0 HP, including nonlethal damage, before spending actions or dice. This explicit unsupported boundary does not block the delivered encounter scope.
+
+## Next work and preservation
+
+The baseline S3 implementation and the requested test-memory optimization are complete. Both reported Python processes were identified as stale S3 pytest runs, received SIGTERM, and were verified absent. The one-time cleanup also stopped an attributable Playwright MCP pair; no Chrome process was present, and uncertain/shared services were retained.
+
+Dynamic S2/S3 terminal tests share a test-only capture limit that fails visibly instead of retaining unlimited output. That memory guard did not change production rules. The pre-S3i 179-test run measured **47.2 MiB peak RSS** and **37.5 MiB peak footprint**. The historical multi-gigabyte growth was not reproduced, so its exact cause remains unproven. The final read-only check confirmed all four cleaned PIDs remained absent, no repository pytest process remained, and whitespace checks passed. One older Python process using approximately 7 MiB was left untouched because ownership by the completed tests was unproven.
+
+S3i is integrated and verified. Broader content remains a future increment; the [plan index](docs/plan/01-product-and-interface.md) describes the later stages.
+
+Earlier uncommitted planning/archive work is preserved. Baseline HEAD remains `115a55d844021c479a2b9d140bc0e7bf92aee40c`; no commit or merge was made, and other worktrees remain out of scope. Completed subagent usage is recorded in the [durable work log](docs/work-log/README.md).

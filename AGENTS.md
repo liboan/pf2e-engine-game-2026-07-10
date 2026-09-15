@@ -1,39 +1,33 @@
-# Codex working rules
+# Working rules
 
-These rules apply to every Codex thread and subagent in this repository. The detailed operating model is [docs/design/05-codex-delivery.md](docs/design/05-codex-delivery.md); do not repeat it in task prompts.
+## Direction and ownership
 
-## Before work
+- Build a local Python PF2e engine with a simple terminal interface. Keep state literal and local; do not add browser, server, network, or distributed-state machinery.
+- The supervisor assigns bounded slices, tracks progress, and integrates results. It does not read repository implementation or rules-source content. Its exception is authoring `docs/plan/*.md` and `docs/work-log/*`, and reading those files it wrote.
+- Give each implementation slice one owner and clear file scope. The owner may make routine refactors inside that scope. Do not require a registry package, package approval, or a separate review for every change.
+- Do not edit plan or work-log files unless you are the supervisor assigned to author them. Leave unrelated worktrees and branches alone.
 
-1. Read [README.md](README.md), [STATUS.md](STATUS.md), the assigned [work package](docs/templates/work-package.md), the relevant records in the [registry](registry/README.md), and only the design chapter and rule oracle needed for the task.
-2. Confirm the package is `ready`, its base commit is current, the worktree is clean, dependencies are merged, and file ownership does not overlap another active package.
-3. State the package result, exclusions, permitted files, required evidence, and stop conditions. One thread owns the package; readers and reviewers return bounded artifacts.
+## Model choice
 
-## Scope and architecture
+- Use `gpt-5.6-luna` with `xhigh` reasoning for bounded implementation and debugging.
+- Use `gpt-5.6-sol` with `high` reasoning less often for broader play, debugging, and critique. Once an engine exists, these reviews must run the actual Python engine and check applicable rules against sources.
+- Use `gpt-6-astra` with `high` reasoning for high-level design, investigations, and extensive rules critique.
+- When setting model overrides for subagents, use `fork_turns: "none"` or a positive number; do not use `"all"`.
 
-- Build the successor independently. Do not import the predecessor runtime, compiler, schemas, trackers, or compatibility layers. An audited rule case or small pure procedure may be ported only through a named package and new tests.
-- Shared code may branch on typed PF2e facts. Modules may carry opaque instance references to identify sources and targets, but may not compare names or IDs to select behavior for a creature, action, fixture, encounter, or definition.
-- Use the small declarative format for common composition and first-party typed modules for specialized printed behavior. Do not add arbitrary scripting, dynamic module loading, or fallback execution.
-- Modules receive immutable context and return only the phase's closed result type. The engine validates operations and orders modules deterministically.
-- A paused command is a committed suspension: advance the state revision and store a serializable frame. Only rejected or unsupported requests leave canonical state unchanged.
-- Keep rules logic out of the service and client. Use revision-bound prompts, idempotent retries, compact deltas, focused option queries, and explicit inspectors.
+## Correctness and evidence
 
-## Rules and evidence
+- Implement applicable supported PF2e rules accurately. Defer costly bespoke content when it is not needed for the current playable slice. Cite the rules sources used. Do not silently approximate unsupported behavior; state the limit and stop where it affects play.
+- Keep rules behavior in the engine, not in a growing set of one-off scenario exceptions.
+- Use source-informed ordinary tests, then verify continuous local encounters, save/load, and performance as each capability becomes available. Do not claim evidence for a path that was not exercised.
+- Keep durable run records in `docs/work-log/agent-runs.json`: record actual input, cached input, and output token metadata for each run. Cached input is a subset of input. If a value is unavailable, record `null` with the reason. Refresh final counters after completion and distinguish cumulative reused-agent counters from per-run counters.
 
-- Implement only against an approved exact rules profile and reusable source records. Each definition's behavior inventory assigns every rule-relevant clause one disposition: `mapped`, `non-executable`, `excluded`, or `unsupported`. Any `unsupported` clause blocks playable status.
-- Definition lifecycle is separate: `candidate`, `supported`, or `retired`. Production loads only `supported` definitions whose behavior inventories close without unsupported clauses.
-- The oracle precedes code. An implementer may challenge it but may not silently change an expected result. Material changes return to rules review.
-- Record evidence dimensions separately as `source-reviewed`, `isolated`, `generalization`, `production-path`, `continuous`, `client`, and `performance`. Only `generalization` may be `N/A`, with a reason. Apply the oracle's risk tier: shared rules need unlike adopters, an independent holdout, and targeted mutations.
-- Every supported path runs through source content, compiler, engine, save/resume, public API, and headless client. Checkpoints may isolate defects but never count as uninterrupted encounter progress.
-- Run focused tests while developing, then the package's independent, continuous-play, persistence, and player-flow performance gates before handoff. Recompute evidence from the integration branch.
+## Test and process cadence
 
-## Keep outputs small
+- During implementation, run the smallest relevant test selection for the changed rule, content family, or encounter. Keep cheap focused checks frequent; run complete scripted encounters after a coherent group of changes, and run the full suite plus broader end-to-end play at integration checkpoints and handoff.
+- Keep checks serial and bounded: one pytest process by default, no `xdist`, watch loops, or background launches. Retain meaningful assertions and bounded output; a timeout or capture limit must fail with the case and last useful state.
+- At integration checkpoints, when agents go idle or complete, and before handoff, audit their reported test and probe processes. Stop only confirmed unused task-owned descendants; verify process identity (PID, start time, command, and working directory when needed), request graceful exit, and confirm exit. Never kill by process name or stop a shared service with unclear ownership.
 
-- Follow [bloat budgets](docs/design/06-bloat-and-human-review.md). Do not commit raw traces, profiles, videos, repeated dashboards, generated snapshots, or superseded documents.
-- A handoff contains only package ID and state, base/head commits, changed claim, files, exact commands and results, measurements, exclusions, and next action. Link artifacts; never paste transcripts or full logs.
-- Comments explain a source, invariant, ordering, or safety constraint. Delete replaced paths and prose in the same change.
+## Decisions and stopping
 
-## Stop and escalate
-
-Stop the package when the rules profile is unclear; a source interpretation is disputed; a shared contract must change outside scope; unsupported behavior would be approximated; a second adopter needs another special branch; deterministic replay, save/resume, or a budget fails; or the baseline is no longer current. Record the failed gate and smallest decision needed. Do not widen the package to work around it.
-
-Human approval is reserved for the decisions listed in [human review policy](docs/design/06-bloat-and-human-review.md). Routine approvals should be batched; merged code is not support-accepted behavior.
+- Treat a P0 blocker as a stop condition and ask for clarification with the available structured question tool. Resolve P1 questions before making materially dependent decisions. Use judgment for routine, reversible choices.
+- Stop and report the smallest decision needed when a source is unclear, a rule would have to be guessed, a check fails, or the slice would exceed its agreed scope. Keep the result and evidence reviewable before escalating.
