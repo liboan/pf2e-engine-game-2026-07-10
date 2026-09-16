@@ -114,7 +114,7 @@ def test_caster_sheet_renders_individually_labeled_spell_slots_and_ammunition() 
     rendered = render_actor_sheet(actor)
 
     assert "Identity: Human · Skilled Human · Farmhand · Cleric · Iomedae" in rendered
-    assert "Cantrip Read Aura: Read Aura (Cantrip, cantrip, ready)" in rendered
+    assert "Cantrip Light: Light (Cantrip, cantrip, ready)" in rendered
     assert "Ordinary Heal 1: Heal (Ordinary, rank 1, ready)" in rendered
     assert "Font Heal 4: Heal (Font, rank 1, ready)" in rendered
     assert "Shield Block" in rendered and "owns no shield" in rendered
@@ -457,7 +457,7 @@ def test_s3_terminal_guidance_effect_survives_save_load_and_next_die_is_consumed
             "guidance_used",
         )
     )
-    assert "Unavailable: Read Aura" in transcript
+    assert "Cantrip Light: Light (Cantrip, cantrip, ready)" in transcript
     assert "Active effect: Guidance +1 on Fighter M, from Warpriest C; expires at source start round 2." in transcript
     assert f"Loaded encounter from {save_path}." in transcript
     assert "Original: d20 20 + 10 = 30 vs AC 15" in transcript

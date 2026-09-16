@@ -2,11 +2,12 @@
 
 This module does not roll checks, choose targets, update initiative, or mutate
 inventory. Its immutable results include flags for the encounter layer to apply.
-The focused rules here are from the Remaster Player Core: Getting Knocked Out
-(PC 410), Dying and Recovery (PC 411), Massive Damage (PC 412), and Hero Points
-(PC 413).
+The focused rules here are from the Remaster Player Core: Temporary Hit Points
+and Getting Knocked Out (PC 410), Dying and Recovery (PC 411), Massive Damage
+(PC 412), and Hero Points (PC 413).
 
 Rules references:
+https://2e.aonprd.com/Rules.aspx?ID=2321
 https://2e.aonprd.com/Rules.aspx?ID=2324
 https://2e.aonprd.com/Rules.aspx?ID=2325
 https://2e.aonprd.com/Rules.aspx?ID=2326
@@ -142,12 +143,18 @@ def damage(
     state: HealthState,
     amount: int,
     *,
+    damage_taken: int | None = None,
     attacker_critical: bool = False,
     target_critical_failure: bool = False,
     nonlethal: bool = False,
     hero_points: int = 0,
 ) -> HealthTransition:
     """Apply one resolved damage amount to a PC health state.
+
+    ``amount`` is the damage that reaches HP after temporary HP absorption.
+    ``damage_taken`` is the damage after defenses and Shield Block but before
+    temporary HP; it governs only the massive-damage threshold and defaults to
+    ``amount`` for callers that do not track the distinction.
 
     ``attacker_critical`` means this blow was an attacker's critical hit;
     ``target_critical_failure`` means the target critically failed its own
@@ -157,15 +164,24 @@ def damage(
     ``UnsupportedHealthRuleError`` unless the damage causes massive death.
     """
     _check_damage_or_healing(amount, "damage")
+    if damage_taken is None:
+        damage_taken = amount
+    else:
+        _check_damage_or_healing(damage_taken, "damage_taken")
+        if damage_taken < amount:
+            raise ValueError("damage_taken cannot be less than damage")
     _check_hero_points(hero_points)
-    if state.dead or amount == 0:
+    if state.dead:
         return HealthTransition(state=state)
 
-    if amount >= 2 * state.max_hp:
+    if damage_taken >= 2 * state.max_hp:
         return HealthTransition(
             state=_dead_state(state),
             massive_damage_death=True,
         )
+
+    if amount == 0:
+        return HealthTransition(state=state)
 
     critical_dying_blow = attacker_critical or target_critical_failure
 

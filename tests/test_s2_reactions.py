@@ -110,15 +110,18 @@ def test_reaction_choice_preserves_attack_and_intent_alternatives_after_load(tmp
     assert choice is not None and choice.kind == "reaction"
     option_ids = {option.option_id for option in choice.options}
     assert "accept" in option_ids
-    assert "strike:fist:bludgeoning:nonlethal" in option_ids
-    assert "strike:longsword:slashing:nonlethal" in option_ids
+    # The physical-item bridge includes the explicit ``unarmed`` slot in the
+    # opaque option id.  Keep the rule assertion on the selected attack,
+    # damage type, and nonlethal intent below rather than pinning the old id.
+    assert "strike:unarmed:fist:bludgeoning:nonlethal" in option_ids
+    assert "strike:longsword:longsword:slashing:nonlethal" in option_ids
     assert "decline" in option_ids
 
     path = tmp_path / "reaction-alternatives.json"
     game.save(path)
     restored = Encounter.load(path)
     assert restored.inspect() == movement.inspection
-    selected = restored.choose(choice.choice_id, "strike:fist:bludgeoning:nonlethal")
+    selected = restored.choose(choice.choice_id, "strike:unarmed:fist:bludgeoning:nonlethal")
     hero = selected.inspection.choice
     assert hero is not None and hero.kind == "attack_hero_reroll"
     strike_event = next(event for event in selected.events if event.check is not None)

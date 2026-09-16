@@ -108,7 +108,7 @@ def test_warpriest_sheet_keeps_fixed_divine_preparations_and_iomedae_choices() -
         "void_warp",
         "guidance",
         "stabilize",
-        "read_aura",
+        "light",
     }
     ordinary = [spell for spell in cleric.prepared_spells if spell.source == "ordinary"]
     font = [spell for spell in cleric.prepared_spells if spell.source == "font"]

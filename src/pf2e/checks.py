@@ -3,11 +3,14 @@
 Rules checked 2026-09-15 against Player Core pp. 401–402:
 https://2e.aonprd.com/Rules.aspx?ID=2286
 https://2e.aonprd.com/Rules.aspx?ID=2289
+Assurance and the fixed 10 + proficiency result:
+https://2e.aonprd.com/Feats.aspx?ID=5121
+https://2e.aonprd.com/Rules.aspx?ID=2281
 """
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Iterable
+from typing import Iterable, Literal
 
 
 class DegreeOfSuccess(IntEnum):
@@ -38,7 +41,7 @@ class Modifier:
 
 @dataclass(frozen=True)
 class CheckResult:
-    die: int
+    die: int | None
     modifier: int
     dc: int
     total: int
@@ -50,6 +53,21 @@ class CheckResult:
     map_penalty: int = 0
     traits: tuple[str, ...] = ()
     modifier_breakdown: tuple[Modifier, ...] = ()
+    method: Literal["d20", "assurance"] = "d20"
+    # Every supplied d20 face is retained. Ordinary checks have one face;
+    # fortune effects such as Sure Strike retain both faces while ``die``
+    # remains the selected face used for degree calculation.
+    dice: tuple[int, ...] = ()
+
+
+def _degree_from_total(total: int, dc: int) -> DegreeOfSuccess:
+    if total >= dc + 10:
+        return DegreeOfSuccess.CRITICAL_SUCCESS
+    if total >= dc:
+        return DegreeOfSuccess.SUCCESS
+    if total <= dc - 10:
+        return DegreeOfSuccess.CRITICAL_FAILURE
+    return DegreeOfSuccess.FAILURE
 
 
 def combine_modifiers(modifiers: Iterable[Modifier]) -> int:
@@ -93,14 +111,7 @@ def resolve_check(
     if type(die) is not int or not 1 <= die <= 20:
         raise ValueError("a check die must be an integer from 1 through 20")
     total = die + modifier
-    if total >= dc + 10:
-        initial = DegreeOfSuccess.CRITICAL_SUCCESS
-    elif total >= dc:
-        initial = DegreeOfSuccess.SUCCESS
-    elif total <= dc - 10:
-        initial = DegreeOfSuccess.CRITICAL_FAILURE
-    else:
-        initial = DegreeOfSuccess.FAILURE
+    initial = _degree_from_total(total, dc)
 
     degree = initial
     adjustments: list[DegreeChange] = []
@@ -123,6 +134,53 @@ def resolve_check(
         attack_count=attack_count,
         map_penalty=map_penalty,
         traits=tuple(sorted(traits)),
+        dice=(die,),
+    )
+
+
+def resolve_assurance_check(
+    proficiency_bonus: int,
+    dc: int,
+    *,
+    attack_id: str | None = None,
+    attack_count: int | None = None,
+    traits: Iterable[str] = (),
+) -> CheckResult:
+    """Resolve Assurance's fixed result without inventing a die roll.
+
+    Assurance sets the check result to 10 plus the chosen skill's proficiency
+    bonus and applies no other modifiers. It uses the normal degree thresholds
+    but has no d20 or natural-die degree adjustment.
+    """
+
+    if type(proficiency_bonus) is not int or proficiency_bonus < 0:
+        raise ValueError("Assurance needs a non-negative integer proficiency bonus")
+    if type(dc) is not int or dc < 0:
+        raise ValueError("Assurance needs a non-negative integer DC")
+    if attack_id is not None and (not isinstance(attack_id, str) or not attack_id):
+        raise ValueError("Assurance attack_id must be non-empty text or None")
+    if attack_count is not None and (type(attack_count) is not int or attack_count < 1):
+        raise ValueError("Assurance attack_count must be a positive integer or None")
+    trait_tuple = tuple(traits)
+    if any(not isinstance(item, str) or not item for item in trait_tuple):
+        raise ValueError("Assurance traits must be non-empty strings")
+
+    total = 10 + proficiency_bonus
+    degree = _degree_from_total(total, dc)
+    return CheckResult(
+        die=None,
+        modifier=proficiency_bonus,
+        dc=dc,
+        total=total,
+        degree_before_adjustments=degree,
+        degree=degree,
+        attack_id=attack_id,
+        attack_count=attack_count,
+        map_penalty=0,
+        traits=tuple(sorted(trait_tuple)),
+        modifier_breakdown=(Modifier(proficiency_bonus, "untyped", "Assurance proficiency bonus"),),
+        method="assurance",
+        dice=(),
     )
 
 

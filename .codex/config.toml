@@ -1,0 +1,5 @@
+[mcp_servers.playwright]
+enabled = false
+
+[mcp_servers.node_repl]
+enabled = false

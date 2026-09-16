@@ -14,12 +14,13 @@ from pf2e.spells import (
     heal_range_ft,
     heal_roll,
     in_heal_emanation,
+    soothe_roll,
     spell_traits,
     void_warp_effect,
 )
 
 
-def test_fixed_spell_metadata_is_frozen_and_keeps_read_aura_unavailable_reason() -> None:
+def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailable() -> None:
     assert set(SPELLS) == {
         "divine_lance",
         "void_warp",
@@ -27,6 +28,12 @@ def test_fixed_spell_metadata_is_frozen_and_keeps_read_aura_unavailable_reason()
         "stabilize",
         "read_aura",
         "heal",
+        "soothe",
+        "angelic_halo",
+        "light",
+        "fear",
+        "runic_weapon",
+        "sure_strike",
     }
     with pytest.raises(TypeError):
         SPELLS["new"] = SPELLS["heal"]  # type: ignore[index]
@@ -35,10 +42,38 @@ def test_fixed_spell_metadata_is_frozen_and_keeps_read_aura_unavailable_reason()
 
     assert SPELLS["read_aura"].action_costs == ()
     assert "one-minute" in SPELLS["read_aura"].unavailable_reason
+    assert SPELLS["light"].action_costs == (2,)
+    assert SPELLS["light"].range_ft == 120
+    assert SPELLS["light"].cantrip is True
+    assert SPELLS["light"].unavailable_reason is None
+    assert "light" in SPELLS["light"].traits
+    assert SPELLS["runic_weapon"].action_costs == (2,)
+    assert SPELLS["runic_weapon"].unavailable_reason is None
+    assert SPELLS["fear"].unavailable_reason is None
+    assert SPELLS["sure_strike"].action_costs == (1,)
+    assert SPELLS["sure_strike"].traits == frozenset({"concentrate", "fortune"})
+    assert SPELLS["soothe"].action_costs == (2,)
+    assert SPELLS["soothe"].range_ft == 30
+    assert SPELLS["soothe"].traits == frozenset({"concentrate", "emotion", "healing", "mental"})
+    assert SPELLS["soothe"].cantrip is False
     assert SPELLS["divine_lance"].traits == frozenset(
         {"attack", "cantrip", "concentrate", "manipulate", "sanctified", "spirit"}
     )
     assert "manipulate" not in SPELLS["guidance"].traits
+
+
+def test_soothe_roll_is_rank_one_d10_plus_four() -> None:
+    calls: list[int] = []
+
+    def roll(sides: int) -> int:
+        calls.append(sides)
+        return 6
+
+    healing = soothe_roll(roll)
+    assert calls == [10]
+    assert healing.rolls == (6,)
+    assert healing.modifier == 4
+    assert healing.total == 10
 
 
 def test_divine_lance_rolls_only_on_hit_and_doubles_complete_damage_on_critical() -> None:

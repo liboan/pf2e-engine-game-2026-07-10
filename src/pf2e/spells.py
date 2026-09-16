@@ -99,6 +99,63 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1554",
             ),
+            SpellDefinition(
+                "soothe",
+                "Soothe",
+                (2,),
+                frozenset({"concentrate", "emotion", "healing", "mental"}),
+                30,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1678",
+            ),
+            SpellDefinition(
+                "angelic_halo",
+                "Angelic Halo",
+                (1,),
+                frozenset({"aura", "concentrate", "focus", "holy"}),
+                None,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=2093",
+            ),
+            # These entries are part of the staged Angelic repertoire ledger.
+            # Light's point cast is admitted by the first orb slice; other
+            # entries still require their own explicit encounter procedures.
+            SpellDefinition(
+                "light",
+                "Light",
+                (2,),
+                frozenset({"cantrip", "concentrate", "manipulate", "light"}),
+                120,
+                True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1585",
+            ),
+            SpellDefinition(
+                "fear",
+                "Fear",
+                (2,),
+                frozenset({"auditory", "concentrate", "emotion", "fear", "mental"}),
+                30,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1524",
+            ),
+            SpellDefinition(
+                "runic_weapon",
+                "Runic Weapon",
+                (2,),
+                frozenset({"concentrate", "manipulate"}),
+                None,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1658",
+            ),
+            SpellDefinition(
+                "sure_strike",
+                "Sure Strike",
+                (1,),
+                frozenset({"concentrate", "fortune"}),
+                None,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1709",
+            ),
         )
     }
 )
@@ -145,6 +202,14 @@ def heal_roll(actions: int, roll: Callable[[int], int]) -> HealingResult:
         raise ValueError("healing die result is outside the d8 range")
     modifier = 8 if actions == 2 else 0
     return HealingResult((face,), modifier, face + modifier)
+
+
+def soothe_roll(roll: Callable[[int], int]) -> HealingResult:
+    """Roll rank-1 Soothe's 1d10+4 healing."""
+    face = roll(10)
+    if type(face) is not int or not 1 <= face <= 10:
+        raise ValueError("Soothe healing die result is outside the d10 range")
+    return HealingResult((face,), 4, face + 4)
 
 
 @dataclass(frozen=True, slots=True)

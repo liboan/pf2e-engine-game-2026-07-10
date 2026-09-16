@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
-from .checks import CheckResult
-from .damage import DamageResult
+from .checks import CheckResult, Modifier
+from .conditions import ActionContext, CheckContext, ConditionValue
+from .damage import DamageDefense, DamageGroup, DamageResult, DefenseChoice, DefenseSelection
 from .health import HealthTransition
+from .items import ItemInstance
 
 
 @dataclass(frozen=True, order=True)
@@ -43,6 +45,14 @@ class AttackDefinition:
     free_hands_required: int = 0
     ammunition_id: str | None = None
     deadly_die: int | None = None
+    reload: int | None = None
+    striking_applies: bool = True
+
+    def __post_init__(self) -> None:
+        if self.reload is not None and (type(self.reload) is not int or self.reload < 0):
+            raise ValueError("reload must be a non-negative integer or None")
+        if type(self.striking_applies) is not bool:
+            raise ValueError("striking_applies must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -52,6 +62,35 @@ class PreparedSpellDefinition:
     spell_id: str
     rank: int = 1
     cantrip: bool = False
+
+
+@dataclass(frozen=True)
+class SpontaneousSpellDefinition:
+    """One explicitly known spell in a spontaneous repertoire."""
+
+    spell_id: str
+    rank: int = 1
+    cantrip: bool = False
+    signature: bool = False
+
+
+@dataclass(frozen=True)
+class SpontaneousSlotDefinition:
+    """One rank pool owned by a spontaneous casting source."""
+
+    slot_id: str
+    source: str
+    rank: int = 1
+    capacity: int = 1
+
+
+@dataclass(frozen=True)
+class SpontaneousSlotView:
+    slot_id: str
+    source: str
+    rank: int
+    capacity: int
+    remaining: int
 
 
 @dataclass(frozen=True)
@@ -74,6 +113,10 @@ class CreatureDefinition:
     saves: tuple[tuple[str, str | None, int], ...] = ()
     proficiencies: tuple[tuple[str, str], ...] = ()
     senses: tuple[str, ...] = ()
+    # The first lighting slice admits only explicitly declared ordinary or
+    # low-light vision. Leave this unset by default instead of inferring it
+    # from descriptive sense strings.
+    vision: str | None = None
     sheet_notes: tuple[str, ...] = ()
     held_items: tuple[str, ...] = ()
     worn_items: tuple[str, ...] = ()
@@ -89,11 +132,23 @@ class CreatureDefinition:
     languages: tuple[str, ...] = ()
     class_dc: int | None = None
     prepared_spells: tuple[PreparedSpellDefinition, ...] = ()
+    spontaneous_spells: tuple[SpontaneousSpellDefinition, ...] = ()
+    spontaneous_slots: tuple[SpontaneousSlotDefinition, ...] = ()
+    spontaneous_source: str = "repertoire"
+    focus_spells: tuple[SpontaneousSpellDefinition, ...] = ()
+    focus_source: str = "focus"
+    focus_points: int = 0
+    focus_capacity: int = 0
+    spell_tradition: str | None = None
     spell_attack: int | None = None
     spell_dc: int | None = None
     spell_attribute: str | None = None
     spell_sanctification: str | None = None
     ammunition: tuple[tuple[str, int], ...] = ()
+    armor_category: str | None = None
+    carried_item_bulk: tuple[tuple[str, int], ...] = ()
+    damage_defenses: tuple[DamageDefense, ...] = ()
+    item_instances: tuple[ItemInstance, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,6 +158,11 @@ class CreaturePlacement:
     label: str
     team: str
     position: Position
+    # Perception is the normal encounter initiative statistic.  A placement
+    # may author another trained statistic when the encounter establishes the
+    # required context (for example Deception in an observed social scene).
+    initiative_skill: str = "perception"
+    initiative_context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +174,20 @@ class EncounterSetup:
     placements: tuple[CreaturePlacement, ...]
     # Ties between these two GM-controlled synthetic actors follow setup order.
     tie_policy: str = "stable_setup_order"
+    # The first Flee slice only admits a finite room with a physical boundary.
+    # Open edges and exits remain unsupported until a setup supplies a richer
+    # environment fact.
+    closed_boundary: bool = False
+    # Ambient illumination for this local scene.  Existing setups retain the
+    # bright default; the Light prerequisite adds a dim diagnostic fixture.
+    ambient_light: str = "bright"
+    # Authored Recall Knowledge subjects/questions for a scene.  The tuple is
+    # intentionally opaque to the core model; Investigator owns the concrete
+    # record and its rule interpretation.
+    knowledge: tuple[object, ...] = ()
+    # Authored outside-combat Forensic Acumen examination records. The tuple
+    # remains opaque to the core model; Investigator owns their interpretation.
+    examinations: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -132,6 +206,13 @@ class Strike:
     attack_id: str | None = None
     damage_type: str | None = None
     nonlethal: bool | None = None
+    # Optional stable physical item identity. Appended to preserve legacy
+    # positional command construction.
+    item_id: str | None = None
+    # Investigator Devise a Stratagem attack mode may explicitly choose
+    # Intelligence for the eligible Strike. ``None`` keeps ordinary Strikes
+    # on their printed attribute and preserves legacy construction.
+    use_intelligence: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +221,9 @@ class ViciousSwing:
     attack_id: str | None = None
     damage_type: str | None = None
     nonlethal: bool | None = None
+    # Optional stable physical item identity. Appended to preserve legacy
+    # positional command construction.
+    item_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +233,44 @@ class Cast:
     actions: int | None = None
     slot_id: str | None = None
     include_self: bool | None = None
+    # Stable physical item identity for item-targeted spells such as Runic
+    # Weapon. Appended to preserve all legacy positional Cast construction.
+    item_id: str | None = None
+    # Point and attachment intent for the rank-1 Light cantrip. These fields
+    # are appended so all legacy positional Cast construction remains valid.
+    point: Position | None = None
+    color: str | None = None
+    attachment_actor_id: str | None = None
+    replacement_orb_id: str | None = None
+
+
+@dataclass(frozen=True)
+class Sustain:
+    """Sustain one of the caster's Light orbs for one concentrate action.
+
+    ``point`` moves or detaches the orb at a chosen grid point.  Supplying
+    ``attachment_actor_id`` instead moves the orb to that actor's current
+    space and presents the existing willingness choice before attaching it.
+    For an attached orb, omitting both fields detaches it in the carrier's
+    current space.
+    """
+
+    orb_id: str
+    point: Position | None = None
+    attachment_actor_id: str | None = None
+
+
+@dataclass(frozen=True)
+class Dismiss:
+    """Dismiss one of the active caster-owned Light orbs."""
+
+    orb_id: str
+
+
+# Descriptive aliases keep callers free to distinguish these from any future
+# generic Sustain/Dismiss actions while retaining one command implementation.
+SustainLight = Sustain
+DismissLight = Dismiss
 
 
 @dataclass(frozen=True)
@@ -158,6 +280,11 @@ class TakeCover:
 
 @dataclass(frozen=True)
 class DismissCover:
+    pass
+
+
+@dataclass(frozen=True)
+class RaiseShield:
     pass
 
 
@@ -183,6 +310,13 @@ class Crawl:
 
 
 @dataclass(frozen=True)
+class Flee:
+    """Use one action to pursue escape from a current fleeing source."""
+
+    pass
+
+
+@dataclass(frozen=True)
 class EndTurn:
     pass
 
@@ -194,7 +328,49 @@ class Choose:
     actor_id: str | None = None
 
 
-Command = Stride | Step | Strike | ViciousSwing | Cast | TakeCover | DismissCover | Interact | Release | Stand | Crawl | EndTurn | Choose
+class FamilyCommand:
+    """Marker base for an explicit class-family action command.
+
+    Family modules define their own frozen command records and set a fixed
+    ``family_id`` (martial, casting, items, or minions). Encounter handles
+    these through a small explicit procedure dispatch while retaining its
+    usual atomic draft and dice transaction.
+    """
+
+    family_id: str
+
+
+@dataclass(frozen=True)
+class LayOnHands(FamilyCommand):
+    """One-action living-target devotion healing."""
+
+    family_id = "martial"
+    target_id: str
+
+
+@dataclass(frozen=True)
+class SuppressAura(FamilyCommand):
+    """Suppress the acting Champion's divine aura."""
+
+    family_id = "martial"
+
+
+@dataclass(frozen=True)
+class ResumeAura(FamilyCommand):
+    """Resume the acting Champion's divine aura."""
+
+    family_id = "martial"
+
+
+@dataclass(frozen=True)
+class ToggleAura(FamilyCommand):
+    """Set the acting Champion's divine aura state explicitly."""
+
+    family_id = "martial"
+    active: bool
+
+
+Command = Stride | Step | Strike | ViciousSwing | Cast | Sustain | Dismiss | TakeCover | DismissCover | RaiseShield | Interact | Release | Stand | Crawl | Flee | EndTurn | Choose | FamilyCommand
 
 
 class ResultStatus(str, Enum):
@@ -214,6 +390,19 @@ class Event:
     damage: DamageResult | None = None
     position: Position | None = None
     details: tuple[str, ...] = ()
+    temporary_hp_absorbed: int = 0
+    remaining_hp_damage: int = 0
+    original_damage: DamageResult | None = None
+    shield_block: "ShieldBlockRecord | None" = None
+
+
+@dataclass(frozen=True)
+class FamilyProcedureResult:
+    """Result returned by one explicit family action procedure."""
+
+    events: tuple[Event, ...] = ()
+    rejection: str | None = None
+    unsupported: str | None = None
 
 
 @dataclass(frozen=True)
@@ -245,7 +434,12 @@ class ActorView:
     actions_remaining: int
     strikes_this_turn: int
     diagonals_this_turn: int
+    initiative_skill: str = "perception"
+    initiative_context: str | None = None
     health_mode: HealthMode = HealthMode.PROTOTYPE
+    temporary_hp_source_id: str | None = None
+    temporary_hp_expires_at_seconds: int | None = None
+    barbarian_state: "BarbarianState | None" = None
     dying: int = 0
     wounded: int = 0
     unconscious: bool = False
@@ -257,15 +451,24 @@ class ActorView:
     worn_items: tuple[str, ...] = ()
     stowed_items: tuple[str, ...] = ()
     prepared_slots: tuple["PreparedSlotView", ...] = ()
+    spontaneous_slots: tuple["SpontaneousSlotView", ...] = ()
+    focus_points: int = 0
+    focus_capacity: int = 0
     ammunition: tuple[tuple[str, int], ...] = ()
     effects: tuple["EffectView", ...] = ()
     guidance_immune_until_round: int | None = None
+    # Absolute wall-clock deadline for the one-hour Guidance immunity.
+    # ``guidance_immune_until_round`` remains as a compatibility projection
+    # for callers written against the original combat-only interface.
+    guidance_immune_until_seconds: int | None = None
+    sure_strike_immune_until_seconds: int | None = None
     taking_cover: bool = False
     ability_modifiers: tuple[tuple[str, int], ...] = ()
     skills: tuple[tuple[str, str | None, int], ...] = ()
     saves: tuple[tuple[str, str | None, int], ...] = ()
     proficiencies: tuple[tuple[str, str], ...] = ()
     senses: tuple[str, ...] = ()
+    vision: str | None = None
     sheet_notes: tuple[str, ...] = ()
     abilities: tuple[str, ...] = ()
     feats: tuple[str, ...] = ()
@@ -280,6 +483,34 @@ class ActorView:
     class_dc: int | None = None
     ac: int = 0
     perception: int = 0
+    speed_ft: int = 0
+    panache: bool = False
+    panache_expires_at_end: int | None = None
+    finisher_used_this_turn: bool = False
+    temporary_hp: int = 0
+    condition_effects: tuple["ActiveConditionEffect", ...] = ()
+    hunted_prey: "HuntedPreyState | None" = None
+    shields: tuple["ShieldView", ...] = ()
+
+    @property
+    def speed(self) -> int:
+        """Compatibility alias for callers that call Speed simply ``speed``."""
+
+        return self.speed_ft
+
+
+@dataclass(frozen=True)
+class ShieldView:
+    instance_id: str
+    definition_id: str
+    hp: int
+    max_hp: int
+    broken_threshold: int
+    hardness: int
+    ac_bonus: int
+    broken: bool
+    raised: bool
+    ac_bonus_active: bool
 
 
 @dataclass(frozen=True)
@@ -291,8 +522,15 @@ class Inspection:
     map_width: int
     map_height: int
     winner_team: str | None
+    ambient_light: str = "bright"
     choice: ChoiceView | None = None
     ground_items: tuple[tuple[Position, tuple[str, ...]], ...] = ()
+    light_orbs: tuple["LightOrb", ...] = ()
+    world_time_seconds: int = 0
+    encounter_start_seconds: int = 0
+    preparation_day: int = 1
+    rested_actor_ids: tuple[str, ...] = ()
+    last_prepared_day: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -310,6 +548,14 @@ class ActionOptions:
     strikes: tuple[StrikeOption, ...] = ()
     interact_options: tuple[tuple[str, str], ...] = ()
     spells: tuple["SpellOption", ...] = ()
+    # Target of the acting Investigator's still-valid attack stratagem, when
+    # one is available for the current owner turn.
+    investigator_stratagem_target_id: str | None = None
+    # Engine-computed living ally targets for the selected Investigator's
+    # Battle Medicine action.
+    battle_medicine_targets: tuple[str, ...] = ()
+    # Engine-computed target ids for authored Recall Knowledge subjects.
+    recall_knowledge_targets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -320,6 +566,7 @@ class StrikeOption:
     damage_types: tuple[str, ...]
     default_damage_type: str
     default_nonlethal: bool
+    intelligence_substitution_available: bool = False
 
 
 @dataclass(frozen=True)
@@ -359,6 +606,7 @@ class EffectView:
     target_actor_id: str
     value: int
     expires_at_source_start: int
+    expires_at_world_time: int | None = None
 
 
 @dataclass(frozen=True)
@@ -394,8 +642,38 @@ class CreatureState:
     stowed_items: list[str] = field(default_factory=list)
     ammunition: dict[str, int] = field(default_factory=dict)
     prepared_slots: list["PreparedSlotState"] = field(default_factory=list)
+    spontaneous_slots: list["SpontaneousSlotState"] = field(default_factory=list)
+    focus_points: int = 0
+    focus_capacity: int = 0
     flourish_used_round: int = 0
     must_leave_occupied: bool = False
+    temporary_hp: int = 0
+    temporary_hp_source_id: str | None = None
+    temporary_hp_expires_at_seconds: int | None = None
+    hunted_prey: "HuntedPreyState | None" = None
+    precision_used_round: int = 0
+    # Swashbuckler Panache is encounter-scoped. A ``None`` expiry means the
+    # actor has lasting panache; otherwise the value is the actor-end counter
+    # at which temporary panache expires.
+    panache: bool = False
+    panache_expires_at_end: int | None = None
+    # A Finisher bars further attack-trait actions until this actor's turn
+    # ends. It is encounter-turn state and therefore must survive saves.
+    finisher_used_this_turn: bool = False
+    barbarian_state: "BarbarianState | None" = None
+    escape_lockout_until_start: int = 0
+    # The stored preliminary d20 is an input for the Investigator's first
+    # eligible Strike, rather than a CheckResult. Kept on the actor so it is
+    # saved even while a reaction or other choice interrupts the action.
+    investigator_stratagem: "InvestigatorStratagemState | None" = None
+    # Recall Knowledge attempts belong to the investigator and subject, so
+    # they survive scene transitions with the carried PC.
+    investigator_knowledge_attempts: dict[str, int] = field(default_factory=dict)
+    investigator_knowledge_exhausted: set[str] = field(default_factory=set)
+    # A body can only be examined once for a given authored examination key;
+    # this is separate from subject-keyed Recall Knowledge history so an
+    # immediate follow-up may intentionally reuse that subject.
+    investigator_examinations_completed: set[str] = field(default_factory=set)
 
     @property
     def defeated(self) -> bool:
@@ -429,11 +707,18 @@ class PendingChoice:
     actor_id: str | None = None
     target_id: str | None = None
     attack_id: str | None = None
+    # Stable physical weapon identity for a saved Strike or Reactive Strike.
+    # This is intentionally separate from ``attack_id``: a transferred
+    # longsword still backs the same attack profile while retaining its origin
+    # instance ID.
+    item_id: str | None = None
     attack_penalty: int = 0
     attack_count: int = 0
     check: CheckResult | None = None
     damage_result: DamageResult | None = None
     damage_text: str | None = None
+    temporary_hp_absorbed: int = 0
+    remaining_hp_damage: int = 0
     attack_critical: bool = False
     initiative_roll: int | None = None
     initiative_modifier: int | None = None
@@ -449,12 +734,18 @@ class PendingChoice:
     attack_count_cost: int = 1
     ranged_penalty: int = 0
     guidance_bonus: int = 0
+    feint_off_guard_applied: bool = False
+    attack_target_off_guard: bool = False
+    nimble_dodge_used: bool = False
     is_reaction: bool = False
     continuation: ActionContinuation | None = None
     check_kind: str | None = None
     check_owner_actor_id: str | None = None
     spell_id: str | None = None
     slot_id: str | None = None
+    # Exact physical item selected by an item-targeted spell. Keep this
+    # separate from ``item_id``, which belongs to Strike/reaction choices.
+    spell_target_item_id: str | None = None
     actions_cost: int = 0
     spell_actions: int = 0
     include_self: bool | None = None
@@ -462,6 +753,18 @@ class PendingChoice:
     damage_adjustment: str | None = None
     damage_context: str | None = None
     target_ids: tuple[str, ...] = ()
+    family_id: str | None = None
+    procedure_id: str | None = None
+    saved_check: "SavedCheckContext | None" = None
+    paired_strike: "PairedStrikeContinuation | None" = None
+    barbarian_choice: "RageModeChoice | None" = None
+    family_command: "FamilyCommand | None" = None
+    damage_resolution: "DamageResolution | None" = None
+    damage_result_is_mitigated: bool = False
+    # True once the observer-relative DC 5 concealment gate has been resolved
+    # or is waiting on its Hero Point decision.  It is distinct from the later
+    # attack check and prevents a saved attack reroll from rechecking light.
+    concealment_checked: bool = False
 
 
 @dataclass
@@ -486,6 +789,9 @@ class ActionContinuation:
     seen_reactors: list[str] = field(default_factory=list)
     must_disrupt_on_critical: bool = False
     vicious_swing: bool = False
+    # Confident Finisher uses the normal Strike continuation machinery while
+    # replacing its damage and applying the Finisher attack lockout.
+    finisher: bool = False
     movement_kind: str | None = None
     reaction_trigger: str | None = None
     spell_id: str | None = None
@@ -493,16 +799,197 @@ class ActionContinuation:
     slot_id: str | None = None
     spell_actions: int = 0
     include_self: bool | None = None
+    spell_source_kind: str | None = None
+    sorcerous_potency: int = 0
+    blood_magic_recipient_id: str | None = None
     spell_damage: DamageResult | None = None
     spell_check: CheckResult | None = None
     spell_save_degree: int | None = None
     target_ids: tuple[str, ...] = ()
     ranged_penalty: int = 0
     guidance_bonus: int = 0
+    feint_off_guard_applied: bool = False
+    attack_target_off_guard: bool = False
+    nimble_dodge_decided: bool = False
+    nimble_dodge_used: bool = False
     guidance_checked: bool = False
     stage: str | None = None
     parent_continuation: ActionContinuation | None = None
     attack_count_committed: bool = False
+    # Item-targeted spell facts remain independent of creature-target fields.
+    spell_target_item_id: str | None = None
+    spell_target_wielder_id: str | None = None
+    concealment_checked: bool = False
+    # Light's point/color/attachment intent survives manipulate reactions and
+    # a saved choice. The orb is created only once this continuation resolves.
+    light_control: str | None = None
+    light_point: Position | None = None
+    light_color: str | None = None
+    light_attachment_actor_id: str | None = None
+    light_replacement_orb_id: str | None = None
+    light_orb_id: str | None = None
+    # A failed observer-relative target gate can still preserve a character
+    # benefit (Scoundrel's Step) without fabricating the underlying skill die.
+    targeting_failed: bool = False
+    # Sure Strike is consumed by the first actual attack roll, after any
+    # reaction window. These markers make a saved continuation unambiguous.
+    sure_strike_checked: bool = False
+    sure_strike_used: bool = False
+    # Investigator attack stratagem intent survives every reaction/choice
+    # continuation until the actual Strike roll consumes the stored die.
+    use_intelligence: bool | None = None
+
+
+@dataclass(frozen=True)
+class DamageResolution:
+    """Original damage and caller context needed to resume defense choices."""
+
+    source_kind: str
+    group: DamageGroup
+    actor_id: str
+    target_id: str
+    source: str
+    damage_type: str
+    check: CheckResult | None = None
+    attack_id: str | None = None
+    spell_id: str | None = None
+    nonlethal: bool = False
+    attacker_critical: bool = False
+    attack_target_off_guard: bool = False
+    target_critical_failure: bool = False
+    damage_bonus_dice: int = 0
+    is_reaction: bool = False
+    continuation: ActionContinuation | None = None
+    enfeebled_on_failure: int = 0
+    complete_family_action_on_resume: bool = False
+    selections: tuple[DefenseSelection, ...] = ()
+    pending_defense_choice: DefenseChoice | None = None
+    shield_block_status: str | None = None
+    shield_block_instance_id: str | None = None
+    shield_block_record: "ShieldBlockRecord | None" = None
+    # Justice Champion's protection is attached to this damage event, not to
+    # the target's ordinary defenses. These facts survive each saved choice.
+    justice_checked: bool = False
+    justice_actor_id: str | None = None
+    justice_protected: bool = False
+
+
+@dataclass(frozen=True)
+class ShieldBlockRecord:
+    shield_instance_id: str
+    hardness: int
+    incoming_damage: int
+    shield_vulnerable_damage: int
+    prevented_from_actor: int
+    damage_to_actor: int
+    damage_to_shield: int
+    shield_hp_before: int
+    shield_hp_after: int
+
+
+@dataclass(frozen=True)
+class RaisedShieldState:
+    instance_id: str
+    expires_at_owner_start: int
+
+
+@dataclass(frozen=True)
+class SavedCheckContext:
+    """Authoritative facts for a check that may pause and later resume."""
+
+    check_owner_actor_id: str
+    context: CheckContext
+    dc: int
+    modifiers: tuple[Modifier, ...]
+    pre_roll_choices: tuple[str, ...] = ()
+    result: CheckResult | None = None
+    fortune_used: bool = False
+    reroll_used: bool = False
+    parent_continuation: ActionContinuation | None = None
+    attack_id: str | None = None
+    # Skill maneuvers commit their attack count before the observer-relative
+    # targeting flat check.  This marker keeps resumption from incrementing
+    # the same count a second time.
+    attack_count_committed: bool = False
+    # Unarmed-attack Escape is represented as a saved skill check, so retain
+    # the consumed fortune fact alongside the ordinary choice flags.
+    sure_strike_used: bool = False
+
+
+@dataclass(frozen=True)
+class HuntedPreyState:
+    """One Ranger's current explicitly hunted target."""
+
+    target_actor_id: str
+
+
+@dataclass(frozen=True)
+class PairedStrikeSelection:
+    """One selected subordinate Strike in a compound Strike activity."""
+
+    target_id: str
+    attack_id: str
+    damage_type: str | None = None
+    nonlethal: bool | None = None
+
+
+@dataclass(frozen=True)
+class PairedStrikeOutcome:
+    """One retained subordinate Strike result, before any grouped defense."""
+
+    target_id: str
+    attack_id: str
+    check: CheckResult
+    damage: DamageResult | None
+    damage_type: str
+    nonlethal: bool
+    hit: bool
+
+
+@dataclass(frozen=True)
+class PairedStrikeContinuation:
+    """Typed continuation for an action that makes two separate Strikes."""
+
+    activity_id: str
+    owner_actor_id: str
+    paid_actions: int
+    initial_attack_count: int
+    selections: tuple[PairedStrikeSelection, ...] = ()
+    next_index: int = 0
+    outcomes: tuple[PairedStrikeOutcome, ...] = ()
+    stage: str = "selecting"
+
+
+@dataclass(frozen=True)
+class EffectExpiration:
+    """Concrete owner-relative duration boundary for one sourced effect."""
+
+    anchor_actor_id: str
+    boundary: str
+    occurrence: int
+
+
+@dataclass(frozen=True)
+class ActiveConditionEffect:
+    """One separately sourced, expiring condition contribution."""
+
+    effect_id: str
+    kind: str
+    source_actor_id: str
+    target_actor_id: str
+    value: int
+    expiration: EffectExpiration
+    dc: int | None = None
+
+
+@dataclass(frozen=True)
+class ConditionImmunity:
+    """An action/condition lockout keyed to a source and target."""
+
+    kind: str
+    source_actor_id: str
+    target_actor_id: str
+    expires_at_seconds: int
 
 
 @dataclass
@@ -515,6 +1002,17 @@ class PreparedSlotState:
     spent: bool = False
 
 
+@dataclass
+class SpontaneousSlotState:
+    """Mutable remaining uses for one spontaneous rank pool."""
+
+    slot_id: str
+    source: str
+    rank: int
+    capacity: int
+    remaining: int
+
+
 @dataclass(frozen=True)
 class ActiveSpellEffect:
     effect_id: str
@@ -523,12 +1021,64 @@ class ActiveSpellEffect:
     target_actor_id: str
     value: int
     expires_at_source_start: int
+    expires_at_world_time: int | None = None
+
+
+@dataclass(frozen=True)
+class ActiveItemSpellEffect:
+    """One concrete temporary spell effect attached to a physical item.
+
+    Rank-1 Runic Weapon has fixed values, so the record stores only the
+    source, exact item identity, and both duration boundaries. The constants
+    are exposed as fields with defaults to make the effective profile
+    explicit while retaining a compact save representation.
+    """
+
+    effect_id: str
+    kind: str
+    source_actor_id: str
+    item_id: str
+    expires_at_source_start: int
+    expires_at_world_time: int
+    potency: int = 1
+    striking_dice: int = 2
+    magical: bool = True
 
 
 @dataclass(frozen=True)
 class GuidanceImmunity:
     target_actor_id: str
     expires_at_round: int
+
+
+@dataclass(frozen=True)
+class LightOrb:
+    """One concrete rank-1 Light orb in the local scene.
+
+    An orb has no creature or equipment identity. Its location is either a
+    point on the grid or a carrier actor; attached locations are derived from
+    the carrier at query time so movement pauses cannot leave stale light.
+    ``owner_preparation`` records the caster's preparation epoch for the
+    future daily-preparation cleanup command; no turn-based expiry is used.
+    """
+
+    stable_id: str
+    caster_actor_id: str
+    rank: int
+    color: str
+    point: Position | None = None
+    attached_actor_id: str | None = None
+    owner_preparation: int = 0
+
+    @property
+    def orb_id(self) -> str:
+        """Convenient public alias for the stable orb identity."""
+        return self.stable_id
+
+    @property
+    def position(self) -> Position | None:
+        """Return the stored point; attached positions are scene-relative."""
+        return self.point
 
 
 @dataclass
@@ -539,6 +1089,8 @@ class EncounterState:
     creatures: dict[str, CreatureState]
     initiative_order: list[str]
     active_index: int
+    initiative_skills: dict[str, str] = field(default_factory=dict)
+    initiative_contexts: dict[str, str | None] = field(default_factory=dict)
     round_number: int = 1
     in_progress: bool = True
     winner_team: str | None = None
@@ -546,12 +1098,351 @@ class EncounterState:
     pending_choice: PendingChoice | None = None
     next_choice_id: int = 1
     initiative_hero_decided: set[str] = field(default_factory=set)
+    quick_tempered_decided: set[str] = field(default_factory=set)
     ground_items: dict[Position, list[str]] = field(default_factory=dict)
+    item_instances: dict[str, ItemInstance] = field(default_factory=dict)
+    raised_shields: dict[str, RaisedShieldState] = field(default_factory=dict)
     initiative_tie_groups: list[tuple[str, ...]] = field(default_factory=list)
     initiative_tie_orders: dict[int, list[str]] = field(default_factory=dict)
     initiative_tie_group_index: int = 0
     initiative_reordered: set[str] = field(default_factory=set)
     actor_start_counts: dict[str, int] = field(default_factory=dict)
+    actor_end_counts: dict[str, int] = field(default_factory=dict)
+    feint_off_guard_effects: list["FeintOffGuardEffect"] = field(default_factory=list)
     active_effects: list[ActiveSpellEffect] = field(default_factory=list)
+    active_item_effects: list[ActiveItemSpellEffect] = field(default_factory=list)
     guidance_immunities: dict[str, int] = field(default_factory=dict)
     taking_cover: set[str] = field(default_factory=set)
+    condition_effects: list[ActiveConditionEffect] = field(default_factory=list)
+    condition_immunities: list[ConditionImmunity] = field(default_factory=list)
+    world_time_seconds: int = 0
+    # The absolute clock at which this encounter's round-one clock began.
+    # Combat advances remain anchored to this value; recovery activities may
+    # advance ``world_time_seconds`` after combat ends.
+    encounter_start_seconds: int = 0
+    ambient_light: str = "bright"
+    light_orbs: list[LightOrb] = field(default_factory=list)
+    next_light_orb_id: int = 1
+    # Compatibility projection retains the original round-shaped Guidance
+    # field.  Rules use the absolute map below.
+    guidance_immunity_deadlines: dict[str, int] = field(default_factory=dict)
+    # Sure Strike's local ten-minute post-use cooldown is absolute time based.
+    sure_strike_immunity_deadlines: dict[str, int] = field(default_factory=dict)
+    # Downtime facts are declared explicitly by the caller.  They never derive
+    # from elapsed seconds or simulate sleep/rest procedures.
+    preparation_day: int = 1
+    rested_actor_ids: set[str] = field(default_factory=set)
+    last_prepared_day: dict[str, int] = field(default_factory=dict)
+    # Justice state is literal per encounter: an active aura is removed by
+    # suppression or unconsciousness, and Prayer's temporary point is tracked
+    # separately so it cannot fund arbitrary spells or survive turn end.
+    justice_aura_active: set[str] = field(default_factory=set)
+    desperate_prayer_used: set[str] = field(default_factory=set)
+    desperate_prayer_points: set[str] = field(default_factory=set)
+    # Known Weaknesses grants are target- and recipient-specific and expire at
+    # the investigator's next turn start.  The concrete record is defined in
+    # ``investigator.py``; keeping this list on encounter state lets allies
+    # consume their own grant independently.
+    investigator_weakness_bonuses: list[object] = field(default_factory=list)
+
+
+@dataclass
+class FamilyProcedureContext:
+    """Shared transactional context for explicit family procedures.
+
+    ``state`` and ``dice`` are the private draft and cloned dice provider
+    owned by ``Encounter.execute``. A handler must not call public
+    ``Encounter.execute``: it should use the draft directly and return one
+    ``FamilyProcedureResult``. A pause is recorded as a normal typed
+    ``PendingChoice`` and resumes through ``handle_choice`` after save/load.
+    """
+
+    encounter: "Encounter"
+    state: EncounterState
+    dice: "DiceSource"
+    actor: CreatureState
+    definition: CreatureDefinition
+    family_id: str
+    command: FamilyCommand | None = None
+    pending: PendingChoice | None = None
+    choice: Choose | None = None
+    quick_tempered_trigger: bool = False
+
+    @property
+    def rage_source_id(self) -> str | None:
+        """Return the next unique Rage source identity from core-owned state."""
+        barbarian_state = self.actor.barbarian_state
+        if barbarian_state is None:
+            return None
+        return f"rage:{self.actor.actor_id}:{barbarian_state.next_rage_instance}"
+
+    def present_choice(
+        self,
+        procedure_id: str,
+        owner_actor_id: str | None,
+        prompt: str,
+        options: tuple[ChoiceOption, ...],
+        continuation: ActionContinuation,
+        *,
+        details: tuple[str, ...] = (),
+        target_id: str | None = None,
+        saved_check: SavedCheckContext | None = None,
+        paired_strike: PairedStrikeContinuation | None = None,
+        family_command: FamilyCommand | None = None,
+    ) -> PendingChoice:
+        """Persist a family pause using the core's ordinary choice sequence."""
+        if self.state.pending_choice is not None:
+            raise ValueError("a family procedure cannot replace an existing pending choice")
+        if not procedure_id or not prompt or not options:
+            raise ValueError("family choices need a procedure id, prompt, and options")
+        if continuation.actor_id != self.actor.actor_id:
+            raise ValueError("family continuation must retain its acting actor")
+        self.encounter._set_pending(
+            self.state,
+            kind="family_action",
+            owner_actor_id=owner_actor_id,
+            prompt=prompt,
+            options=options,
+            details=details,
+            actor_id=self.actor.actor_id,
+            target_id=target_id,
+            continuation=continuation,
+            family_id=self.family_id,
+            procedure_id=procedure_id,
+            saved_check=saved_check,
+            paired_strike=paired_strike,
+            family_command=family_command,
+        )
+        assert self.state.pending_choice is not None
+        return self.state.pending_choice
+
+    def present_spell_slot_choice(
+        self,
+        command: Cast,
+        options: tuple[ChoiceOption, ...],
+        *,
+        spell_name: str,
+        actions: int,
+    ) -> PendingChoice:
+        """Create the existing persisted prepared-slot choice for a cast."""
+        if self.state.pending_choice is not None:
+            raise ValueError("a spell-slot choice cannot replace an existing pending choice")
+        if not isinstance(command, Cast) or command.slot_id is not None:
+            raise ValueError("a spell-slot choice requires a Cast without a selected slot")
+        if not isinstance(spell_name, str) or not spell_name:
+            raise ValueError("a spell-slot choice needs the printed spell name")
+        if type(actions) is not int or actions < 1:
+            raise ValueError("a spell-slot choice needs a positive action count")
+        if not isinstance(options, tuple) or not options or any(
+            not isinstance(option, ChoiceOption) for option in options
+        ):
+            raise ValueError("a spell-slot choice needs typed prepared-slot options")
+        self.encounter._set_pending(
+            self.state,
+            kind="spell_slot",
+            owner_actor_id=self.actor.actor_id,
+            prompt=f"Choose which prepared {spell_name} slot to expend.",
+            options=options,
+            actor_id=self.actor.actor_id,
+            spell_id=command.spell_id,
+            spell_actions=actions,
+            target_id=command.target_id,
+            spell_target_item_id=command.item_id,
+            include_self=command.include_self,
+        )
+        assert self.state.pending_choice is not None
+        return self.state.pending_choice
+
+    def roll_skill_check(
+        self,
+        statistic: str,
+        dc: int,
+        *,
+        traits: frozenset[str] = frozenset(),
+        extra_modifiers: tuple[Modifier, ...] = (),
+        pre_roll_choices: tuple[str, ...] = (),
+        parent_continuation: ActionContinuation | None = None,
+    ) -> SavedCheckContext:
+        """Roll a printed skill with sourced conditions and retain its facts."""
+        return self.encounter._roll_skill_check(
+            self.state,
+            self.dice,
+            self.actor,
+            statistic,
+            dc,
+            traits=traits,
+            extra_modifiers=extra_modifiers,
+            pre_roll_choices=pre_roll_choices,
+            parent_continuation=parent_continuation,
+        )
+
+    def prepare_skill_check(
+        self,
+        statistic: str,
+        dc: int,
+        *,
+        traits: frozenset[str] = frozenset(),
+        extra_modifiers: tuple[Modifier, ...] = (),
+        pre_roll_choices: tuple[str, ...] = (),
+        parent_continuation: ActionContinuation | None = None,
+    ) -> SavedCheckContext:
+        return self.encounter._prepare_skill_check(
+            self.state, self.actor, statistic, dc, traits=traits,
+            extra_modifiers=extra_modifiers, pre_roll_choices=pre_roll_choices,
+            parent_continuation=parent_continuation,
+        )
+
+    def prepare_unarmed_attack_check(
+        self,
+        dc: int,
+        attack_id: str | None = None,
+        *,
+        parent_continuation: ActionContinuation | None = None,
+    ) -> SavedCheckContext:
+        """Prepare an unarmed attack check, retaining its selected profile and MAP."""
+        return self.encounter._prepare_unarmed_attack_check(
+            self.state, self.actor, dc, attack_id, parent_continuation=parent_continuation,
+        )
+
+    def resolve_saved_check(self, saved: SavedCheckContext) -> SavedCheckContext:
+        return self.encounter._resolve_saved_check(self.state, self.actor, self.dice, saved)
+
+    def reroll_saved_check(self, saved: SavedCheckContext, *, spend_hero_point: bool) -> SavedCheckContext:
+        return self.encounter._reroll_saved_check(self.state, self.dice, self.actor, saved, spend_hero_point=spend_hero_point)
+
+    def reroll_skill_check(self, saved: SavedCheckContext) -> SavedCheckContext:
+        return self.encounter._reroll_saved_check(self.state, self.dice, self.actor, saved, spend_hero_point=True)
+
+    def add_check_modifier(self, saved: SavedCheckContext, modifier: Modifier) -> SavedCheckContext:
+        if saved.result is not None:
+            raise ValueError("check modifiers must be chosen before rolling")
+        return replace(saved, modifiers=(*saved.modifiers, modifier))
+
+    def guidance_for(self, actor_id: str | None = None):
+        return self.encounter._guidance_for(self.state, actor_id or self.actor.actor_id)
+
+    def guidance_effect(self):
+        return self.guidance_for()
+
+    def consume_guidance(self, effect_id: str) -> Modifier | None:
+        return self.encounter._consume_guidance(self.state, self.actor.actor_id, effect_id)
+
+    def skill_modifier(self, statistic: str) -> int:
+        """Return the actor's printed or untrained skill modifier."""
+        return self.encounter._skill_modifier(self.definition, statistic)
+
+    @property
+    def free_hands(self) -> int:
+        """Number of hands not occupied by held items in this draft."""
+        return self.encounter._free_hands(self.state, self.definition, self.actor)
+
+    def commit_family_action(self, *, actions: int, attacks: int = 0) -> None:
+        """Commit ordinary action and MAP counters at the procedure boundary."""
+        self.encounter._commit_family_action(self, actions=actions, attacks=attacks)
+
+    def require_action_permitted(self, action_id: str, traits: frozenset[str]) -> None:
+        """Apply the shared condition gate before a family action commits costs."""
+        self.encounter._require_action_permitted(
+            self.state, self.actor, action_id, traits
+        )
+
+    def has_condition(self, target_actor_id: str, kind: str) -> bool:
+        return any(
+            effect.target_actor_id == target_actor_id and effect.kind == kind
+            for effect in self.state.condition_effects
+        )
+
+    def skill_dc(self, actor_id: str, statistic: str) -> int:
+        """Return the creature's ordinary DC for one saved skill statistic."""
+        return self.encounter._skill_dc(self.state, actor_id, statistic)
+
+    def condition_effects_for(self, target_actor_id: str, kind: str | None = None) -> tuple[ActiveConditionEffect, ...]:
+        return tuple(
+            effect for effect in self.state.condition_effects
+            if effect.target_actor_id == target_actor_id and (kind is None or effect.kind == kind)
+        )
+
+    def add_condition_effect(
+        self,
+        effect_id: str,
+        kind: str,
+        source_actor_id: str,
+        target_actor_id: str,
+        value: int,
+        *,
+        expiration: EffectExpiration,
+        dc: int | None = None,
+    ) -> None:
+        if not effect_id or any(item.effect_id == effect_id for item in self.state.condition_effects):
+            raise ValueError("condition effect IDs must be unique and non-empty")
+        if target_actor_id not in self.state.creatures or source_actor_id not in self.state.creatures:
+            raise ValueError("condition effect source and target must exist")
+        if dc is not None and (type(dc) is not int or dc < 0):
+            raise ValueError("condition effect DC must be a non-negative integer")
+        self.state.condition_effects.append(
+            ActiveConditionEffect(effect_id, kind, source_actor_id, target_actor_id, value, expiration, dc)
+        )
+
+    def remove_condition_effect(self, effect_id: str) -> None:
+        self.state.condition_effects = [
+            effect for effect in self.state.condition_effects if effect.effect_id != effect_id
+        ]
+
+    def condition_immunity_active(self, kind: str, source_actor_id: str, target_actor_id: str) -> bool:
+        now = self.state.world_time_seconds
+        return any(
+            item.kind == kind
+            and item.source_actor_id == source_actor_id
+            and item.target_actor_id == target_actor_id
+            and item.expires_at_seconds > now
+            for item in self.state.condition_immunities
+        )
+
+    @property
+    def escape_locked(self) -> bool:
+        return self.actor.escape_lockout_until_start > self.state.actor_start_counts.get(self.actor.actor_id, 0)
+
+    def grant_condition_immunity(
+        self, kind: str, source_actor_id: str, target_actor_id: str, *, duration_seconds: int
+    ) -> None:
+        if not kind or type(duration_seconds) is not int or duration_seconds < 0:
+            raise ValueError("condition immunity requires a kind and non-negative duration")
+        if source_actor_id not in self.state.creatures or target_actor_id not in self.state.creatures:
+            raise ValueError("condition immunity source and target must exist")
+        self.state.condition_immunities = [
+            item for item in self.state.condition_immunities
+            if (item.kind, item.source_actor_id, item.target_actor_id)
+            != (kind, source_actor_id, target_actor_id)
+        ]
+        self.state.condition_immunities.append(
+            ConditionImmunity(kind, source_actor_id, target_actor_id, self.state.world_time_seconds + duration_seconds)
+        )
+
+    def apply_family_damage(
+        self,
+        target_actor_id: str,
+        damage: DamageResult,
+        *,
+        source: str,
+        damage_type: str,
+        check: CheckResult | None = None,
+        nonlethal: bool = False,
+        attacker_critical: bool = False,
+        target_critical_failure: bool = False,
+        continuation: ActionContinuation | None = None,
+    ) -> tuple[Event, ...]:
+        """Apply one named family damage result through shared core health rules."""
+        return tuple(self.encounter.apply_family_damage(
+            self.state,
+            self.actor,
+            target_actor_id,
+            damage,
+            dice=self.dice,
+            source=source,
+            damage_type=damage_type,
+            check=check,
+            nonlethal=nonlethal,
+            attacker_critical=attacker_critical,
+            target_critical_failure=target_critical_failure,
+            continuation=continuation,
+        ))

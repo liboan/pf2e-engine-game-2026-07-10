@@ -6,7 +6,7 @@ Build a Python program that can run a complete tactical fight, explain its resul
 
 Keep correctness firm within the supported game. Limit the available content and environments when necessary. Prefer a small working implementation over infrastructure designed for hypothetical future abilities.
 
-S1–S3 and the S3i encounter expansion are implemented, independently reviewed, and enabled for local play. S3i adds eight S2 and eight S3 encounters, bringing the catalog to 21 setups. The full suite passes 211 tests. Later-stage mechanics have not started. [STATUS](../../STATUS.md) records the latest progress; the [work log](../work-log/README.md) records decisions and delegated work.
+S1–S3 and the S3i encounter expansion are implemented, independently reviewed, and enabled for local play. S3i adds eight S2 and eight S3 encounters, bringing the catalog to 21 setups. The full suite passes 211 tests. The active S3i extension targets all sixteen Player Core 1/2 classes at level 1, then level 2, using representative subclasses and small common content menus. Selected options must be correct and playable; exhaustive subclass or nested-choice coverage is not required. [STATUS](../../STATUS.md) records the latest progress; the [work log](../work-log/README.md) records decisions and delegated work.
 
 ## Plan index
 
@@ -14,7 +14,8 @@ S1–S3 and the S3i encounter expansion are implemented, independently reviewed,
 2. [Engine and content](02-engine-and-content.md): the main components and how content uses shared rules.
 3. [Rules and stages](03-rules-and-stages.md): source policy, rule families, content families, and successive runnable releases.
 4. [Delivery and checks](04-delivery-and-checks.md): assignments, model routing, review, modular tests, process cleanup, performance, and usage records.
-5. [Interaction encounters](05-interaction-encounters.md): the completed S3i work item, scenario matrix, content choices, and acceptance evidence.
+5. [Interaction encounters](05-interaction-encounters.md): the completed first S3i increment and its evidence.
+6. [Class and content expansion](06-class-and-content-expansion.md): the active S3i extension, level-1/2 coverage, content selection and acceptance.
 
 ## Product decisions
 

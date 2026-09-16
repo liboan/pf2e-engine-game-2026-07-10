@@ -3,41 +3,86 @@ from dataclasses import replace
 import pytest
 
 from pf2e.content import (
+    BARBARIAN_PC_PAIR_SETUP,
     CREATURES,
+    ANGELIC_FIRST_CAST_SETUP,
+    JUSTICE_CHAMPION_SETUP,
     S1_SETUP,
+    FEINT_FIGHTER_DUEL_SETUP,
     S2_INTERACTION_SETUPS,
     S2_PACK_ATTACK_SETUP,
     S2_PC_DUEL_SETUP,
     S2_SETUP,
     S3_INTERACTION_SETUPS,
     S3_SETUP,
+    ROGUE_THIEF_SETUP,
+    ROGUE_THIEF_FIGHTER_SETUP,
+    ROGUE_THIEF_WARPRIEST_SETUP,
+    RUNE_WEAPON_TEST_SETUP,
+    RUNE_ARMOR_AC_TEST_SETUP,
+    RUNE_ARMOR_DC_TEST_SETUP,
+    RUNE_ARMOR_SPELL_SAVE_TEST_SETUP,
+    RUNE_HANDWRAP_TEST_SETUP,
+    RUNE_HANDWRAP_UNINVESTED_TEST_SETUP,
+    SURE_STRIKE_WARPRIEST_SETUP,
+    STEEL_SHIELD_TEST_SETUP,
     SETUPS,
     get_setup,
 )
+from pf2e.barbarian_content import (
+    ANIMAL_BARBARIAN_SETUPS,
+    BARBARIAN_TEST_SETUP,
+    DRAGON_BARBARIAN_SETUPS,
+)
+from pf2e.typed_defense_content import TYPED_DEFENSE_SETUPS
 from pf2e.encounter import Encounter
 import pf2e.terminal as terminal
 
 
-_PRE_EXISTING_SETUP_IDS = {
+_BASE_SETUP_IDS = {
+    BARBARIAN_TEST_SETUP.setup_id,
+    BARBARIAN_PC_PAIR_SETUP.setup_id,
     S1_SETUP.setup_id,
     S2_SETUP.setup_id,
     S2_PACK_ATTACK_SETUP.setup_id,
     S2_PC_DUEL_SETUP.setup_id,
     S3_SETUP.setup_id,
+    ROGUE_THIEF_SETUP.setup_id,
+    ROGUE_THIEF_FIGHTER_SETUP.setup_id,
+    ROGUE_THIEF_WARPRIEST_SETUP.setup_id,
+    FEINT_FIGHTER_DUEL_SETUP.setup_id,
+    STEEL_SHIELD_TEST_SETUP.setup_id,
+    RUNE_WEAPON_TEST_SETUP.setup_id,
+    RUNE_ARMOR_AC_TEST_SETUP.setup_id,
+    RUNE_ARMOR_DC_TEST_SETUP.setup_id,
+    RUNE_ARMOR_SPELL_SAVE_TEST_SETUP.setup_id,
+    RUNE_HANDWRAP_TEST_SETUP.setup_id,
+    RUNE_HANDWRAP_UNINVESTED_TEST_SETUP.setup_id,
+    SURE_STRIKE_WARPRIEST_SETUP.setup_id,
+    ANGELIC_FIRST_CAST_SETUP.setup_id,
+    JUSTICE_CHAMPION_SETUP.setup_id,
 }
 
 
-def test_catalog_keeps_existing_entries_and_adds_eight_per_stage() -> None:
+def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family() -> None:
     s2_ids = {setup.setup_id for setup in S2_INTERACTION_SETUPS}
     s3_ids = {setup.setup_id for setup in S3_INTERACTION_SETUPS}
+    dragon_ids = set(DRAGON_BARBARIAN_SETUPS)
+    animal_ids = set(ANIMAL_BARBARIAN_SETUPS)
+    defense_ids = set(TYPED_DEFENSE_SETUPS)
 
     assert len(S2_INTERACTION_SETUPS) == 8
     assert len(S3_INTERACTION_SETUPS) == 8
-    assert _PRE_EXISTING_SETUP_IDS <= SETUPS.keys()
-    assert len(SETUPS) == 21
-    assert s2_ids.isdisjoint(s3_ids | _PRE_EXISTING_SETUP_IDS)
-    assert s3_ids.isdisjoint(_PRE_EXISTING_SETUP_IDS)
-    assert s2_ids | s3_ids | _PRE_EXISTING_SETUP_IDS == SETUPS.keys()
+    assert len(dragon_ids) == 8
+    assert len(animal_ids) == 2
+    assert len(defense_ids) == 4
+    assert _BASE_SETUP_IDS <= SETUPS.keys()
+    assert s2_ids.isdisjoint(s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids)
+    assert s3_ids.isdisjoint(_BASE_SETUP_IDS)
+    assert dragon_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids | animal_ids)
+    assert animal_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids | defense_ids)
+    assert defense_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids)
+    assert s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):
         assert get_setup(setup.setup_id) == setup

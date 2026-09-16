@@ -1,5 +1,9 @@
 # Engine components and content
 
+## Representative content boundary
+
+The active S3i target covers all sixteen PC1/2 classes using representative subclasses and small shared spell/domain/item menus. Selected choices must be complete and legal. A class, field or spellbook does not recursively require its entire eligible catalog; honor printed selection counts using the curated menu. Keep accepted play, staged helpers and deferred options distinct. The [class plan](06-class-and-content-expansion.md) owns the roster.
+
 ## Design rule
 
 Use ordinary Python records and functions to preserve the facts PF2e needs. Add an abstraction when a real mechanic benefits from it. Do not build a compiler, plugin framework, generic event bus, or resource-accounting language.
@@ -57,6 +61,7 @@ For the selected S2/S3 content, reuse the same check decision inside an ordinary
 
 - **Checks:** retain modifier type/source, DC, natural die, total, attack context, and ordered degree changes. Queries do not roll dice.
 - **Damage:** keep the source effect and its typed components together. Preserve relevant precision/material/critical facts as needed. Do not flatten damage before defenses can inspect it; healing is its own operation.
+- **Temporary HP:** keep one pool with its source and expiration. When a new grant arrives, preserve the player's choice to keep the old pool and duration or replace them, even when the new amount is lower. Save that choice and remove only the pool belonging to an expiring effect.
 - **Health:** apply the correct implemented zero-HP treatment for the actor. PCs cannot silently use an ordinary-enemy removal shortcut. Ending an encounter is separate from declaring creatures dead: the shared outcome check asks whether each team still has a conscious living combatant. Preserve unconscious actors and their health facts in the final state.
 - **Effects:** retain source, subject, value, and an expiration anchor such as a particular actor's next end of turn. Distinct sources may need separate records even when one currently dominates.
 - **Space:** keep position and footprint conceptually distinct. The first map may use one-cell actors; later larger footprints should use the same central spatial functions. Save turn-wide movement accounting.
@@ -64,9 +69,9 @@ For the selected S2/S3 content, reuse the same check decision inside an ordinary
 
 These are small rule-specific records, not universal frameworks.
 
-S3 needs two explicit ongoing spell effects: Guidance and enfeebled from Void Warp. Both retain their caster, target, and expiry at the caster's next initiative start. Reaching that position expires the effect even if the caster cannot act or is dead. Guidance also records its separate one-hour immunity using encounter time, with any consumed bonus retained in the current check for a later Hero reroll.
+Initial S3 introduced two explicit ongoing spell effects: Guidance and enfeebled from Void Warp. Both retain their caster, target, and expiry at the caster's next initiative start. Reaching that position expires the effect even if the caster cannot act or is dead. Guidance also records its separate one-hour immunity using encounter time, with any consumed bonus retained in the current check for a later Hero reroll.
 
-The initial caster has individually labeled prepared slots: two ordinary slots and four Heal-only font slots. Each records its source, prepared spell, rank, and whether it is spent. Cantrips do not spend those slots. This concrete casting model is enough for S3; additional casting models follow when selected content needs them.
+The initial caster has individually labeled prepared slots: two ordinary slots and four Heal-only font slots. Each records its source, prepared spell, rank, and whether it is spent. Cantrips do not spend those slots. The reviewed staged Angelic slice adds a repertoire with three interchangeable rank-1 slots, using the same source/resource validation and saved cast continuation. Prepared slots remain authoritative for the Warpriest; no second ledger shadows them. Focus resources join this path for Halo.
 
 ## How content uses the engine
 
@@ -93,3 +98,17 @@ Validate saved checks by reconstructing their arithmetic and degree from their s
 Use a save-format version and one engine/content compatibility identifier. Support compatible-build restoration first; reject incompatible saves clearly. Write a temporary file and replace the destination atomically. Do not serialize Python callables or use pickle. Save migrations can wait until released saves need preservation.
 
 Inspections return safe read-only information: current actors, resources, effects, choice, and focused check/damage explanations. Keep a bounded recent combat log for people. Tests examine structured results and state directly; they do not parse prose to decide correctness.
+
+## Local play between encounters
+
+The planned recovery interface keeps the same `Encounter` handle and existing character state. Refocus restores focus while preserving spent slots and injuries. A validated next scene keeps the same party, actual equipment and remaining resources, replaces opponents and rolls initiative. No second party database is needed.
+
+Use monotonic elapsed seconds plus the current encounter's start timestamp for durations. During an active encounter, a spell anchored to its caster’s turn expires at that turn boundary; the round clock must not shorten it before a later-initiative caster acts. Absolute deadlines support explicit time advancement between encounters. A separate explicit preparation-day declaration controls once-per-day preparation, which also requires externally adjudicated rest eligibility. This does not claim a sleep, natural-healing or fatigue simulator. Reject pending decisions, unresolved health or unsupported item transfers before a time jump or scene change. The [bounded recovery packet](../work-log/local-recovery-work.md) defines the proposed commands and tests; it is not yet implemented behavior.
+
+## Class expansion within S3i
+
+The active extension keeps the existing local command/choice/save model. Required shared changes are explicit casting sources and resource ownership, richer checks and conditions, damage/defense and item state, and owned actors/forms where a class requires them. One integration owner controls shared encounter/model/persistence changes; separate pure helpers and family modules have bounded owners. Exact reviewed starting setups remain the admission boundary.
+
+A created companion, familiar or summon needs a reviewed definition, owner and creation origin; a form is an override on the existing actor. Costs and pending choices still resolve once and survive saving. Class definitions supply ordinary parameters and dedicated procedures for distinct timing; they do not become an instruction language.
+
+Level 1 and level 2 must work before the requested generalization review. Share operations already required by multiple admitted features, and postpone speculative frameworks. The [extension plan](06-class-and-content-expansion.md) records content and acceptance scope; this paragraph describes planned work, not completed implementation.
