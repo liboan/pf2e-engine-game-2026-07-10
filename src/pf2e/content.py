@@ -73,6 +73,27 @@ from .druid_content import STORM_DRUID, STORM_DRUID_SETUP, STORM_DRUID_NEXT_SETU
 from .oracle_content import LIFE_ORACLE, LIFE_ORACLE_NUDGE_SETUP, VOID_HEALING_ORACLE, LIFE_ORACLE_LASH_SETUP, LIFE_ORACLE_NEXT_SETUP
 from .alchemist_content import BOMBER_ALCHEMIST, BOMBER_ALCHEMIST_NEXT_SETUP, BOMBER_ALCHEMIST_SETUP
 from .witch_content import FAITHS_FLAMEKEEPER_WITCH, FLAMEKEEPER_FOX, COMMAND_TARGET, FAITHS_FLAMEKEEPER_SETUP, FAITHS_FLAMEKEEPER_NEXT_SETUP
+from .l2_horizontal_content import L2_HORIZONTAL_DEFINITIONS, L2_HORIZONTAL_SETUPS
+from .l2_ranger_content import (
+    RANGER_PRECISION_LEVEL_2,
+    RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
+)
+from .l2_reach_content import L2_REACH_DEFINITIONS, L2_REACH_SETUPS
+
+
+# The normal Maestro admission uses the Witch's existing auditory Command
+# rather than inventing an additional spell family solely for a reaction test.
+MAESTRO_BARD_COUNTER_SETUP = EncounterSetup(
+    "maestro_bard_counter_performance_command",
+    "Maestro Counter Performance against Command",
+    15,
+    3,
+    (
+        CreaturePlacement("enemy_witch", FAITHS_FLAMEKEEPER_WITCH.definition_id, "Enemy Witch", "red", Position(1, 1)),
+        CreaturePlacement("beneficiary", FAITHS_FLAMEKEEPER_WITCH.definition_id, "Beneficiary", "blue", Position(2, 1)),
+        CreaturePlacement("maestro_bard", MAESTRO_BARD_STAGED.definition_id, "Maestro Bard", "blue", Position(3, 1)),
+    ),
+)
 
 # Dim fixtures opt into the narrow lighting model with an explicit vision
 # fact in the assembled content. The selected Angelic sheet remains neutral
@@ -856,6 +877,10 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         # Preserve the stable selected Ranger definition ID for saves made
         # before this reviewed combat setup entered the normal catalog.
         RANGER_PRECISION.definition_id: RANGER_PRECISION,
+        # The selected Monk keeps its stable staged definition ID on normal
+        # catalog admission. Horizontal Quick Jump is supported; vertical
+        # terrain and High Jump remain outside this flat-map slice.
+        MONK.definition_id: MONK,
         # The completed selected Battle Magic Wizard keeps its stable ID as
         # it moves into the normal catalog; diagnostic alternates stay staged.
         BATTLE_MAGIC_WIZARD.definition_id: BATTLE_MAGIC_WIZARD,
@@ -866,9 +891,17 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         FAITHS_FLAMEKEEPER_WITCH.definition_id: FAITHS_FLAMEKEEPER_WITCH,
         FLAMEKEEPER_FOX.definition_id: FLAMEKEEPER_FOX,
         COMMAND_TARGET.definition_id: COMMAND_TARGET,
+        # The selected Maestro keeps its historical definition ID so existing
+        # staged saves remain compatible after normal catalog admission.
+        MAESTRO_BARD_STAGED.definition_id: MAESTRO_BARD_STAGED,
         # The selected Bomber retains its stable staged ID now that the full
         # level-1 recovery, preparation, venom, and terminal route is admitted.
         BOMBER_ALCHEMIST.definition_id: BOMBER_ALCHEMIST,
+        # Selected L2 progression bundles retain explicit, finite public
+        # sheets and encounters; no class/subclass discovery is implied.
+        **L2_HORIZONTAL_DEFINITIONS,
+        RANGER_PRECISION_LEVEL_2.definition_id: RANGER_PRECISION_LEVEL_2,
+        **{definition.definition_id: definition for definition in L2_REACH_DEFINITIONS},
     }
 )
 
@@ -1230,6 +1263,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         JUSTICE_CHAMPION_SETUP.setup_id: JUSTICE_CHAMPION_SETUP,
         BRAGGART_SWASHBUCKLER_SETUP.setup_id: BRAGGART_SWASHBUCKLER_SETUP,
         RANGER_PRECISION_BOW_SETUP.setup_id: RANGER_PRECISION_BOW_SETUP,
+        MONK_KAMA_FLURRY_SETUP.setup_id: MONK_KAMA_FLURRY_SETUP,
         **INVESTIGATOR_SETUPS,
         **DRAGON_BARBARIAN_SETUPS,
         **ANIMAL_BARBARIAN_SETUPS,
@@ -1240,7 +1274,13 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         STORM_DRUID_SETUP.setup_id: STORM_DRUID_SETUP,
         LIFE_ORACLE_NUDGE_SETUP.setup_id: LIFE_ORACLE_NUDGE_SETUP,
         FAITHS_FLAMEKEEPER_SETUP.setup_id: FAITHS_FLAMEKEEPER_SETUP,
+        MAESTRO_BARD_ANTHEM_SETUP.setup_id: MAESTRO_BARD_ANTHEM_SETUP,
+        MAESTRO_BARD_FEAR_SETUP.setup_id: MAESTRO_BARD_FEAR_SETUP,
+        MAESTRO_BARD_COUNTER_SETUP.setup_id: MAESTRO_BARD_COUNTER_SETUP,
         BOMBER_ALCHEMIST_SETUP.setup_id: BOMBER_ALCHEMIST_SETUP,
+        **L2_HORIZONTAL_SETUPS,
+        RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id: RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
+        **{setup.setup_id: setup for setup in L2_REACH_SETUPS},
     }
 )
 
@@ -1249,8 +1289,6 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
 _STAGED_CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType({
     SOOTHE_TEST_CASTER.definition_id: SOOTHE_TEST_CASTER,
     WEAPON_IDENTITY_THIEF.definition_id: WEAPON_IDENTITY_THIEF,
-    MAESTRO_BARD_STAGED.definition_id: MAESTRO_BARD_STAGED,
-    MONK.definition_id: MONK,
     BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS.definition_id: BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS,
     BATTLE_MAGIC_WIZARD_RUNIC_BODY.definition_id: BATTLE_MAGIC_WIZARD_RUNIC_BODY,
     BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE.definition_id: BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE,
@@ -1269,9 +1307,6 @@ _STAGED_SETUPS: Mapping[str, EncounterSetup] = MappingProxyType({
     SOOTHE_TEST_SETUP.setup_id: SOOTHE_TEST_SETUP,
     WEAPON_IDENTITY_SETUP.setup_id: WEAPON_IDENTITY_SETUP,
     WEAPON_IDENTITY_SHORTSWORD_SETUP.setup_id: WEAPON_IDENTITY_SHORTSWORD_SETUP,
-    MAESTRO_BARD_ANTHEM_SETUP.setup_id: MAESTRO_BARD_ANTHEM_SETUP,
-    MAESTRO_BARD_FEAR_SETUP.setup_id: MAESTRO_BARD_FEAR_SETUP,
-    MONK_KAMA_FLURRY_SETUP.setup_id: MONK_KAMA_FLURRY_SETUP,
     BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP.setup_id: BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP,
     BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP.setup_id: BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP,
     BATTLE_MAGIC_WIZARD_NEXT_SETUP.setup_id: BATTLE_MAGIC_WIZARD_NEXT_SETUP,

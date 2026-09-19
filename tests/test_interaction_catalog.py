@@ -11,6 +11,9 @@ from pf2e.content import (
     STORM_DRUID_SETUP,
     LIFE_ORACLE_NUDGE_SETUP,
     FAITHS_FLAMEKEEPER_SETUP,
+    MAESTRO_BARD_ANTHEM_SETUP,
+    MAESTRO_BARD_FEAR_SETUP,
+    MAESTRO_BARD_COUNTER_SETUP,
     BOMBER_ALCHEMIST_SETUP,
     JUSTICE_CHAMPION_SETUP,
     FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
@@ -33,6 +36,7 @@ from pf2e.content import (
     RUNE_HANDWRAP_TEST_SETUP,
     RUNE_HANDWRAP_UNINVESTED_TEST_SETUP,
     RANGER_PRECISION_BOW_SETUP,
+    MONK_KAMA_FLURRY_SETUP,
     SURE_STRIKE_WARPRIEST_SETUP,
     STEEL_SHIELD_TEST_SETUP,
     SETUPS,
@@ -45,7 +49,13 @@ from pf2e.barbarian_content import (
 )
 from pf2e.typed_defense_content import TYPED_DEFENSE_SETUPS
 from pf2e.encounter import Encounter
-from pf2e.ranger_monk_content import RANGER_PRECISION
+from pf2e.ranger_monk_content import MONK, RANGER_PRECISION
+from pf2e.l2_horizontal_content import L2_HORIZONTAL_DEFINITIONS, L2_HORIZONTAL_SETUPS
+from pf2e.l2_ranger_content import (
+    RANGER_PRECISION_LEVEL_2,
+    RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
+)
+from pf2e.l2_reach_content import L2_REACH_DEFINITIONS, L2_REACH_SETUPS
 import pf2e.terminal as terminal
 
 
@@ -75,10 +85,14 @@ _BASE_SETUP_IDS = {
     FORENSIC_INVESTIGATOR_VS_TWO_DOGS.setup_id,
     FORENSIC_INVESTIGATOR_HEALING_SETUP.setup_id,
     RANGER_PRECISION_BOW_SETUP.setup_id,
+    MONK_KAMA_FLURRY_SETUP.setup_id,
     BATTLE_MAGIC_WIZARD_SETUP.setup_id,
     STORM_DRUID_SETUP.setup_id,
     LIFE_ORACLE_NUDGE_SETUP.setup_id,
     FAITHS_FLAMEKEEPER_SETUP.setup_id,
+    MAESTRO_BARD_ANTHEM_SETUP.setup_id,
+    MAESTRO_BARD_FEAR_SETUP.setup_id,
+    MAESTRO_BARD_COUNTER_SETUP.setup_id,
     BOMBER_ALCHEMIST_SETUP.setup_id,
 }
 
@@ -89,6 +103,9 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     dragon_ids = set(DRAGON_BARBARIAN_SETUPS)
     animal_ids = set(ANIMAL_BARBARIAN_SETUPS)
     defense_ids = set(TYPED_DEFENSE_SETUPS)
+    l2_horizontal_ids = set(L2_HORIZONTAL_SETUPS)
+    l2_ranger_ids = {RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id}
+    l2_reach_ids = {setup.setup_id for setup in L2_REACH_SETUPS}
 
     assert len(S2_INTERACTION_SETUPS) == 8
     assert len(S3_INTERACTION_SETUPS) == 8
@@ -101,7 +118,10 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert dragon_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids | animal_ids)
     assert animal_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids | defense_ids)
     assert defense_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids)
-    assert s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids == SETUPS.keys()
+    assert (
+        s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids
+        | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
+    ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):
         assert get_setup(setup.setup_id) == setup
@@ -111,6 +131,12 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert "elite_guard_dog_mc2924" in CREATURES
     assert "fighter_rapier_level_1" in CREATURES
     assert RANGER_PRECISION.definition_id in CREATURES
+    assert MONK.definition_id in CREATURES
+    for definition_id, definition in L2_HORIZONTAL_DEFINITIONS.items():
+        assert CREATURES[definition_id] == definition
+    assert CREATURES[RANGER_PRECISION_LEVEL_2.definition_id] == RANGER_PRECISION_LEVEL_2
+    for definition in L2_REACH_DEFINITIONS:
+        assert CREATURES[definition.definition_id] == definition
 
 
 def test_catalogued_precision_ranger_combat_setup_starts_and_round_trips(tmp_path) -> None:
@@ -120,6 +146,19 @@ def test_catalogued_precision_ranger_combat_setup_starts_and_round_trips(tmp_pat
 
     game = Encounter.start(setup, seed=13)
     save_path = tmp_path / "precision-ranger-combat.json"
+    game.save(save_path)
+    restored = Encounter.load(save_path)
+
+    assert restored.inspect().map_width == setup.width
+
+
+def test_catalogued_monk_setup_starts_and_round_trips(tmp_path) -> None:
+    setup = get_setup(MONK_KAMA_FLURRY_SETUP.setup_id)
+    assert setup == MONK_KAMA_FLURRY_SETUP
+    assert all(placement.definition_id in CREATURES for placement in setup.placements)
+
+    game = Encounter.start(setup, seed=13)
+    save_path = tmp_path / "monk-kama-flurry.json"
     game.save(save_path)
     restored = Encounter.load(save_path)
 
@@ -158,6 +197,7 @@ def test_modified_catalogued_setup_is_still_rejected() -> None:
         "s2_fleet_diagonal_assault",
         "s3_long_lane_crossfire",
         "staged_ranger_precision_bow",
+        "staged_monk_kama_flurry",
         "staged_life_oracle_nudge",
     ),
 )

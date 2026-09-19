@@ -22,7 +22,7 @@ from .model import (
 
 MAESTRO_BARD_STAGED = CreatureDefinition(
     definition_id="bard_maestro_level_1_staged",
-    name="Level 1 Maestro Bard (Courageous Anthem sheet)",
+    name="Level 1 Maestro Bard",
     hp=18,
     ac=15,
     perception=5,
@@ -101,18 +101,17 @@ MAESTRO_BARD_STAGED = CreatureDefinition(
         SpontaneousSpellDefinition("counter_performance", 1),
         SpontaneousSpellDefinition("lingering_composition", 1),
     ),
-    # Counter Performance's trigger/substitution behavior remains deferred,
-    # but it is a granted focus spell and therefore contributes to this
-    # Maestro's reviewed two-point Focus Pool.
+    # Counter Performance and Lingering Composition are both learned focus
+    # spells and therefore contribute to this Maestro's two-point Focus Pool.
     focus_points=2,
     focus_capacity=2,
     abilities=(
-        "courageous_anthem", "counter_performance", "lingering_composition", "shield_cantrip",
+        "courageous_anthem", "counter_performance", "counter_performance_singing", "lingering_composition", "shield_cantrip",
     ),
     sheet_notes=(
         "Human Versatile Human Farmhand Maestro Bard: Str +1, Dex +2, Con +2, Int +0, Wis +0, Cha +4; 18 HP, Perception +5, Will +5, Speed 30, ordinary vision, Hero Point 1, and a held rapier.",
         "Farmhand grants Athletics, Farming Lore, and Assurance (Athletics); Natural Skill grants Society and Medicine. The Bard's four additional trained skills are Acrobatics, Deception, Diplomacy, and Intimidation.",
-        "Five ordinary occult cantrips and three rank-1 repertoire spells are legal here: Light, Guidance, Void Warp, Forbidding Ward, and Shield; Fear and Runic Weapon are the two Bard choices, while Maestro grants Soothe; the two rank-1 slots are shared. Courageous Anthem and the Maestro's Lingering Composition are executable; Counter Performance remains granted but unimplemented.",
+        "Five ordinary occult cantrips and three rank-1 repertoire spells are legal here: Light, Guidance, Void Warp, Forbidding Ward, and Shield; Fear and Runic Weapon are the two Bard choices, while Maestro grants Soothe; the two rank-1 slots are shared. Courageous Anthem, Lingering Composition, and Counter Performance are executable. Counter Performance is limited to the admitted auditory Command reaction, uses singing, and Fear is not an eligible trigger.",
         "Courageous Anthem is a one-action 60-foot emanation for 1 round. Its printed entry has no auditory or visual trait or recipient gate, so this literal slice does not infer hearing from sight or lighting.",
         "Sources: https://2e.aonprd.com/Classes.aspx?ID=32; https://2e.aonprd.com/Spells.aspx?ID=1763; https://2e.aonprd.com/Spells.aspx?ID=1769; https://2e.aonprd.com/Traits.aspx?ID=559",
     ),

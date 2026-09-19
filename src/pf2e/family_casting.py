@@ -30,6 +30,7 @@ from .model import (
     PreparedSpellDefinition,
     PreparedSlotState,
     Position,
+    ReachSpell,
 )
 from .spells import SPELLS, spell_traits, telekinetic_projectile_object_profile
 from .space import grid_distance_feet, in_bounds
@@ -69,6 +70,10 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     forbidding_ward = spell.spell_id == "forbidding_ward"
     detect_magic = spell.spell_id == "detect_magic"
     sigil = spell.spell_id == "sigil"
+    if spell.spell_id == "counter_performance":
+        return FamilyProcedureResult(
+            rejection="Counter Performance is available only as its saved reaction to an auditory or visual effect."
+        )
     if spell.spell_id == "ignition":
         if command.spell_mode not in {"ranged", "melee"}:
             return FamilyProcedureResult(rejection="Ignition requires an explicit ranged or melee spell-attack form.")
@@ -152,6 +157,19 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     if actions > context.actor.actions_remaining:
         return FamilyProcedureResult(rejection=f"{spell.name} requires {actions} actions.")
 
+    # Compute the one cast-mode range snapshot before every target validator,
+    # but do not consume the spellshape marker until all validation and the
+    # precise resource spend have succeeded.  The encounter helper normalizes
+    # touch and Heal modes and delegates the actual arithmetic to
+    # ``reach_spell.effective_spell_range``.
+    reach_spell_ready = context.actor.reach_spell_pending
+    reach_spell_effective_range_ft = context.encounter._effective_reach_spell_range(
+        spell.spell_id, actions, reach_ready=reach_spell_ready
+    )
+    committed_reach_spell_range_ft = (
+        reach_spell_effective_range_ft if reach_spell_ready else None
+    )
+
     if sigil:
         if command.target_ids is not None or (command.target_id is None) == (command.item_id is None):
             return FamilyProcedureResult(rejection="Sigil requires exactly one touched creature or physical item.")
@@ -185,16 +203,14 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             )
         ally = context.state.creatures.get(command.target_ids[0])
         enemy = context.state.creatures.get(command.target_ids[1])
-        if (
-            ally is None or enemy is None
-            or ally.actor_id == context.actor.actor_id
-            or ally.dead or enemy.dead
-            or ally.team != context.actor.team or enemy.team == context.actor.team
-            or grid_distance_feet(context.actor.position, ally.position) > 30
-            or grid_distance_feet(context.actor.position, enemy.position) > 30
+        if not context.encounter._forbidding_ward_targets_valid(
+            context.actor, ally, enemy, range_ft=reach_spell_effective_range_ft
         ):
             return FamilyProcedureResult(
-                rejection="Forbidding Ward requires one non-self ally and one opposing enemy within 30 feet."
+                rejection=(
+                    "Forbidding Ward requires one non-self ally and one opposing enemy "
+                    f"within {reach_spell_effective_range_ft} feet."
+                )
             )
     if force_barrage:
         if command.target_id is not None or command.include_self is not None:
@@ -210,7 +226,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
                 rejection=f"Force Barrage requires exactly {actions} target_ids, one per shard."
             )
         candidates = context.encounter._spell_targets_for_cast(
-            context.state, context.actor, spell.spell_id, actions
+            context.state, context.actor, spell.spell_id, actions,
+            reach_spell_effective_range_ft=committed_reach_spell_range_ft,
         )
         if any(target_id not in candidates for target_id in command.target_ids):
             return FamilyProcedureResult(
@@ -254,8 +271,10 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             return FamilyProcedureResult(rejection="Light requires a point inside the encounter map.")
         if not in_bounds(command.point, context.state.map_width, context.state.map_height):
             return FamilyProcedureResult(rejection="Light's point must be inside the encounter map.")
-        if grid_distance_feet(context.actor.position, command.point) > 120:
-            return FamilyProcedureResult(rejection="Light's point is outside its 120-foot range.")
+        if grid_distance_feet(context.actor.position, command.point) > (reach_spell_effective_range_ft or 120):
+            return FamilyProcedureResult(
+                rejection=f"Light's point is outside its {reach_spell_effective_range_ft or 120}-foot range."
+            )
         if command.color is not None and (
             not isinstance(command.color, str) or not command.color.strip()
         ):
@@ -347,7 +366,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             return FamilyProcedureResult(rejection="Runic Weapon requires an explicit physical weapon item_id.")
         try:
             target_facts = context.encounter._runic_weapon_target(
-                context.state, context.actor, command.item_id
+                context.state, context.actor, command.item_id,
+                reach_spell_effective_range_ft=committed_reach_spell_range_ft,
             )
         except ValueError as error:
             return FamilyProcedureResult(rejection=str(error))
@@ -478,7 +498,10 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         )
 
     if electric_arc:
-        candidates = context.encounter._spell_targets_for_cast(context.state, context.actor, spell.spell_id, actions)
+        candidates = context.encounter._spell_targets_for_cast(
+            context.state, context.actor, spell.spell_id, actions,
+            reach_spell_effective_range_ft=committed_reach_spell_range_ft,
+        )
         if not isinstance(command.target_ids, tuple) or not 1 <= len(command.target_ids) <= 2 or len(set(command.target_ids)) != len(command.target_ids) or any(target_id not in candidates for target_id in command.target_ids):
             return FamilyProcedureResult(rejection="Electric Arc requires one or two distinct legal targets.")
     if telekinetic_projectile:
@@ -498,7 +521,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             or len(item_positions) != 1
             or profile is None
             or profile[0] > 1
-            or grid_distance_feet(context.actor.position, item_positions[0]) > 30
+            or grid_distance_feet(context.actor.position, item_positions[0]) > (reach_spell_effective_range_ft or 30)
         ):
             return FamilyProcedureResult(rejection="Telekinetic Projectile requires a supported loose unattended object of at most 1 Bulk within 30 feet.")
     if not electric_arc and not gale_blast and not shield and not breathe_fire and not force_barrage and not forbidding_ward and not detect_magic and not sigil and not runic_weapon and not light and not courageous_anthem and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
@@ -511,7 +534,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
                 unsupported="Positive damage to a stabilized 0 HP PC awaits a product ruling and is unsupported."
             )
         candidates = context.encounter._spell_targets_for_cast(
-            context.state, context.actor, spell.spell_id, actions
+            context.state, context.actor, spell.spell_id, actions,
+            reach_spell_effective_range_ft=committed_reach_spell_range_ft,
         )
         if command.target_id is not None and command.target_id not in candidates:
             return FamilyProcedureResult(
@@ -569,6 +593,11 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
                 slots_by_id[spend.resource_id].spent = True
 
     context.actor.actions_remaining -= actions
+    # A cast is the only direct successor that can consume Reach Spell.  It
+    # consumes the marker even for a no-range spell; only a legal ranged/touch
+    # mode receives a durable committed range on its continuation.
+    if reach_spell_ready:
+        context.actor.reach_spell_pending = False
     if command.use_arcane_bond:
         context.actor.arcane_bond_recast_until_start = 0
         context.actor.arcane_bond_eligible_slots.discard(permission.selection.resource_id or "")
@@ -590,6 +619,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         spell_target_id=command.target_ids[0] if forbidding_ward else command.target_id,
         slot_id=slot_id,
         spell_actions=actions,
+        reach_spell_effective_range_ft=committed_reach_spell_range_ft,
         include_self=command.include_self,
         spell_source_kind=source_kind,
         sorcerous_potency=1 if source_kind == "spontaneous" and spell.spell_id == "heal" else 0,
@@ -660,9 +690,39 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
 
 
 def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
-    """Dispatch the narrow Wizard Arcane Bond free action."""
+    """Dispatch the admitted casting-family free actions."""
+    command = context.command
+    if isinstance(command, ReachSpell):
+        return _begin_reach_spell(context)
     from . import wizard
     return wizard.handle_action(context)
+
+
+def _begin_reach_spell(context: FamilyProcedureContext) -> FamilyProcedureResult:
+    """Spend one action to ready the next eligible cast.
+
+    Reach Spell is a one-action spellshape activity.  The core encounter route clears
+    this marker for every intervening action, free action, reaction, and turn
+    end; the next cast snapshots the shaped range in its continuation.
+    """
+    actor = context.actor
+    if context.state.pending_choice is not None:
+        return FamilyProcedureResult(rejection="A pending choice must be resolved before Reach Spell.")
+    if "reach_spell" not in context.definition.abilities or "Reach Spell" not in context.definition.feats:
+        return FamilyProcedureResult(rejection=f"{actor.label} has no admitted Reach Spell feat.")
+    if actor.reach_spell_pending:
+        return FamilyProcedureResult(rejection="Reach Spell is already waiting for the next eligible cast.")
+    if actor.actions_remaining < 1:
+        return FamilyProcedureResult(rejection="Reach Spell requires 1 action.")
+    context.encounter._require_action_permitted(
+        context.state, actor, "reach_spell", frozenset({"concentrate", "spellshape"})
+    )
+    actor.actions_remaining -= 1
+    actor.reach_spell_pending = True
+    return FamilyProcedureResult((Event(
+        "reach_spell_ready", actor.actor_id, None,
+        f"{actor.label} shapes their next eligible ranged or touch spell with Reach Spell.",
+    ),))
 
 
 def validate_pending(context: FamilyProcedureContext) -> None:

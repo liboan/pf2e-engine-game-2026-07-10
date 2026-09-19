@@ -7,9 +7,11 @@ Sources checked 2026-09-16:
 * Trip weapon trait: https://2e.aonprd.com/Traits.aspx?ID=716
 
 The selected flat-map contract admits one-action horizontal Quick Jump at DC
-15 with 30/15/5/0-foot degree bands capped by Speed. Kama's Trip trait permits
-the held weapon to supply the maneuver and allows dropping it to convert a
-critical failure to a failure.
+15. A success uses the check total rounded down to 5 feet, capped by Speed.
+Failure and critical failure make a normal horizontal Leap (15 feet for this
+Fleet Monk's 30-foot Speed), and critical failure then leaves the Monk prone.
+Kama's Trip trait permits the held weapon to supply the maneuver and allows
+dropping it to convert a critical failure to a failure.
 """
 
 from pathlib import Path
@@ -58,10 +60,10 @@ def _jump_setup(monkeypatch: pytest.MonkeyPatch, setup_id: str) -> EncounterSetu
 @pytest.mark.parametrize(
     ("die", "expected_x", "expected_degree", "expected_prone"),
     (
-        (20, 6, "CRITICAL_SUCCESS", False),  # 30 feet is capped by Speed 25.
+        (20, 6, "CRITICAL_SUCCESS", False),  # 25-foot result is within Speed 30.
         (10, 4, "SUCCESS", False),
-        (5, 2, "FAILURE", False),
-        (1, 1, "CRITICAL_FAILURE", True),
+        (5, 4, "FAILURE", False),  # Normal 15-foot Leap at Speed 30.
+        (1, 4, "CRITICAL_FAILURE", True),  # Leap, then prone.
     ),
 )
 def test_quick_jump_degree_distance_action_cost_and_speed_cap(

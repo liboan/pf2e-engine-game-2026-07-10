@@ -155,7 +155,10 @@ MONK = CreatureDefinition(
     hp=20,
     ac=19,
     perception=4,
-    land_speed_ft=25,
+    # Versatile Human grants a qualifying general feat at character creation.
+    # This selected sheet takes Fleet, so its ordinary 25-foot Human Speed is
+    # increased by 5 feet.
+    land_speed_ft=30,
     attacks=(
         AttackDefinition(
             attack_id="fist",
@@ -188,7 +191,7 @@ MONK = CreatureDefinition(
     kind="pc",
     health_mode=HealthMode.PC,
     abilities=("flurry_of_blows", "powerful_fist", "monastic_weaponry"),
-    feats=("Natural Skill", "Quick Jump", "Flurry of Blows", "Powerful Fist", "Monastic Weaponry"),
+    feats=("Natural Skill", "Fleet", "Quick Jump", "Flurry of Blows", "Powerful Fist", "Monastic Weaponry"),
     ability_modifiers=(
         ("strength", 2),
         ("dexterity", 4),
@@ -226,12 +229,12 @@ MONK = CreatureDefinition(
         ("class_dc", "trained"),
     ),
     sheet_notes=(
-        "Level-1 Human Monk; Martial Disciple background. Key attribute Dexterity +4; Strength +2, Constitution +2, Wisdom +1.",
+        "Level-1 Versatile Human Monk; the heritage selects the general feat Fleet, increasing land Speed from 25 to 30 feet. Martial Disciple background. Key attribute Dexterity +4; Strength +2, Constitution +2, Wisdom +1.",
         "Four class skills: Acrobatics, Medicine, Stealth, and Survival. Martial Disciple trains Athletics and Warfare Lore and grants Quick Jump; Natural Skill trains Crafting and Society.",
         "Monk is expert in unarmored defense and all three saves; no armor is worn. Human ancestry HP 8 + Monk class HP 10 + Constitution 2 = 20 HP.",
         "Powerful Fist changes fist damage to 1d6 and removes the –2 circumstance penalty for a lethal fist Strike.",
         "Monastic Weaponry is the selected level-1 class feat. The held kama is a one-handed martial monk weapon: 1d6 slashing, agile, trip; it may replace an unarmed Strike in Flurry.",
-        "Sources: https://2e.aonprd.com/Classes.aspx?ID=60; https://2e.aonprd.com/Backgrounds.aspx?ID=432; https://2e.aonprd.com/Feats.aspx?ID=5979; https://2e.aonprd.com/Feats.aspx?ID=4479; https://2e.aonprd.com/Weapons.aspx",
+        "Sources: https://2e.aonprd.com/Classes.aspx?ID=60; https://2e.aonprd.com/Heritages.aspx?ID=262; https://2e.aonprd.com/Feats.aspx?ID=5150; https://2e.aonprd.com/Backgrounds.aspx?ID=432; https://2e.aonprd.com/Feats.aspx?ID=5979; https://2e.aonprd.com/Feats.aspx?ID=4479; https://2e.aonprd.com/Weapons.aspx",
         "Quick Jump is the background's granted skill feat; the selected slice supports its one-action horizontal Long Jump result on these flat maps.",
     ),
     held_items=("kama",),

@@ -84,7 +84,7 @@ from .spells import CONCEALMENT_TARGETED_SPELL_IDS, SPELLS
 from .preparation import has_variable_preparations, prepared_slot_rejection
 
 
-SAVE_VERSION = 17
+SAVE_VERSION = 18
 ENGINE_COMPATIBILITY = "pf2e-s3i-thief-rogue-v1"
 CONTENT_COMPATIBILITY = "pf2e-s3i-thief-rogue-content-v1"
 
@@ -445,7 +445,10 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "focus_capacity": creature.focus_capacity,
                 "flourish_used_round": creature.flourish_used_round,
                 "composition_cast_at_start": creature.composition_cast_at_start,
+                "composition_cast_turn_actor_id": creature.composition_cast_turn_actor_id,
+                "composition_cast_turn_start": creature.composition_cast_turn_start,
                 "lingering_composition_pending": creature.lingering_composition_pending,
+                "reach_spell_pending": creature.reach_spell_pending,
                 "must_leave_occupied": creature.must_leave_occupied,
                 "temporary_hp": creature.temporary_hp,
                 "temporary_hp_source_id": creature.temporary_hp_source_id,
@@ -547,6 +550,19 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 effect.consume_on_next_attack,
             ]
             for effect in state.feint_off_guard_effects
+        ],
+        "tumble_behind_exposures": [
+            [
+                effect.effect_id,
+                effect.source_actor_id,
+                effect.target_actor_id,
+                [
+                    effect.expiration.anchor_actor_id,
+                    effect.expiration.boundary,
+                    effect.expiration.occurrence,
+                ],
+            ]
+            for effect in state.tumble_behind_exposures
         ],
         "world_time_seconds": state.world_time_seconds,
         "encounter_start_seconds": state.encounter_start_seconds,
@@ -902,7 +918,17 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError(f"saved actor {actor_id!r} has focus capacity outside its reviewed definition")
         flourish_used_round = _required_int(raw, "flourish_used_round")
         composition_cast_at_start = _required_int(raw, "composition_cast_at_start")
+        composition_cast_turn_actor_id = raw.get("composition_cast_turn_actor_id")
+        composition_cast_turn_start = raw.get("composition_cast_turn_start", 0)
+        if (
+            composition_cast_turn_actor_id is not None
+            and (not isinstance(composition_cast_turn_actor_id, str) or not composition_cast_turn_actor_id)
+        ) or type(composition_cast_turn_start) is not int or composition_cast_turn_start < 0:
+            raise ValueError(f"saved actor {actor_id!r} has invalid composition turn marker")
         lingering_composition_pending = _required_bool(raw, "lingering_composition_pending")
+        reach_spell_pending = raw.get("reach_spell_pending", False)
+        if type(reach_spell_pending) is not bool:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Reach Spell state")
         must_leave_occupied = _required_bool(raw, "must_leave_occupied")
         temporary_hp = _required_int(raw, "temporary_hp")
         temporary_hp_source_id = raw.get("temporary_hp_source_id")
@@ -1201,7 +1227,10 @@ def _state_from_data(data: Any) -> EncounterState:
             focus_capacity=focus_capacity,
             flourish_used_round=flourish_used_round,
             composition_cast_at_start=composition_cast_at_start,
+            composition_cast_turn_actor_id=composition_cast_turn_actor_id,
+            composition_cast_turn_start=composition_cast_turn_start,
             lingering_composition_pending=lingering_composition_pending,
+            reach_spell_pending=reach_spell_pending,
             must_leave_occupied=must_leave_occupied,
             temporary_hp=temporary_hp,
             temporary_hp_source_id=temporary_hp_source_id,
@@ -1637,6 +1666,18 @@ def _state_from_data(data: Any) -> EncounterState:
     ):
         raise ValueError("save has invalid composition turn marker")
     if any(
+        (creature.composition_cast_turn_actor_id is None) != (creature.composition_cast_turn_start == 0)
+        or (
+            creature.composition_cast_turn_actor_id is not None
+            and (
+                creature.composition_cast_turn_actor_id not in expected_ids
+                or creature.composition_cast_turn_start > starts_raw[creature.composition_cast_turn_actor_id]
+            )
+        )
+        for creature in creatures.values()
+    ):
+        raise ValueError("save has invalid composition actual-turn marker")
+    if any(
         creature.lingering_composition_pending
         and (
             get_definition(creature.definition_id).class_name != "Bard"
@@ -1649,6 +1690,22 @@ def _state_from_data(data: Any) -> EncounterState:
         for creature in creatures.values()
     ):
         raise ValueError("save has invalid Lingering Composition spellshape state")
+    for creature in creatures.values():
+        if not creature.reach_spell_pending:
+            continue
+        definition = get_definition(creature.definition_id)
+        if (
+            "reach_spell" not in definition.abilities
+            or "Reach Spell" not in definition.feats
+            or not in_progress
+            or not initiative_finalized
+            or active_actor_id != creature.actor_id
+            # Reach Spell is a one-action activity. Its saved marker must
+            # prove that action has already been committed, but can remain
+            # at zero actions until the current turn ends.
+            or not 0 <= creature.actions_remaining <= 2
+        ):
+            raise ValueError("save has invalid Reach Spell spellshape state")
     weakness_raw = data.get("investigator_weakness_bonuses", [])
     if not isinstance(weakness_raw, list):
         raise ValueError("save has invalid Investigator Known Weaknesses bonuses")
@@ -1754,6 +1811,46 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save retains an expired Feint off-guard effect")
         feint_effect_ids.add(effect.effect_id)
         feint_effects.append(effect)
+    tumble_effects_raw = data.get("tumble_behind_exposures", [])
+    if not isinstance(tumble_effects_raw, list):
+        raise ValueError("save has invalid Tumble Behind exposures")
+    from .movement_progression import TumbleBehindExposure
+
+    tumble_effects: list[TumbleBehindExposure] = []
+    tumble_effect_ids: set[str] = set()
+    for row in tumble_effects_raw:
+        if (
+            not isinstance(row, list) or len(row) != 4
+            or any(not isinstance(value, str) or not value for value in row[:3])
+            or not isinstance(row[3], list) or len(row[3]) != 3
+            or not isinstance(row[3][0], str) or not row[3][0]
+            or row[3][1] != "end"
+            or type(row[3][2]) is not int or row[3][2] < 1
+            or row[0] in tumble_effect_ids
+            or row[1] not in expected_ids or row[2] not in expected_ids
+            or row[3][0] not in expected_ids
+        ):
+            raise ValueError("save has invalid Tumble Behind exposure")
+        try:
+            expiration = EffectExpiration(row[3][0], row[3][1], row[3][2])
+            effect = TumbleBehindExposure(row[0], row[1], row[2], expiration)
+        except (TypeError, ValueError) as error:
+            raise ValueError("save has invalid Tumble Behind exposure") from error
+        if expiration.occurrence <= ends_raw[expiration.anchor_actor_id]:
+            raise ValueError("save retains an expired Tumble Behind exposure")
+        source_definition = get_definition(creatures[row[1]].definition_id)
+        if (
+            "Tumble Behind" not in source_definition.feats
+            or expiration.anchor_actor_id != row[1]
+            or expiration.occurrence != ends_raw[row[1]] + 1
+            or not in_progress
+            or not initiative_order
+            or initiative_order[active_index] != row[1]
+            or creatures[row[1]].team == creatures[row[2]].team
+        ):
+            raise ValueError("save has forged or off-schedule Tumble Behind exposure")
+        tumble_effect_ids.add(effect.effect_id)
+        tumble_effects.append(effect)
     effects_raw = data.get("active_effects")
     if not isinstance(effects_raw, list):
         raise ValueError("save has invalid active spell effects")
@@ -2558,6 +2655,7 @@ def _state_from_data(data: Any) -> EncounterState:
         actor_start_counts=dict(starts_raw),
         actor_end_counts=dict(ends_raw),
         feint_off_guard_effects=feint_effects,
+        tumble_behind_exposures=tumble_effects,
         active_effects=effects,
         persistent_effects=persistent_effects,
         giant_centipede_venom_afflictions=venom_afflictions,
@@ -2693,6 +2791,7 @@ def _state_from_data(data: Any) -> EncounterState:
             )
             or state.pending_choice.kind in {"witch_restored_spirit", "witch_restored_spirit_timing"}
             or state.pending_choice.kind == "concealment_hero_reroll"
+            or state.pending_choice.kind in {"counter_performance_save_choice", "counter_performance_bard_hero_reroll"}
         )
     ):
         from .encounter import Encounter
@@ -3413,7 +3512,7 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
         "heroic_recovery_damage", "damage_defense", "shield_block", "reaction", "spell_target", "spell_self_inclusion", "persistent_recovery",
         "spell_willingness", "spell_blood_magic_recipient", "guidance_use", "spell_attack_hero_reroll", "detect_magic_known",
             "spell_save_hero_reroll", "spell_slot",
-            "lingering_composition_hero_reroll",
+            "lingering_composition_hero_reroll", "counter_performance_save_choice", "counter_performance_bard_hero_reroll",
         "grabbed_manipulate_hero_reroll",
         "family_action", "nimble_dodge", "concealment_hero_reroll",
             "desperate_prayer", "witch_restored_spirit", "witch_restored_spirit_timing",
@@ -3677,6 +3776,14 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
             continuation.spell_area_direction.x, continuation.spell_area_direction.y
         ],
         "spell_mode": continuation.spell_mode,
+        "hunter_aim_intent": (
+            None if continuation.hunter_aim_intent is None else [
+                continuation.hunter_aim_intent.target_actor_id,
+                continuation.hunter_aim_intent.attack_id,
+                continuation.hunter_aim_intent.item_id,
+            ]
+        ),
+        "reach_spell_effective_range_ft": continuation.reach_spell_effective_range_ft,
         "ranged_penalty": continuation.ranged_penalty,
         "guidance_bonus": continuation.guidance_bonus,
         "feint_off_guard_applied": continuation.feint_off_guard_applied,
@@ -3703,6 +3810,10 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "tumble_command": _family_command_to_data(continuation.tumble_command),
         "tumble_saved_check": _saved_check_to_data(continuation.tumble_saved_check),
         "tumble_distance": continuation.tumble_distance,
+        "tumble_origin": None if continuation.tumble_origin is None else [
+            continuation.tumble_origin.x, continuation.tumble_origin.y
+        ],
+        "quick_jump_saved_check": _saved_check_to_data(continuation.quick_jump_saved_check),
         "paired_strike": _paired_strike_to_data(continuation.paired_strike),
         "bomber_only_primary_splash": continuation.bomber_only_primary_splash,
     }
@@ -3789,10 +3900,17 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has Breathe Fire without its area direction")
     include_self = data.get("include_self")
     spell_save_degree = data.get("spell_save_degree")
+    reach_spell_effective_range_ft = data.get("reach_spell_effective_range_ft")
     if include_self is not None and type(include_self) is not bool:
         raise ValueError("save has invalid interrupted spell self-inclusion")
     if spell_save_degree is not None and (type(spell_save_degree) is not int or not 0 <= spell_save_degree <= 3):
         raise ValueError("save has invalid interrupted save degree")
+    if reach_spell_effective_range_ft is not None and (
+        type(reach_spell_effective_range_ft) is not int or reach_spell_effective_range_ft <= 0
+    ):
+        raise ValueError("save has invalid committed Reach Spell range")
+    if reach_spell_effective_range_ft is not None and kind != "cast":
+        raise ValueError("save has Reach Spell range on a non-cast continuation")
     if (
         integers["next_step"] < 0
         or integers["damage_bonus_dice"] < 0
@@ -3815,9 +3933,34 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
     use_intelligence = data.get("use_intelligence")
     if use_intelligence is not None and type(use_intelligence) is not bool:
         raise ValueError("save has invalid Investigator Intelligence intent")
+    hunter_aim_raw = data.get("hunter_aim_intent")
+    if hunter_aim_raw is None:
+        hunter_aim_intent = None
+    elif (
+        not isinstance(hunter_aim_raw, list) or len(hunter_aim_raw) != 3
+        or not isinstance(hunter_aim_raw[0], str) or not hunter_aim_raw[0]
+        or not isinstance(hunter_aim_raw[1], str) or not hunter_aim_raw[1]
+        or (hunter_aim_raw[2] is not None and (not isinstance(hunter_aim_raw[2], str) or not hunter_aim_raw[2]))
+    ):
+        raise ValueError("save has invalid Hunter's Aim intent")
+    else:
+        from .ranger import HunterAimIntent
+
+        hunter_aim_intent = HunterAimIntent(*hunter_aim_raw)
     tumble_command = _family_command_from_data(data.get("tumble_command"))
     tumble_saved_check = _saved_check_from_data(data.get("tumble_saved_check"))
     tumble_distance = data.get("tumble_distance")
+    tumble_origin_raw = data.get("tumble_origin")
+    if tumble_origin_raw is None:
+        tumble_origin = None
+    elif (
+        not isinstance(tumble_origin_raw, list) or len(tumble_origin_raw) != 2
+        or any(type(value) is not int for value in tumble_origin_raw)
+    ):
+        raise ValueError("save has invalid Tumble Through origin")
+    else:
+        tumble_origin = Position(*tumble_origin_raw)
+    quick_jump_saved_check = _saved_check_from_data(data.get("quick_jump_saved_check"))
     paired_strike = _paired_strike_from_data(data.get("paired_strike"))
     bomber_only_primary_splash = data.get("bomber_only_primary_splash", False)
     if type(bomber_only_primary_splash) is not bool:
@@ -3828,6 +3971,19 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has an unsupported Tumble Through continuation command")
     if tumble_saved_check is not None and tumble_saved_check.context.statistic != "acrobatics":
         raise ValueError("save has an invalid Tumble Through continuation check")
+    if tumble_origin is not None and (
+        kind != "movement" or optional_strings["stage"] != "tumble_through_lead_in"
+    ):
+        raise ValueError("save has Tumble Through origin on an invalid continuation")
+    if quick_jump_saved_check is not None and quick_jump_saved_check.context.statistic != "athletics":
+        raise ValueError("save has an invalid Quick Jump continuation check")
+    quick_jump_kind = optional_strings["movement_kind"] in {
+        "quick_jump", "quick_jump_critical_failure",
+    }
+    if quick_jump_kind != (quick_jump_saved_check is not None):
+        raise ValueError("save has inconsistent Quick Jump continuation provenance")
+    if quick_jump_saved_check is not None and kind != "movement":
+        raise ValueError("save has Quick Jump facts on a non-movement continuation")
     finisher = data.get("finisher", False)
     if type(finisher) is not bool:
         raise ValueError("save has invalid Confident Finisher continuation")
@@ -3899,6 +4055,8 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         target_ids=tuple(target_ids),
         spell_area_direction=spell_area_direction,
         spell_mode=optional_strings["spell_mode"],
+        hunter_aim_intent=hunter_aim_intent,
+        reach_spell_effective_range_ft=reach_spell_effective_range_ft,
         ranged_penalty=integers["ranged_penalty"],
         guidance_bonus=integers["guidance_bonus"],
         feint_off_guard_applied=_required_bool(data, "feint_off_guard_applied"),
@@ -3929,6 +4087,8 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         tumble_command=tumble_command,
         tumble_saved_check=tumble_saved_check,
         tumble_distance=tumble_distance,
+        tumble_origin=tumble_origin,
+        quick_jump_saved_check=quick_jump_saved_check,
         light_control=optional_strings["light_control"],
         light_point=light_point,
         light_color=optional_strings["light_color"],

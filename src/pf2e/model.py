@@ -407,6 +407,13 @@ class FamilyCommand:
 
 
 @dataclass(frozen=True)
+class ReachSpell(FamilyCommand):
+    """Ready the selected caster's next eligible ranged or touch spell."""
+
+    family_id = "casting"
+
+
+@dataclass(frozen=True)
 class LayOnHands(FamilyCommand):
     """One-action living-target devotion healing."""
 
@@ -717,9 +724,17 @@ class CreatureState:
     # active effect. The marker is persisted because an extended composition
     # may be saved before a later turn replaces it.
     composition_cast_at_start: int = 0
+    # A composition can also be cast as an off-turn reaction. The source
+    # start count above remains the expiry marker; these identify the actual
+    # current turn that consumed the composition allowance.
+    composition_cast_turn_actor_id: str | None = None
+    composition_cast_turn_start: int = 0
     # Lingering Composition is a spellshape free action. It has exactly one
     # legal successor: the next action must cast the qualifying composition.
     lingering_composition_pending: bool = False
+    # Reach Spell is a distinct one-spell spellshape marker.  The cast keeps
+    # its committed range separately on ActionContinuation.
+    reach_spell_pending: bool = False
     must_leave_occupied: bool = False
     temporary_hp: int = 0
     temporary_hp_source_id: str | None = None
@@ -927,6 +942,12 @@ class ActionContinuation:
     target_ids: tuple[str, ...] = ()
     spell_area_direction: Position | None = None
     spell_mode: str | None = None
+    # Hunter's Aim is a Ranger-procedure-only attack intent.  It remains
+    # typed through reaction and saved-decision continuations.
+    hunter_aim_intent: "HunterAimIntent | None" = None
+    # A positive range is the immutable range committed by Reach Spell; it is
+    # never recomputed from the caster's transient pending marker.
+    reach_spell_effective_range_ft: int | None = None
     ranged_penalty: int = 0
     guidance_bonus: int = 0
     feint_off_guard_applied: bool = False
@@ -965,6 +986,11 @@ class ActionContinuation:
     tumble_command: "FamilyCommand | None" = None
     tumble_saved_check: "SavedCheckContext | None" = None
     tumble_distance: int | None = None
+    tumble_origin: Position | None = None
+    # Quick Jump carries the resolved Long Jump check through reaction
+    # continuations so its failure/critical-failure landing is not a mutable
+    # movement-kind string after save/load.
+    quick_jump_saved_check: "SavedCheckContext | None" = None
     # A paid paired activity retains this parent while each subordinate Strike
     # passes through the ordinary reaction/check/damage continuation.
     paired_strike: "PairedStrikeContinuation | None" = None
@@ -1323,6 +1349,9 @@ class EncounterState:
     actor_start_counts: dict[str, int] = field(default_factory=dict)
     actor_end_counts: dict[str, int] = field(default_factory=dict)
     feint_off_guard_effects: list["FeintOffGuardEffect"] = field(default_factory=list)
+    # Tumble Behind is deliberately a distinct typed, attacker-relative
+    # one-attack exposure; it does not reuse Feint's melee-only contract.
+    tumble_behind_exposures: list["TumbleBehindExposure"] = field(default_factory=list)
     active_effects: list[ActiveSpellEffect] = field(default_factory=list)
     persistent_effects: list[PersistentDamageEffect] = field(default_factory=list)
     giant_centipede_venom_afflictions: list[GiantCentipedeVenomAffliction] = field(default_factory=list)

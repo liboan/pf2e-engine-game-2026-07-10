@@ -66,6 +66,15 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 "https://2e.aonprd.com/Spells.aspx?ID=1769",
             ),
             SpellDefinition(
+                "counter_performance",
+                "Counter Performance",
+                (0,),
+                frozenset({"auditory", "bard", "composition", "concentrate", "focus", "fortune", "mental"}),
+                60,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1762",
+            ),
+            SpellDefinition(
                 "force_bolt",
                 "Force Bolt",
                 (1,),

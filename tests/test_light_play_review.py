@@ -101,7 +101,7 @@ def test_healthy_dim_fight_saves_light_choice_sustains_targeting_and_wins(
     save_path = tmp_path / "light-complete-play.json"
     game.save(save_path)
     payload = json.loads(save_path.read_text(encoding="utf-8"))
-    assert payload["save_version"] == 17
+    assert payload["save_version"] == 18
     resumed = Encounter.load(save_path)
     assert resumed.inspect() == offered.inspection
     choice = resumed.inspect().choice

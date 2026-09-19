@@ -45,6 +45,30 @@ class HuntedShot(FamilyCommand):
     strike: PairedStrikeSelection
 
 
+@dataclass(frozen=True)
+class HunterAim(FamilyCommand):
+    """Spend two actions for Hunter's Aim's one ranged weapon Strike."""
+
+    family_id = "martial"
+    target_id: str
+    attack_id: str
+    item_id: str | None = None
+
+
+@dataclass(frozen=True)
+class HunterAimIntent:
+    """The verified Hunter's Aim facts carried by a saved Strike.
+
+    This is deliberately not a command: only ``HunterAim`` can construct it
+    after Ranger-specific checks.  The shared Strike path validates the same
+    facts again before it applies the special attack modifiers.
+    """
+
+    target_actor_id: str
+    attack_id: str
+    item_id: str | None
+
+
 def hunter_edge(abilities: tuple[str, ...] | list[str]) -> HunterEdge | None:
     """Read the one fixed edge encoded in a reviewed Ranger definition."""
     selected = tuple(edge for edge in HunterEdge if f"hunter_edge_{edge.value}" in abilities)
@@ -164,6 +188,62 @@ def precision_damage_term(
     )
 
 
+def validate_hunter_aim_intent(
+    intent: HunterAimIntent,
+    *,
+    actor,
+    target,
+    attack,
+    actions_cost: int,
+    attack_count_cost: int,
+) -> bool:
+    """Fail closed unless one saved Hunter's Aim still has its legal facts.
+
+    The core calls this before beginning a Strike and whenever it validates a
+    saved continuation.  Keeping the definition and prey checks here prevents
+    a serialized intent from granting Hunter's Aim's benefits to an ordinary
+    attack, a different weapon, or a replaced prey.
+    """
+    if not isinstance(intent, HunterAimIntent):
+        return False
+    if (
+        type(intent.target_actor_id) is not str
+        or type(intent.attack_id) is not str
+        or (intent.item_id is not None and type(intent.item_id) is not str)
+        or type(actions_cost) is not int
+        or type(attack_count_cost) is not int
+    ):
+        return False
+    if actions_cost != 2 or attack_count_cost != 1:
+        return False
+    if target is None or attack is None:
+        return False
+    if (
+        intent.target_actor_id != target.actor_id
+        or intent.attack_id != attack.attack_id
+        or intent.item_id != getattr(attack, "selected_item_id", intent.item_id)
+        or "ranged" not in attack.traits
+    ):
+        return False
+    from .content import get_definition
+
+    definition = get_definition(actor.definition_id)
+    prey = actor.hunted_prey
+    return (
+        "hunters_aim" in definition.abilities
+        and hunter_edge(definition.abilities) is HunterEdge.PRECISION
+        and prey is not None
+        and prey.target_actor_id == target.actor_id
+    )
+
+
+def hunter_aim_attack_bonus(intent: HunterAimIntent) -> int:
+    """Return Hunter's Aim's typed +2 circumstance attack bonus."""
+    if not isinstance(intent, HunterAimIntent):
+        raise ValueError("Hunter's Aim attack bonus requires a typed intent")
+    return 2
+
+
 def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | None:
     """Execute Ranger commands inside Encounter's existing transaction."""
     command = context.command
@@ -183,6 +263,8 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | No
             require_hunted_prey=True,
             requires_unarmed_or_monk_weapon=False,
         )
+    if isinstance(command, HunterAim):
+        return _handle_hunter_aim(context, command)
     return None
 
 
@@ -229,3 +311,63 @@ def _handle_hunt_prey(context: FamilyProcedureContext, command: HuntPrey) -> Fam
     ]
     events = context.encounter._complete_action(state, actor, events, dice=context.dice)
     return FamilyProcedureResult(events=tuple(events))
+
+
+def _handle_hunter_aim(
+    context: FamilyProcedureContext, command: HunterAim
+) -> FamilyProcedureResult:
+    """Validate the Ranger procedure, then delegate its Strike to core."""
+    actor = context.actor
+    state = context.state
+    if "hunters_aim" not in context.definition.abilities:
+        return FamilyProcedureResult(unsupported="Hunter's Aim is not admitted for this creature.")
+    target = state.creatures.get(command.target_id)
+    if target is None or target.actor_id == actor.actor_id or target.defeated:
+        return FamilyProcedureResult(rejection="Hunter's Aim requires an active hunted prey.")
+    select_attack = getattr(context.encounter, "_select_attack", None)
+    if not callable(select_attack):
+        return FamilyProcedureResult(unsupported="The core Strike selection hook is not available.")
+    attack = select_attack(state, actor, command.attack_id, item_id=command.item_id)
+    intent = HunterAimIntent(command.target_id, command.attack_id, command.item_id)
+    if not validate_hunter_aim_intent(
+        intent,
+        actor=actor,
+        target=target,
+        attack=attack,
+        actions_cost=2,
+        attack_count_cost=1,
+    ):
+        return FamilyProcedureResult(
+            rejection="Hunter's Aim requires two actions, a ranged weapon Strike, and your current hunted prey."
+        )
+    require_permitted = getattr(context.encounter, "_require_action_permitted", None)
+    if callable(require_permitted):
+        require_permitted(state, actor, "hunter_aim", frozenset({"concentrate"}))
+    start_strike = getattr(context.encounter, "_start_strike", None)
+    if not callable(start_strike):
+        return FamilyProcedureResult(unsupported="The core Hunter's Aim Strike hook is not available.")
+    events = start_strike(
+        state,
+        context.dice,
+        actor,
+        command.target_id,
+        command.attack_id,
+        command.item_id,
+        None,
+        None,
+        actions_cost=2,
+        attack_count_cost=1,
+        vicious_swing=False,
+        hunter_aim_intent=intent,
+    )
+    return FamilyProcedureResult(
+        events=(
+            Event(
+                "hunters_aim",
+                actor.actor_id,
+                target.actor_id,
+                f"{actor.label} focuses Hunter's Aim on {target.label} (2 actions).",
+            ),
+            *events,
+        )
+    )

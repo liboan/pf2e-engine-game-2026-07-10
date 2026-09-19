@@ -40,6 +40,7 @@ from pf2e.content import get_definition, get_setup
 from pf2e.encounter import Encounter
 from pf2e.model import (
     Cast,
+    Choose,
     CreaturePlacement,
     EncounterSetup,
     EndTurn,
@@ -923,6 +924,10 @@ def test_failed_command_locks_then_restores_a_targets_reaction_after_obedience(
     _settle(game)
 
     cast = game.execute(Cast("command", target_id="enemy", spell_mode="stand"))
+    if cast.status is ResultStatus.PAUSED:
+        choice = game.inspect().choice
+        assert choice is not None and choice.kind == "counter_performance_save_choice"
+        cast = game.execute(Choose(choice.choice_id, "keep", choice.owner_actor_id))
     assert cast.status is ResultStatus.COMPLETED
     enemy = game._state.creatures["enemy"]
     effect = next(item for item in game._state.condition_effects if item.kind == "commanded")

@@ -165,6 +165,8 @@ def test_level_one_definitions_cover_all_edges_and_selected_class_feats() -> Non
         assert (fist.modifier, fist.damage_modifier, fist.attack_attribute, fist.damage_attribute) == (7, 1, "dexterity", "strength")
     assert MONK.level == 1
     assert {"flurry_of_blows", "powerful_fist", "monastic_weaponry"} <= set(MONK.abilities)
+    assert MONK.land_speed_ft == 30
+    assert "Fleet" in MONK.feats
     assert {"Natural Skill", "Hunted Shot"} <= set(RANGER_DEFINITIONS["ranger_flurry_level_1"].feats)
 
 
@@ -553,6 +555,65 @@ def test_hunted_prey_carries_across_scenes_then_daily_preparation_clears_it(
     carried = tmp_path / "carried-prey.json"
     game.save(carried)
     assert Encounter.load(carried)._state.creatures["ranger"].hunted_prey == HuntedPreyState("old_dog")
+
+
+def test_healthy_monk_recovers_prepares_saves_and_acts_in_next_scene(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """The selected Monk retains its Fleet Speed through ordinary staged continuity.
+
+    The build retains its historical setup ID after horizontal-only catalog
+    admission. This covers the source-settled sheet grant and the existing
+    common recovery/next-scene lifecycle without expanding into vertical play.
+    """
+    first = content.get_setup("staged_monk_kama_flurry")
+    second = EncounterSetup(
+        setup_id="test_monk_next_scene",
+        name="Monk next scene",
+        width=6,
+        height=3,
+        placements=(
+            CreaturePlacement("monk", MONK.definition_id, "Monk", "blue", Position(1, 1)),
+            CreaturePlacement("next_dog", "guard_dog_mc2924", "Next Guard Dog", "red", Position(4, 1)),
+        ),
+    )
+    monkeypatch.setattr(content, "_STAGED_SETUPS", content._STAGED_SETUPS | {second.setup_id: second})
+
+    # Initiative, two critical kama Strikes/d6 damage, next-scene initiative,
+    # then a live fist Strike/d6 damage.
+    game = Encounter.start(first, rolls=(20, 1, 1, 20, 6, 20, 6, 20, 1, 20, 6))
+    _settle_initiative(game)
+    assert game.inspect().turn_actor_id == "monk"
+    assert game.execute(FlurryOfBlows(PairedStrikeSelection("guard_dog_a", "kama"))).status is ResultStatus.PAUSED
+    assert _choose(game, "keep").status is ResultStatus.PAUSED
+    second_choice = game.inspect().choice
+    assert second_choice is not None
+    second_kama = next(
+        option.option_id
+        for option in second_choice.options
+        if (selection := _decode_selection(option.option_id)) is not None
+        and selection.target_id == "guard_dog_b"
+    )
+    assert _choose(game, second_kama).status is ResultStatus.PAUSED
+    assert _choose(game, "keep").inspection.winner_team == "blue"
+    assert game._state.creatures["monk"].hp == MONK.hp
+
+    assert game.record_rested(("monk",), day_number=2, elapsed_seconds=28_800).status is ResultStatus.COMPLETED
+    save_path = tmp_path / "healthy-monk-rested.json"
+    game.save(save_path)
+    game = Encounter.load(save_path)
+    assert game.daily_prepare(("monk",)).status is ResultStatus.COMPLETED
+
+    transitioned = game.next_encounter(second)
+    assert transitioned.status is ResultStatus.PAUSED
+    _settle_initiative(game)
+    monk = next(actor for actor in game.inspect().actors if actor.actor_id == "monk")
+    assert monk.speed_ft == 30 and monk.hp == MONK.hp
+    assert game.execute(Stride((Position(2, 1), Position(3, 1)))).status is ResultStatus.COMPLETED
+    strike = game.execute(Strike("next_dog", attack_id="fist"))
+    assert strike.status is ResultStatus.PAUSED
+    resolved = _choose(game, "keep")
+    assert any(event.kind == "strike" and event.actor_id == "monk" for event in resolved.events)
 
 def test_kama_flurry_is_one_action_with_sequential_map_and_second_target(tmp_path: Path) -> None:
     # Initiative, first kama attack/d6, second kama attack/d6.  The first
@@ -951,7 +1012,7 @@ def test_quick_jump_saved_reaction_decline_resumes_remaining_path(
     assert sum(event.kind == "reaction_declined" for event in finished.events) == 1
 
 
-def test_quick_jump_critical_failure_falls_prone_without_moving(
+def test_quick_jump_critical_failure_leaps_then_falls_prone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     setup = EncounterSetup(
@@ -971,7 +1032,9 @@ def test_quick_jump_critical_failure_falls_prone_without_moving(
     assert paused.status is ResultStatus.PAUSED
     _choose(game, "keep")
     monk = next(actor for actor in game.inspect().actors if actor.actor_id == "monk")
-    assert monk.position == Position(1, 1) and monk.prone
+    # Critical failure retains Long Jump's ordinary horizontal Leap before
+    # applying prone. The chosen path is one square, so it ends after 5 feet.
+    assert monk.position == Position(2, 1) and monk.prone
 
 
 def test_terminal_plays_monk_quick_jump() -> None:

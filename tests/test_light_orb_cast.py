@@ -77,7 +77,7 @@ def test_light_point_cast_save_load_preserves_orb_record(
     path = tmp_path / "light.json"
     game.save(path)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["save_version"] == 17
+    assert payload["save_version"] == 18
     assert payload["state"]["light_orbs"] == [
         ["light:angelic_sorcerer:1", "angelic_sorcerer", 1, "amber", [0, 2], None, 0]
     ]

@@ -32,6 +32,7 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
         "angelic_halo",
         "courageous_anthem",
         "lingering_composition",
+        "counter_performance",
         "force_bolt",
             "tempest_surge",
             "life_link",
@@ -82,6 +83,11 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
     assert SPELLS["lingering_composition"].action_costs == (0,)
     assert SPELLS["lingering_composition"].traits == frozenset(
         {"bard", "concentrate", "focus", "spellshape"}
+    )
+    assert SPELLS["counter_performance"].action_costs == (0,)
+    assert SPELLS["counter_performance"].range_ft == 60
+    assert SPELLS["counter_performance"].traits == frozenset(
+        {"auditory", "bard", "composition", "concentrate", "focus", "fortune", "mental"}
     )
     assert SPELLS["shield"].action_costs == (1,)
     assert SPELLS["shield"].range_ft is None

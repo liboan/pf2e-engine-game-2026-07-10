@@ -1236,6 +1236,25 @@ def _start_skill_action_check(
             attack_traits=frozenset({"melee"}),
             actor_end_counts=context.state.actor_end_counts,
         ))
+    if isinstance(command, (Trip, Grapple, Escape)):
+        # Tumble Behind is separate from Feint and never alters a skill
+        # action's save DC.  Trip, Grapple, and Escape carry the attack trait,
+        # so each is the source's next attack and ends any live exposure
+        # before a later Strike can claim it. Escape has no target creature;
+        # its stable impediment ID is only a non-empty hook token because the
+        # Tumble Behind helper deliberately consumes attacker-wide.
+        tumble_store = getattr(context.state, "tumble_behind_exposures", None)
+        if tumble_store is not None:
+            from .movement_progression import consume_tumble_behind_on_attack
+
+            context.state.tumble_behind_exposures = list(
+                consume_tumble_behind_on_attack(
+                    tuple(tumble_store),
+                    attacker_id=context.actor.actor_id,
+                    target_id=(command.target_id if not isinstance(command, Escape) else command.impediment_id),
+                    actor_end_counts=context.state.actor_end_counts,
+                )
+            )
     if isinstance(command, TumbleThrough):
         # Tumble's check occurs on entering the enemy square.  Move through
         # any clear lead-in squares first, including their ordinary departure
@@ -1247,6 +1266,7 @@ def _start_skill_action_check(
             actor_id=context.actor.actor_id,
             target_id=target.actor_id,
             path=command.path[:target_index],
+            tumble_origin=context.actor.position,
             movement_kind="tumble_through",
             mode="tumble_through",
             stage="tumble_through_lead_in",
@@ -1365,15 +1385,20 @@ def _finish_quick_jump(
     if check is None:
         return FamilyProcedureResult(rejection="Quick Jump requires a resolved Athletics check.")
     path = _quick_jump_path(context, command)
-    distance_by_degree = {
-        DegreeOfSuccess.CRITICAL_SUCCESS: 30,
-        DegreeOfSuccess.SUCCESS: 15,
-        DegreeOfSuccess.FAILURE: 5,
-        DegreeOfSuccess.CRITICAL_FAILURE: 0,
-    }
-    maximum = min(
-        distance_by_degree[check.degree], effective_speed_ft(context.actor, context.definition, _conditions_for_target(context, context.actor))
+    speed = effective_speed_ft(
+        context.actor, context.definition, _conditions_for_target(context, context.actor)
     )
+    # Quick Jump changes only Long Jump's action cost and run-up requirement.
+    # It retains Long Jump's check-result distance and failed-check horizontal
+    # Leap, rather than using an invented degree-to-distance table.
+    # A normal horizontal Leap is 10 feet at Speed 15--25 and 15 feet at
+    # Speed 30 or greater.  Vertical Long/High Jump terrain remains outside
+    # this deliberately horizontal movement slice.
+    normal_leap = 15 if speed >= 30 else 10
+    if check.degree >= DegreeOfSuccess.SUCCESS:
+        maximum = min((check.total // 5) * 5, speed)
+    else:
+        maximum = normal_leap
     events = [Event(
         "quick_jump_check",
         context.actor.actor_id,
@@ -1382,21 +1407,25 @@ def _finish_quick_jump(
         f"({check.total} vs DC {check.dc}); up to {maximum} feet.",
         check=check,
     )]
-    if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
-        context.actor.prone = True
-        events.append(Event(
-            "condition_applied", context.actor.actor_id, context.actor.actor_id,
-            f"{context.actor.label} falls prone after the failed Quick Jump.", check=check,
-        ))
-        return _complete_action_unless_paused(context, events)
     jumped_path = path[: maximum // 5]
     if not jumped_path:
+        if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
+            context.actor.prone = True
+            events.append(Event(
+                "condition_applied", context.actor.actor_id, context.actor.actor_id,
+                f"{context.actor.label} falls prone after the failed Quick Jump.", check=check,
+            ))
         return _complete_action_unless_paused(context, events)
     continuation = ActionContinuation(
         kind="movement",
         actor_id=context.actor.actor_id,
         path=jumped_path,
-        movement_kind="quick_jump",
+        quick_jump_saved_check=check_context,
+        movement_kind=(
+            "quick_jump_critical_failure"
+            if check.degree is DegreeOfSuccess.CRITICAL_FAILURE
+            else "quick_jump"
+        ),
         seen_reactors=[],
     )
     events.append(Event(
@@ -1472,6 +1501,31 @@ def _finish_tumble_through(
     if panache_event is not None:
         events.append(panache_event)
     if success:
+        # This is deliberately not a Feint exposure.  The selected level-2
+        # Braggart feat keys its target-relative, next-attack benefit to a
+        # successful Tumble Through and permits the admitted thrown attack.
+        if "Tumble Behind" in context.definition.feats:
+            from .movement_progression import grant_tumble_behind_exposure
+
+            store = getattr(context.state, "tumble_behind_exposures", None)
+            if store is None:
+                return FamilyProcedureResult(
+                    unsupported="Encounter state does not yet persist typed Tumble Behind exposures."
+                )
+            updated = grant_tumble_behind_exposure(
+                tuple(store),
+                source_actor_id=context.actor.actor_id,
+                target_actor_id=target.actor_id,
+                current_source_end_count=context.state.actor_end_counts.get(context.actor.actor_id, 0),
+            )
+            store[:] = updated
+            events.append(Event(
+                "tumble_behind_exposure",
+                context.actor.actor_id,
+                target.actor_id,
+                f"{target.label} is off-guard to {context.actor.label}'s next attack before the end of this turn.",
+                check=check,
+            ))
         continuation = ActionContinuation(
             kind="movement",
             actor_id=context.actor.actor_id,

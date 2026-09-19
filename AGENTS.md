@@ -16,7 +16,7 @@
 - Recipient progression is deferred: the current common save handling covers the major risk, while remaining eligibility, completion, and rider behavior differs and a generic iterator would mostly relocate branches. Revisit it only when a new actual adopter or demonstrated drift supplies evidence. Paired-policy and turn-walk work remain optional; poison, minion, and universal rules frameworks are outside scope, as are unrelated content expansion and wholesale rewrites.
 - Explicitly granted and clearly labeled above-level fundamental-rune test equipment is permitted. It does not raise character level or make the equipment an ordinary starting purchase.
 - Ranger acceptance is combat-only: exploration, foraging, Seek, and Track grants remain recorded sheet facts and do not gate the selected combat build's admission.
-- Keep the remaining stable-unconscious-at-zero positive-damage boundary explicit until separately ruled on. The active scope and recovery state are in [the class and content expansion plan](docs/plan/06-class-and-content-expansion.md) and [ACTIVE](docs/work-log/ACTIVE.md).
+- Keep the remaining stable-unconscious-at-zero positive-damage boundary explicit until separately ruled on. The user approved the documented Counter Performance natural-die and fortune/Hero conventions and horizontal-only Monk admission; vertical terrain and High Jump remain unsupported until the engine has verticality. The active scope and recovery state are in [the class and content expansion plan](docs/plan/06-class-and-content-expansion.md) and [ACTIVE](docs/work-log/ACTIVE.md).
 
 ## Model choice
 

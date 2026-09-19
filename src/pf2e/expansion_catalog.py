@@ -54,12 +54,13 @@ FIRST_FAMILIES_UNDEAD_STARTER = EncounterSetup(
 
 EXPANSION_CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
     {
-        # Precision Ranger is admitted through the normal catalog. Its staged
-        # mixed-family fixture still resolves it through CREATURES at startup.
+        # Precision Ranger and the horizontal-only Monk are admitted through
+        # the normal catalog. Their staged mixed-family fixture still resolves
+        # either admitted definition through CREATURES at startup.
         **{
             definition_id: definition
             for definition_id, definition in RANGER_MONK_DEFINITIONS.items()
-            if definition_id != _precision_ranger_id
+            if definition_id not in {_precision_ranger_id, _monk_definition_id}
         },
         **PUBLISHED_OPPONENT_DEFINITIONS,
     }
