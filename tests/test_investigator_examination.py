@@ -15,7 +15,7 @@ import pytest
 
 import pf2e.content as content
 from pf2e.encounter import Encounter
-from pf2e.investigator import DeviseStratagem, RecallKnowledge
+from pf2e.investigator import ATTACK_STRATAGEM, DeviseStratagem, RecallKnowledge
 from pf2e.investigator_content import (
     FORENSIC_INJURY_CAUSE_KNOWLEDGE,
     FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
@@ -311,7 +311,7 @@ def test_healthy_fight_then_examination_and_saved_next_scene_have_legitimate_res
     )
     _settle_initiative(game)
     assert all(actor.hp == actor.max_hp for actor in game.inspect().actors)
-    assert game.execute(DeviseStratagem("investigator_guard_dog_a")).status is ResultStatus.COMPLETED
+    assert game.execute(DeviseStratagem("investigator_guard_dog_a", mode=ATTACK_STRATAGEM)).status is ResultStatus.COMPLETED
     other = game.execute(Strike("investigator_guard_dog_b", attack_id="shortsword"))
     assert other.status is ResultStatus.PAUSED
     _choose(game, "keep")
@@ -321,7 +321,7 @@ def test_healthy_fight_then_examination_and_saved_next_scene_have_legitimate_res
     assert selected.status is ResultStatus.COMPLETED
     assert game.execute(Strike("forensic_investigator", attack_id="jaws")).status is ResultStatus.COMPLETED
     assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
-    assert game.execute(DeviseStratagem("investigator_guard_dog_b")).status is ResultStatus.COMPLETED
+    assert game.execute(DeviseStratagem("investigator_guard_dog_b", mode=ATTACK_STRATAGEM)).status is ResultStatus.COMPLETED
     victory = game.execute(
         Strike("investigator_guard_dog_b", attack_id="shortsword", use_intelligence=True)
     )

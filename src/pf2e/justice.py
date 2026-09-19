@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .health import healing as pc_healing
+from .content import get_definition
 from .model import (
     ActionContinuation,
     ActiveSpellEffect,
@@ -72,13 +73,14 @@ def _resolve_lay(context: FamilyProcedureContext, continuation: ActionContinuati
     if target.team != context.actor.team or grid_distance_feet(context.actor.position, target.position) > 5:
         raise ValueError("Lay on Hands' target is no longer within touch range.")
 
-    amount = 6
-    if target.health_mode.value == "pc":
+    amount = 0 if target.oracle_life_mode == "death" else 6
+    if amount and "life_oracle" in get_definition(target.definition_id).abilities:
+        from .oracle import healing_after_curse
+        amount = healing_after_curse(amount, target.oracle_cursebound)
+    if amount and target.health_mode.value == "pc":
         transition = pc_healing(encounter._health_state(target), amount)
         encounter._apply_health_transition(state, target, transition)
-    else:
-        from .content import get_definition
-
+    elif amount:
         target.hp = min(get_definition(target.definition_id).hp, target.hp + amount)
         if target.hp > 0:
             target.unconscious = False
@@ -87,7 +89,7 @@ def _resolve_lay(context: FamilyProcedureContext, continuation: ActionContinuati
         "lay_on_hands",
         context.actor.actor_id,
         target.actor_id,
-        f"{context.actor.label} uses Lay on Hands; {target.label} heals 6 HP and is now at {target.hp} HP.",
+        f"{context.actor.label} uses Lay on Hands; {target.label} heals {amount} HP and is now at {target.hp} HP.",
     )]
     if target.actor_id != context.actor.actor_id:
         effect_id = f"lay_on_hands:{context.actor.actor_id}:{target.actor_id}:{state.next_choice_id}"

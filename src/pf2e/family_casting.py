@@ -31,7 +31,7 @@ from .model import (
     PreparedSlotState,
     Position,
 )
-from .spells import SPELLS, spell_traits
+from .spells import SPELLS, spell_traits, telekinetic_projectile_object_profile
 from .space import grid_distance_feet, in_bounds
 
 
@@ -45,6 +45,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     """
     if not isinstance(command, Cast):
         return FamilyProcedureResult(unsupported="The casting procedure requires a Cast command.")
+    if type(command.use_arcane_bond) is not bool:
+        return FamilyProcedureResult(rejection="use_arcane_bond must be true or false.")
     if context.state.pending_choice is not None:
         return FamilyProcedureResult(rejection="A pending choice must be resolved before another action.")
 
@@ -54,8 +56,37 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     runic_weapon = spell.spell_id == "runic_weapon"
     light = spell.spell_id == "light"
     sure_strike = spell.spell_id == "sure_strike"
+    courageous_anthem = spell.spell_id == "courageous_anthem"
+    force_barrage = spell.spell_id == "force_barrage"
+    breathe_fire = spell.spell_id == "breathe_fire"
+    electric_arc = spell.spell_id == "electric_arc"
+    gale_blast = spell.spell_id == "gale_blast"
+    telekinetic_projectile = spell.spell_id == "telekinetic_projectile"
+    shield = spell.spell_id == "shield"
+    vitality_lash = spell.spell_id == "vitality_lash"
+    life_link = spell.spell_id == "life_link"
+    command_spell = spell.spell_id == "command"
+    forbidding_ward = spell.spell_id == "forbidding_ward"
+    detect_magic = spell.spell_id == "detect_magic"
+    sigil = spell.spell_id == "sigil"
+    if spell.spell_id == "ignition":
+        if command.spell_mode not in {"ranged", "melee"}:
+            return FamilyProcedureResult(rejection="Ignition requires an explicit ranged or melee spell-attack form.")
+    elif spell.spell_id == "gouging_claw":
+        if command.spell_mode not in {"piercing", "slashing"}:
+            return FamilyProcedureResult(rejection="Gouging Claw requires an explicit piercing or slashing damage choice.")
+    elif command_spell:
+        if command.spell_mode not in {"approach", "flee", "release", "prone", "stand"}:
+            return FamilyProcedureResult(rejection="Command requires approach, flee, release, prone, or stand as its selected command.")
+    elif sigil:
+        if command.spell_mode not in {"visible", "invisible", None}:
+            return FamilyProcedureResult(rejection="Sigil may be placed visible or invisible.")
+    elif command.spell_mode is not None:
+        return FamilyProcedureResult(rejection=f"{spell.name} has no selectable spell mode.")
     if spell.unavailable_reason:
         return FamilyProcedureResult(rejection=spell.unavailable_reason)
+    if life_link and context.encounter._active_life_link(context.state, context.actor) is not None:
+        return FamilyProcedureResult(rejection="Life Link already has one active linked creature.")
     if sure_strike and context.state.sure_strike_immunity_deadlines.get(
         context.actor.actor_id, 0
     ) > context.state.world_time_seconds:
@@ -84,6 +115,29 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             )
         )
 
+    if command.use_arcane_bond:
+        start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+        if (
+            context.actor.arcane_bond_used_day != context.state.preparation_day
+            or context.actor.arcane_bond_recast_until_start != start
+            or command.slot_id is None
+            or command.slot_id not in context.actor.arcane_bond_eligible_slots
+        ):
+            return FamilyProcedureResult(
+                rejection="Arcane Bond has no matching current-turn prepared-spell recast permission."
+            )
+        bonded_slot = next(
+            (slot for slot in context.actor.prepared_slots if slot.slot_id == command.slot_id), None
+        )
+        if bonded_slot is None or not bonded_slot.spent or bonded_slot.spell_id != spell.spell_id:
+            return FamilyProcedureResult(
+                rejection="Arcane Bond can recast only its completed prepared spell without spending that slot."
+            )
+        # Expose this one already-spent slot only to the normal prepared-cast
+        # validator. It is immediately spent again on commitment, so Arcane
+        # Bond never refills a slot as a durable resource.
+        bonded_slot.spent = False
+
     supported_action_costs = spell.action_costs
     if command.actions is None:
         if len(supported_action_costs) != 1:
@@ -97,6 +151,91 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         return FamilyProcedureResult(rejection=f"{actions!r} is not a supported action mode for {spell.name}.")
     if actions > context.actor.actions_remaining:
         return FamilyProcedureResult(rejection=f"{spell.name} requires {actions} actions.")
+
+    if sigil:
+        if command.target_ids is not None or (command.target_id is None) == (command.item_id is None):
+            return FamilyProcedureResult(rejection="Sigil requires exactly one touched creature or physical item.")
+        if command.target_id is not None:
+            target = context.state.creatures.get(command.target_id)
+            if target is None or target.dead or grid_distance_feet(context.actor.position, target.position) > 5:
+                return FamilyProcedureResult(rejection="Sigil requires one living creature within touch range.")
+        else:
+            item_id = command.item_id
+            position = context.encounter._item_position(context.state, item_id or "")
+            if item_id not in context.state.item_instances or position is None or grid_distance_feet(context.actor.position, position) > 5:
+                return FamilyProcedureResult(rejection="Sigil requires one physical item within touch range.")
+    if detect_magic:
+        if command.target_id is not None or command.target_ids is not None or command.item_id is not None:
+            return FamilyProcedureResult(rejection="Detect Magic is a 30-foot emanation and takes no target selection.")
+        if command.include_self is not None:
+            return FamilyProcedureResult(rejection="Detect Magic asks whether to ignore already-known magic after the cast is committed.")
+    if forbidding_ward:
+        if command.target_id is not None or command.include_self is not None:
+            return FamilyProcedureResult(
+                rejection="Forbidding Ward uses target_ids for one ally and one enemy."
+            )
+        if (
+            not isinstance(command.target_ids, tuple)
+            or len(command.target_ids) != 2
+            or any(not isinstance(target_id, str) or not target_id for target_id in command.target_ids)
+            or command.target_ids[0] == command.target_ids[1]
+        ):
+            return FamilyProcedureResult(
+                rejection="Forbidding Ward requires target_ids=(ally_id, enemy_id)."
+            )
+        ally = context.state.creatures.get(command.target_ids[0])
+        enemy = context.state.creatures.get(command.target_ids[1])
+        if (
+            ally is None or enemy is None
+            or ally.actor_id == context.actor.actor_id
+            or ally.dead or enemy.dead
+            or ally.team != context.actor.team or enemy.team == context.actor.team
+            or grid_distance_feet(context.actor.position, ally.position) > 30
+            or grid_distance_feet(context.actor.position, enemy.position) > 30
+        ):
+            return FamilyProcedureResult(
+                rejection="Forbidding Ward requires one non-self ally and one opposing enemy within 30 feet."
+            )
+    if force_barrage:
+        if command.target_id is not None or command.include_self is not None:
+            return FamilyProcedureResult(
+                rejection="Force Barrage uses target_ids to allocate each shard."
+            )
+        if (
+            not isinstance(command.target_ids, tuple)
+            or len(command.target_ids) != actions
+            or any(not isinstance(target_id, str) or not target_id for target_id in command.target_ids)
+        ):
+            return FamilyProcedureResult(
+                rejection=f"Force Barrage requires exactly {actions} target_ids, one per shard."
+            )
+        candidates = context.encounter._spell_targets_for_cast(
+            context.state, context.actor, spell.spell_id, actions
+        )
+        if any(target_id not in candidates for target_id in command.target_ids):
+            return FamilyProcedureResult(
+                rejection="Every Force Barrage shard target must be an eligible creature within 120 feet."
+            )
+    if breathe_fire:
+        direction = command.area_direction
+        if command.target_id is not None or command.target_ids is not None or command.include_self is not None:
+            return FamilyProcedureResult(
+                rejection="Breathe Fire uses only its explicit cone direction."
+            )
+        if (
+            not isinstance(direction, Position)
+            or (direction.x, direction.y) == (0, 0)
+            or direction.x not in {-1, 0, 1}
+            or direction.y not in {-1, 0, 1}
+        ):
+            return FamilyProcedureResult(
+                rejection="Breathe Fire requires one adjacent direction vector for its 15-foot cone."
+            )
+    if gale_blast:
+        if command.target_id is not None or command.target_ids is not None:
+            return FamilyProcedureResult(rejection="Gale Blast emanates from its caster and takes no creature target.")
+        if command.include_self is not None and type(command.include_self) is not bool:
+            return FamilyProcedureResult(rejection="include_self must be true or false for Gale Blast.")
 
     traits = spell_traits(spell.spell_id, actions)
     context.encounter._require_action_permitted(
@@ -165,6 +304,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             )
         if command.include_self is not None and type(command.include_self) is not bool:
             return FamilyProcedureResult(rejection="include_self must be true or false for three-action Heal.")
+    elif gale_blast:
+        pass
     elif command.include_self is not None:
         return FamilyProcedureResult(rejection="include_self is only supported for three-action Heal.")
     if sure_strike and (
@@ -175,6 +316,21 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     ):
         return FamilyProcedureResult(
             rejection="Sure Strike targets the caster and takes no target or point selection."
+        )
+    if shield and any(
+        value is not None
+        for value in (
+            command.target_id, command.target_ids, command.include_self, command.item_id,
+            command.point, command.color, command.attachment_actor_id, command.replacement_orb_id,
+            command.area_direction,
+        )
+    ):
+        return FamilyProcedureResult(
+            rejection="Shield affects only its caster and takes no target, item, point, or area selection."
+        )
+    if shield and context.actor.shield_recast_available_at_seconds > context.state.world_time_seconds:
+        return FamilyProcedureResult(
+            rejection="Shield cannot be cast again until its ten-minute post-Block cooldown expires."
         )
     if spell.spell_id == "angelic_halo" and command.target_id is not None:
         return FamilyProcedureResult(rejection="Angelic Halo creates an emanation and does not take a target.")
@@ -321,7 +477,31 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             unsupported=f"Rank {selected_rank} resolution for {spell.name} is not admitted by the current spell procedure."
         )
 
-    if not runic_weapon and not light and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
+    if electric_arc:
+        candidates = context.encounter._spell_targets_for_cast(context.state, context.actor, spell.spell_id, actions)
+        if not isinstance(command.target_ids, tuple) or not 1 <= len(command.target_ids) <= 2 or len(set(command.target_ids)) != len(command.target_ids) or any(target_id not in candidates for target_id in command.target_ids):
+            return FamilyProcedureResult(rejection="Electric Arc requires one or two distinct legal targets.")
+    if telekinetic_projectile:
+        item_id = command.item_id
+        item_positions = [
+            position for position, ground_items in (context.state.ground_items or {}).items()
+            if isinstance(item_id, str) and item_id in ground_items
+        ]
+        item = context.state.item_instances.get(item_id) if isinstance(item_id, str) else None
+        profile = (
+            telekinetic_projectile_object_profile(item.definition_id)
+            if item is not None else None
+        )
+        if (
+            command.target_id is None
+            or not isinstance(item_id, str)
+            or len(item_positions) != 1
+            or profile is None
+            or profile[0] > 1
+            or grid_distance_feet(context.actor.position, item_positions[0]) > 30
+        ):
+            return FamilyProcedureResult(rejection="Telekinetic Projectile requires a supported loose unattended object of at most 1 Bulk within 30 feet.")
+    if not electric_arc and not gale_blast and not shield and not breathe_fire and not force_barrage and not forbidding_ward and not detect_magic and not sigil and not runic_weapon and not light and not courageous_anthem and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
         if (
             command.target_id is not None
             and spell.spell_id in {"divine_lance", "void_warp"}
@@ -339,6 +519,13 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             )
         if command.target_id is None and not candidates:
             return FamilyProcedureResult(rejection=f"There are no eligible targets for {spell.name}.")
+        if (
+            spell.spell_id == "ignition" and command.spell_mode == "melee"
+            and command.target_id is not None
+            and command.target_id in candidates
+            and grid_distance_feet(context.actor.position, context.state.creatures[command.target_id].position) > 5
+        ):
+            return FamilyProcedureResult(rejection="Ignition's melee form requires a target within reach.")
 
     # Only now commit the action and the exact helper-reported resource spend.
     # The encounter transaction discards both together on rejection.
@@ -382,6 +569,9 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
                 slots_by_id[spend.resource_id].spent = True
 
     context.actor.actions_remaining -= actions
+    if command.use_arcane_bond:
+        context.actor.arcane_bond_recast_until_start = 0
+        context.actor.arcane_bond_eligible_slots.discard(permission.selection.resource_id or "")
     if "attack" in spell.traits:
         context.state.taking_cover.discard(context.actor.actor_id)
     attack_count = 0
@@ -393,11 +583,11 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     continuation = ActionContinuation(
         kind="cast",
         actor_id=context.actor.actor_id,
-        target_id=command.target_id,
+        target_id=command.target_ids[0] if forbidding_ward else command.target_id,
         attack_penalty=attack_penalty,
         attack_count=attack_count,
         spell_id=spell.spell_id,
-        spell_target_id=command.target_id,
+        spell_target_id=command.target_ids[0] if forbidding_ward else command.target_id,
         slot_id=slot_id,
         spell_actions=actions,
         include_self=command.include_self,
@@ -405,19 +595,28 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         sorcerous_potency=1 if source_kind == "spontaneous" and spell.spell_id == "heal" else 0,
         movement_kind="manipulate" if "manipulate" in traits else None,
         must_disrupt_on_critical="manipulate" in traits,
-        spell_target_item_id=command.item_id if runic_weapon else None,
+        spell_target_item_id=command.item_id if runic_weapon or telekinetic_projectile or sigil else None,
         spell_target_wielder_id=(target_facts[1] if target_facts is not None else None),
         light_point=command.point if light else None,
         light_color=(command.color.strip() if isinstance(command.color, str) else "white") if light else None,
         light_attachment_actor_id=command.attachment_actor_id if light else None,
         light_replacement_orb_id=command.replacement_orb_id if light else None,
+        target_ids=(
+            command.target_ids if force_barrage else
+            command.target_ids if electric_arc else
+            command.target_ids[1:] if forbidding_ward else
+            context.encounter._breathe_fire_targets(context.state, context.actor, command.area_direction)
+            if breathe_fire else ()
+        ),
+        spell_area_direction=command.area_direction if breathe_fire else None,
+        spell_mode=command.spell_mode,
     )
     events = [Event(
         "cast_started",
         context.actor.actor_id,
-        command.target_id,
+        command.target_ids[0] if forbidding_ward else command.target_id,
         f"{context.actor.label} commits {spell.name} ({actions} action(s))"
-        + (f" on {command.item_id}." if runic_weapon else "."),
+        + (f" on {command.item_id}." if runic_weapon or (sigil and command.item_id is not None) else "."),
     )]
     if runic_weapon and continuation.spell_target_wielder_id not in (None, context.actor.actor_id):
         events.extend(context.encounter._offer_runic_weapon_willingness(
@@ -438,6 +637,16 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             context.state, context.actor, continuation,
         ))
         return FamilyProcedureResult(tuple(events))
+    if (
+        spell.spell_id == "stoke_the_heart"
+        and context.actor.witch_hex_cast_start
+        != context.state.actor_start_counts.get(context.actor.actor_id, 0)
+    ):
+        events.extend(context.encounter._offer_restored_spirit_timing(
+            context.state, context.actor, continuation,
+        ))
+        if context.state.pending_choice is not None:
+            return FamilyProcedureResult(tuple(events))
     if continuation.movement_kind == "manipulate":
         events.extend(context.encounter._advance_continuation(context.state, context.dice, continuation))
     else:
@@ -448,6 +657,12 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
 def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
     """Casting choices remain on the legacy core route in this migration."""
     return FamilyProcedureResult(unsupported="The casting procedure does not own this family choice.")
+
+
+def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
+    """Dispatch the narrow Wizard Arcane Bond free action."""
+    from . import wizard
+    return wizard.handle_action(context)
 
 
 def validate_pending(context: FamilyProcedureContext) -> None:
@@ -473,13 +688,30 @@ def _prepared_casting_snapshots(
         (slot.slot_id, slot.source, slot.spell_id, slot.rank, slot.cantrip)
         for slot in context.actor.prepared_slots
     )
-    if actual != expected:
+    from .preparation import has_variable_preparations, prepared_slot_rejection
+
+    variable_preparations = has_variable_preparations(definition)
+    if not variable_preparations and actual != expected:
         return FamilyProcedureResult(
             rejection="The prepared spell slots no longer match this creature's reviewed definition."
         )
+    if variable_preparations:
+        expected_shape = tuple((slot_id, source, rank, cantrip) for slot_id, source, _spell_id, rank, cantrip in expected)
+        actual_shape = tuple((slot_id, source, rank, cantrip) for slot_id, source, _spell_id, rank, cantrip in actual)
+        if (
+            actual_shape != expected_shape
+            or any(
+                prepared_slot_rejection(context.actor, definition, slot, slot.spell_id) is not None
+                for slot in context.actor.prepared_slots
+            )
+        ):
+            return FamilyProcedureResult(
+                rejection="The prepared slots no longer match this caster's finite preparation policy."
+            )
 
     grouped: dict[tuple[str, bool], list[PreparedSpellDefinition]] = {}
-    for slot in definition.prepared_spells:
+    source_slots = context.actor.prepared_slots if variable_preparations else definition.prepared_spells
+    for slot in source_slots:
         grouped.setdefault((slot.source, slot.cantrip), []).append(slot)
 
     sources: list[CastingSource] = []

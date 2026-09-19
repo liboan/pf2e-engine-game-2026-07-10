@@ -20,7 +20,12 @@ from pf2e.investigator import (
     stratagem_for_attack,
     stratagem_to_data,
 )
-from pf2e.investigator_content import FORENSIC_INVESTIGATOR
+from pf2e.investigator_content import (
+    FORENSIC_INVESTIGATOR,
+    FORENSIC_INVESTIGATOR_HEALING_SETUP,
+    FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
+)
+import pf2e.terminal as terminal
 from pf2e import family_martial
 from pf2e.model import (
     AttackDefinition,
@@ -135,26 +140,37 @@ def test_devise_stores_preliminary_d20_and_commits_one_action() -> None:
     assert "preliminary d20 is 14" in result.events[0].text
 
 
-def test_investigator_slice_is_staged_but_directly_retrievable() -> None:
-    setup_id = "investigator_forensic_vs_two_guard_dogs"
+def test_investigator_slice_is_catalogued_with_its_stable_ids(monkeypatch) -> None:
+    setup_id = FORENSIC_INVESTIGATOR_VS_TWO_DOGS.setup_id
     definition_id = FORENSIC_INVESTIGATOR.definition_id
 
-    assert setup_id not in SETUPS
-    assert definition_id not in CREATURES
+    assert setup_id in SETUPS
+    assert FORENSIC_INVESTIGATOR_HEALING_SETUP.setup_id in SETUPS
+    assert definition_id in CREATURES
     assert get_setup(setup_id).setup_id == setup_id
     assert get_definition(definition_id) == FORENSIC_INVESTIGATOR
+    seen = {}
+
+    def capture_run(*, setup, seed, save_path):
+        seen.update(setup=setup, seed=seed, save_path=save_path)
+        return 0
+
+    monkeypatch.setattr(terminal, "run_terminal", capture_run)
+    assert terminal.main(["play", setup_id, "--seed", "27", "--save-path", "investigator.json"]) == 0
+    assert seen == {"setup": FORENSIC_INVESTIGATOR_VS_TWO_DOGS, "seed": 27, "save_path": "investigator.json"}
 
 
-def test_devise_rejects_unsupported_skill_and_free_modes_without_spending_die_or_action() -> None:
+def test_devise_accepts_skill_and_rejects_unaware_free_mode_without_spending_again() -> None:
     skill_context, skill_actor, _state = _context(mode=SKILL_STRATAGEM)
     skill_result = handle_action(skill_context)
-    assert skill_result is not None and skill_result.unsupported is not None
-    assert skill_actor.actions_remaining == 3
-    assert skill_actor.investigator_stratagem is None
+    assert skill_result is not None and skill_result.rejection is None and skill_result.unsupported is None
+    assert skill_actor.actions_remaining == 2
+    assert skill_actor.investigator_stratagem is not None
+    assert skill_actor.investigator_stratagem.mode == SKILL_STRATAGEM
 
     free_context, free_actor, _state = _context(free_action=True)
     free_result = handle_action(free_context)
-    assert free_result is not None and free_result.unsupported is not None
+    assert free_result is not None and free_result.rejection is not None
     assert free_actor.actions_remaining == 3
 
     known_context, known_actor, _state = _context(known_weaknesses=True)
@@ -255,7 +271,7 @@ def _public_investigator() -> Encounter:
 
 def test_public_devise_then_eligible_strike_uses_saved_roll_and_precision() -> None:
     game = _public_investigator()
-    devise = game.execute(DeviseStratagem(target_id="investigator_guard_dog_a"))
+    devise = game.execute(DeviseStratagem(target_id="investigator_guard_dog_a", mode=ATTACK_STRATAGEM))
     assert devise.status is ResultStatus.COMPLETED
     assert game._state.creatures["forensic_investigator"].actions_remaining == 2
     strike = game.execute(
@@ -280,7 +296,7 @@ def test_public_devise_then_eligible_strike_uses_saved_roll_and_precision() -> N
 
 def test_public_save_load_preserves_unconsumed_stratagem_before_strike(tmp_path) -> None:
     game = _public_investigator()
-    assert game.execute(DeviseStratagem(target_id="investigator_guard_dog_a")).status is ResultStatus.COMPLETED
+    assert game.execute(DeviseStratagem(target_id="investigator_guard_dog_a", mode=ATTACK_STRATAGEM)).status is ResultStatus.COMPLETED
     path = tmp_path / "investigator-before-strike.json"
     game.save(path)
     loaded = Encounter.load(path)
@@ -296,7 +312,7 @@ def test_public_save_load_preserves_unconsumed_stratagem_before_strike(tmp_path)
 
 def test_unused_stratagem_clears_at_the_investigators_next_turn() -> None:
     game = _public_investigator()
-    assert game.execute(DeviseStratagem(target_id="investigator_guard_dog_a")).status is ResultStatus.COMPLETED
+    assert game.execute(DeviseStratagem(target_id="investigator_guard_dog_a", mode=ATTACK_STRATAGEM)).status is ResultStatus.COMPLETED
     actor = game._state.creatures["forensic_investigator"]
     assert actor.investigator_stratagem is not None and not actor.investigator_stratagem.consumed
 
@@ -312,10 +328,9 @@ def test_public_invalid_investigator_intent_is_atomic_and_unsupported_modes_reje
     skill = game.execute(
         DeviseStratagem(target_id="investigator_guard_dog_a", mode=SKILL_STRATAGEM)
     )
-    assert skill.status is ResultStatus.UNSUPPORTED
-    assert game._state.creatures["forensic_investigator"].actions_remaining == 3
-    assert game._state.creatures["forensic_investigator"].investigator_stratagem is None
-    assert game.execute(DeviseStratagem(target_id="investigator_guard_dog_a")).status is ResultStatus.COMPLETED
+    assert skill.status is ResultStatus.COMPLETED
+    assert game._state.creatures["forensic_investigator"].actions_remaining == 2
+    assert game._state.creatures["forensic_investigator"].investigator_stratagem is not None
     invalid = game.execute(
         Strike(target_id="investigator_guard_dog_b", attack_id="shortsword", use_intelligence=True)
     )
@@ -333,10 +348,11 @@ def test_terminal_public_devise_save_load_and_strike_path_is_bounded(tmp_path) -
         (
             "2", "1",       # keep the deterministic initiative result
             "5", "2",       # Devise a Stratagem, Guard Dog A
-            "13", "",       # save the unconsumed stratagem
-            "14", "",       # load it back
-            "4", "1", "2", "1", "1",  # Strike, shortsword, Dog A, intent, Intelligence
-            "16",            # quit from the bounded post-strike menu
+            "2", "1",       # resolve the stored-die mode choice: Attack Stratagem
+            "14", "",       # save the unconsumed stratagem
+            "15", "",       # load it back
+            "4", "1", "1", "1", "1",  # Strike, shortsword, Dog A, intent, Intelligence
+            "17",            # quit from the bounded post-strike menu
         )
     )
     output = BoundedTranscript(max_lines=500, max_chars=100_000)
@@ -350,7 +366,7 @@ def test_terminal_public_devise_save_load_and_strike_path_is_bounded(tmp_path) -
     )
     transcript = "\n".join(output)
     assert status == 0
-    assert bounded_input.calls == 14
+    assert bounded_input.calls == 16
     assert "Devise a Stratagem" in transcript
     assert "preliminary d20 is 14" in transcript
     assert "Loaded encounter" in transcript

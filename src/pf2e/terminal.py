@@ -44,10 +44,16 @@ _ACTION_LABELS = {
     "stride": "Stride",
     "step": "Step",
     "strike": "Strike",
+    "quick_bomber": "Quick Bomber",
+    "quick_alchemy": "Quick Alchemy",
+    "activate_alchemy": "Activate Alchemy Item",
     "confident_finisher": "Confident Finisher",
     "devise_stratagem": "Devise a Stratagem",
     "known_weaknesses": "Known Weaknesses + Devise",
     "vicious_swing": "Vicious Swing",
+    "flurry_of_blows": "Flurry of Blows",
+    "hunt_prey": "Hunt Prey",
+    "hunted_shot": "Hunted Shot",
     "interact": "Interact",
     "release": "Release",
     "stand": "Stand",
@@ -60,24 +66,36 @@ _ACTION_LABELS = {
     "resume_aura": "Resume Aura",
     "trip": "Trip",
     "trip_assurance": "Trip (Assurance)",
+    "quick_jump": "Quick Jump",
     "grapple": "Grapple",
     "grapple_assurance": "Grapple (Assurance)",
     "escape": "Escape",
     "escape_assurance": "Escape (Assurance)",
     "flee": "Flee",
     "demoralize": "Demoralize",
+    "tumble_through": "Tumble Through",
     "feint": "Feint",
     "recall_knowledge": "Recall Knowledge",
     "forensic_examine": "Forensic Acumen Examination",
+    "pursue_lead": "Pursue a Lead",
+    "streetwise": "Streetwise",
+    "animal_empathy": "Animal Empathy",
+    "nudge_the_scales": "Nudge the Scales",
+    "oracle_life_mode": "Choose Oracle Life/Death Mode",
     "rage": "Rage",
+    "drain_bonded_item": "Drain Bonded Item",
     "cast": "Cast",
+    "lingering_composition": "Lingering Composition",
     "sustain_light": "Sustain Light",
     "dismiss_light": "Dismiss Light",
+    "dismiss_life_link": "Dismiss Life Link",
     "end_turn": "End Turn",
     "refocus": "Refocus (10 minutes)",
     "next_encounter": "Next Encounter",
     "record_rested": "Record Rested Eligibility",
     "daily_prepare": "Daily Preparation",
+    "spell_substitution": "Spell Substitution (10 minutes)",
+    "interrupt_spell_substitution": "Interrupt Spell Substitution",
 }
 
 PROTOTYPE_NOTICE = (
@@ -93,10 +111,10 @@ FIXED_ENCOUNTER_NOTICE = (
     "and PF2e options are outside scope. A team loses when it has no conscious, living "
     "combat-capable actor."
 )
-SWASHBUCKLER_STAGED_NOTICE = (
-    "Staged Braggart Swashbuckler slice: this local encounter exposes Braggart "
-    "Demoralize, Panache, ordinary dagger Precise Strike, and melee Confident "
-    "Finisher. Flying Blade thrown attacks and Tumble Through remain unsupported."
+SWASHBUCKLER_ADMITTED_SCOPE_NOTICE = (
+    "Curated Braggart Swashbuckler setup: this local encounter exposes Braggart "
+    "Demoralize, Panache, dagger Precise Strike, Confident Finisher, Tumble "
+    "Through, and Flying Blade thrown dagger attacks in the first 10-foot range increment."
 )
 S2_SCOPE_NOTICE = (
     "S2 roster fixture: level-1 Fighter M sheets and Guard Dog source statistics are admitted. "
@@ -149,7 +167,16 @@ INVESTIGATOR_ADMITTED_SCOPE_NOTICE = (
     "save/load. Normal Recall Knowledge and Known Weaknesses use the authored "
     "question/answer packet in these scenes. The authored Forensic Acumen body "
     "examination and immediate relevant follow-up are also supported outside combat. "
-    "Skill Stratagem and lead-aware free use remain explicitly outside this slice."
+    "The authored Pursue a Lead, Clue In, lead-aware free Devise, and Skill "
+    "Stratagem paths are supported for the selected case."
+)
+LIFE_ORACLE_ADMITTED_SCOPE_NOTICE = (
+    "Curated level-1 Life Oracle setup: the selected Human Scholar sheet, "
+    "Nudge the Scales, Life Link, Vitality Lash, finite divine repertoire, "
+    "daily life/death choice, Refocus, and saved encounter choices have "
+    "bounded public support. This admits one authored Life mystery build; "
+    "other mysteries, anathema adjudication, persistent damage, and positive "
+    "damage against stabilized 0-HP PCs remain outside this scope."
 )
 
 _COORDINATE = re.compile(r"^([A-Za-z])([1-9][0-9]*)$")
@@ -217,6 +244,11 @@ def build_action_menu(
     include_next_encounter: bool = False,
     include_downtime: bool = False,
     include_examination: bool = False,
+    include_lead: bool = False,
+    include_streetwise: bool = False,
+    include_animal_empathy: bool = False,
+    include_spell_substitution: bool = False,
+    include_oracle_life_mode: bool = False,
 ) -> tuple[tuple[str, str], ...]:
     """Pair command IDs with labels; legality and availability come from engine options."""
     if preserve_s1:
@@ -250,9 +282,9 @@ def build_action_menu(
         # activity reachable and collects the actor identity.
         entries.insert(1, ("refocus", _ACTION_LABELS["refocus"]))
     if include_next_encounter:
-        # The curated Angelic carry route is the only authored scene transition
-        # exposed by this small terminal adapter. The encounter engine still
-        # owns all eligibility and atomic validation.
+        # The curated Angelic and Bomber carry routes are the authored scene
+        # transitions exposed by this small terminal adapter. The encounter
+        # engine still owns all eligibility and atomic validation.
         # Keep the existing Save/Load/Restart/Quit positions stable for
         # scripts that already drive the post-combat Refocus menu.
         entries.append(("next_encounter", _ACTION_LABELS["next_encounter"]))
@@ -266,11 +298,26 @@ def build_action_menu(
                 ("daily_prepare", _ACTION_LABELS["daily_prepare"]),
             )
         )
+    if include_oracle_life_mode:
+        entries.append(("oracle_life_mode", _ACTION_LABELS["oracle_life_mode"]))
+    if include_spell_substitution:
+        entries.extend(
+            (
+                ("spell_substitution", _ACTION_LABELS["spell_substitution"]),
+                ("interrupt_spell_substitution", _ACTION_LABELS["interrupt_spell_substitution"]),
+            )
+        )
     if include_examination:
         # Body examinations are authored outside-combat activities.  Append
         # this control after the established recovery controls so existing
         # bounded terminal scripts retain their menu positions.
         entries.append(("forensic_examine", _ACTION_LABELS["forensic_examine"]))
+    if include_lead:
+        entries.append(("pursue_lead", _ACTION_LABELS["pursue_lead"]))
+    if include_streetwise:
+        entries.append(("streetwise", _ACTION_LABELS["streetwise"]))
+    if include_animal_empathy:
+        entries.append(("animal_empathy", _ACTION_LABELS["animal_empathy"]))
     return tuple(entries)
 
 
@@ -344,8 +391,10 @@ def render_support_summary(setup_id: str = "s1_duel") -> str:
         "investigator_forensic_healing_vs_ally",
     }:
         return INVESTIGATOR_ADMITTED_SCOPE_NOTICE
+    if setup_id == "staged_life_oracle_nudge":
+        return LIFE_ORACLE_ADMITTED_SCOPE_NOTICE
     if setup_id == "staged_braggart_swashbuckler_vs_guard_dog":
-        return SWASHBUCKLER_STAGED_NOTICE
+        return SWASHBUCKLER_ADMITTED_SCOPE_NOTICE
     if setup_id == "s1_duel":
         return PROTOTYPE_NOTICE
     return FIXED_ENCOUNTER_NOTICE
@@ -852,15 +901,106 @@ def _choose_forensic_examination(
     return actor.actor_id, key
 
 
+def _choose_pursue_lead(
+    setup: object,
+    game: object,
+    inspection: object,
+    input_fn: Callable[[], str],
+    output_fn: Callable[[str], object],
+) -> tuple[str, str, str] | None:
+    """Select one authored case/clue for the public downtime activity."""
+    records = tuple(getattr(setup, "investigations", ()))
+    if not records:
+        output_fn("No authored investigations are available in this scene.")
+        return None
+    actor = next(
+        (
+            item for item in getattr(inspection, "actors", ())
+            if "investigator_on_the_case" in getattr(item, "abilities", ())
+            and getattr(getattr(item, "health_mode", None), "value", None) == "pc"
+            and not getattr(item, "unconscious", False)
+            and not getattr(item, "dead", False)
+        ),
+        None,
+    )
+    if actor is None:
+        output_fn("No conscious Investigator can pursue a lead now.")
+        return None
+    case_index = _choose_index(
+        "Investigation case number:",
+        tuple(f"{record.name} ({record.case_id})" for record in records),
+        input_fn,
+        output_fn,
+    )
+    if case_index is None:
+        return None
+    record = records[case_index]
+    clues = tuple(getattr(record, "clues", ()))
+    clue_index = _choose_index(
+        "Clue number:",
+        tuple(f"{clue.label} ({clue.clue_key})" for clue in clues),
+        input_fn,
+        output_fn,
+    )
+    if clue_index is None:
+        return None
+    return actor.actor_id, record.case_id, clues[clue_index].clue_key
+
+
+def _choose_streetwise(setup: object, inspection: object, input_fn, output_fn):
+    """Select one finite Streetwise question and one sourced method."""
+    records = tuple(getattr(setup, "streetwise", ()))
+    actor = next((item for item in getattr(inspection, "actors", ()) if (
+        "Streetwise" in getattr(item, "feats", ())
+        and getattr(getattr(item, "health_mode", None), "value", None) == "pc"
+        and not getattr(item, "unconscious", False) and not getattr(item, "dead", False)
+    )), None)
+    if actor is None or not records:
+        output_fn("No conscious Investigator with an authored Streetwise question is available.")
+        return None
+    index = _choose_index(
+        "Streetwise question number:",
+        tuple(f"{record.question} ({record.settlement_label})" for record in records), input_fn, output_fn,
+    )
+    if index is None:
+        return None
+    mode_index = _choose_index(
+        "Streetwise method:",
+        ("Recall Knowledge (Society, no time)", "Gather Information (Society, 2 hours)"),
+        input_fn, output_fn,
+    )
+    if mode_index is None:
+        return None
+    record = records[index]
+    return actor.actor_id, record.question_key, ("recall", "gather")[mode_index], record.settlement_key
+
+
+def _choose_animal_empathy(setup: object, inspection: object, input_fn, output_fn):
+    records = tuple(getattr(setup, "animal_empathy", ()))
+    actor = next((item for item in getattr(inspection, "actors", ()) if "animal_empathy" in getattr(item, "abilities", ()) and not getattr(item, "unconscious", False) and not getattr(item, "dead", False)), None)
+    if actor is None or not records:
+        output_fn("No conscious Druid with an authored Animal Empathy question is available.")
+        return None
+    index = _choose_index("Animal Empathy question number:", tuple(f"{record.question} ({record.attitude}; Will DC {record.will_dc}; Request DC {record.request_dc})" for record in records), input_fn, output_fn)
+    if index is None:
+        return None
+    action = _choose_index("Diplomacy action:", ("Make an Impression", "Request"), input_fn, output_fn)
+    if action is None:
+        return None
+    return actor.actor_id, records[index].question_key, ("make_impression", "request")[action]
+
+
 def _choose_encounter_actor(
     prompt: str,
     inspection: object,
     actor_id: str | None,
     input_fn: Callable[[], str],
     output_fn: Callable[[str], object],
+    *,
+    include_actor: bool = False,
 ) -> str | None:
     """Offer other inspected actors; the engine validates action targeting."""
-    targets = tuple(actor for actor in inspection.actors if actor.actor_id != actor_id)
+    targets = tuple(actor for actor in inspection.actors if include_actor or actor.actor_id != actor_id)
     if not targets:
         output_fn("No other encounter actors are available to select.")
         return None
@@ -931,6 +1071,39 @@ def _choose_downtime_actor_group(
     return tuple(actors[number - 1].actor_id for number in numbers)
 
 
+def _choose_daily_preparations(
+    game: "Encounter",
+    actor_ids: tuple[str, ...],
+    input_fn: Callable[[], str],
+    output_fn: Callable[[str], object],
+) -> dict[str, dict[str, str]] | None:
+    """Choose each live prepared slot from its finite authored menu."""
+    from pf2e.content import get_definition
+    from pf2e.preparation import preparation_choices
+
+    selections: dict[str, dict[str, str]] = {}
+    for actor_id in actor_ids:
+        actor = game._state.creatures[actor_id]
+        definition = get_definition(actor.definition_id)
+        selected: dict[str, str] = {}
+        for slot in actor.prepared_slots:
+            choices = preparation_choices(actor, definition, slot)
+            if choices == (slot.spell_id,):
+                selected[slot.slot_id] = slot.spell_id
+                continue
+            index = _choose_index(
+                f"Daily preparation {slot.slot_id} spell:",
+                tuple(spell.replace("_", " ").title() for spell in choices),
+                input_fn,
+                output_fn,
+            )
+            if index is None:
+                return None
+            selected[slot.slot_id] = choices[index]
+        selections[actor_id] = selected
+    return selections
+
+
 def _read_integer(
     prompt: str,
     input_fn: Callable[[], str],
@@ -985,17 +1158,22 @@ def _physical_item_choices(inspection: object) -> tuple[tuple[str, str], ...]:
     seen: set[str] = set()
     for actor in getattr(inspection, "actors", ()):
         actor_label = str(getattr(actor, "label", getattr(actor, "actor_id", "actor")))
-        for raw_item_id in getattr(actor, "held_items", ()):
-            item_id = str(raw_item_id)
-            if item_id in seen:
-                continue
-            seen.add(item_id)
-            choices.append(
-                (
-                    item_id,
-                    f"Held by {actor_label}: {_physical_item_name(item_id)} ({item_id})",
+        for location, item_ids in (
+            ("Held by", getattr(actor, "held_items", ())),
+            ("Worn by", getattr(actor, "worn_items", ())),
+            ("Carried by", getattr(actor, "stowed_items", ())),
+        ):
+            for raw_item_id in item_ids:
+                item_id = str(raw_item_id)
+                if item_id in seen:
+                    continue
+                seen.add(item_id)
+                choices.append(
+                    (
+                        item_id,
+                        f"{location} {actor_label}: {_physical_item_name(item_id)} ({item_id})",
+                    )
                 )
-            )
     for position, item_ids in getattr(inspection, "ground_items", ()):
         coordinate = format_coordinate((position.x, position.y))
         for raw_item_id in item_ids:
@@ -1032,6 +1210,61 @@ def _choose_runic_weapon_item(
         output_fn,
     )
     return choices[index][0] if index is not None else None
+
+
+def _choose_sigil_item(
+    inspection: object,
+    input_fn: Callable[[], str],
+    output_fn: Callable[[str], object],
+) -> str | None:
+    """Select a concrete object for Sigil; range remains engine-owned."""
+    choices = _physical_item_choices(inspection)
+    if not choices:
+        output_fn("No carried, worn, or ground physical items are visible for Sigil.")
+        return None
+    index = _choose_index(
+        "Sigil item number:", [label for _item_id, label in choices], input_fn, output_fn,
+    )
+    return choices[index][0] if index is not None else None
+
+
+def _choose_ground_item(
+    inspection: object,
+    input_fn: Callable[[], str],
+    output_fn: Callable[[str], object],
+) -> str | None:
+    """Select a literal loose item; the engine verifies range and eligibility."""
+    choices = tuple(
+        (item_id, label) for item_id, label in _physical_item_choices(inspection)
+        if label.startswith("On ground at ")
+    )
+    if not choices:
+        output_fn("No loose unattended ground item is visible for Telekinetic Projectile.")
+        return None
+    index = _choose_index("Ground item number:", [label for _item_id, label in choices], input_fn, output_fn)
+    return choices[index][0] if index is not None else None
+
+
+def _choose_held_item(
+    inspection: object,
+    input_fn: Callable[[], str],
+    output_fn: Callable[[str], object],
+) -> str | None:
+    """Select an item held by the active actor for a literal self procedure."""
+    active_id = getattr(inspection, "turn_actor_id", None)
+    actor = next(
+        (entry for entry in getattr(inspection, "actors", ()) if entry.actor_id == active_id),
+        None,
+    )
+    held = tuple(getattr(actor, "held_items", ())) if actor is not None else ()
+    if not held:
+        output_fn("The active actor holds no item.")
+        return None
+    index = _choose_index(
+        "Held item:", [_physical_item_name(str(item_id)) + f" ({item_id})" for item_id in held],
+        input_fn, output_fn,
+    )
+    return str(held[index]) if index is not None else None
 
 
 def _choose_escape_inputs(
@@ -1248,7 +1481,12 @@ def _choose_cast_inputs(
     target_mode = target_modes[mode_index]
 
     slot_id = None
-    if spell.slots:
+    use_arcane_bond = False
+    # Focus spells use their actor-level pool; there is no rank-slot choice.
+    # A pool resource carries rank 0 internally, while the spell's source
+    # access carries its real rank, so forwarding it as ``slot_id`` would
+    # incorrectly ask the normal prepared-slot validator for rank 0.
+    if spell.slots and any(candidate_id != "actor_focus_pool" for candidate_id, _source in spell.slots):
         slot_index = _choose_index(
             "Prepared slot:",
             [f"{slot_id} ({source})" for slot_id, source in spell.slots],
@@ -1257,7 +1495,8 @@ def _choose_cast_inputs(
         )
         if slot_index is None:
             return None
-        slot_id = spell.slots[slot_index][0]
+        slot_id, slot_source = spell.slots[slot_index]
+        use_arcane_bond = slot_source.endswith("; Arcane Bond")
 
     if is_runic_weapon:
         item_id = _choose_runic_weapon_item(inspection, input_fn, output_fn)
@@ -1267,7 +1506,108 @@ def _choose_cast_inputs(
         # eligibility, range, commitment, and willingness checks.
         return spell.spell_id, None, target_mode.actions, slot_id, None, item_id
 
-    if spell.spell_id == "sure_strike":
+    if spell.spell_id == "sigil":
+        kind = _choose_index(
+            "Sigil target:", ("Creature", "Carried or worn item"), input_fn, output_fn,
+        )
+        if kind is None:
+            return None
+        visibility = _choose_index(
+            "Sigil visibility:", ("Visible", "Invisible"), input_fn, output_fn,
+        )
+        if visibility is None:
+            return None
+        mode = ("visible", "invisible")[visibility]
+        if kind == 0:
+            target_id = _choose_target(
+                target_mode.targets, inspection, input_fn, output_fn,
+                prompt="Sigil creature target:",
+            )
+            return (spell.spell_id, target_id, target_mode.actions, slot_id, None, {"spell_mode": mode}) if target_id is not None else None
+        item_id = _choose_sigil_item(inspection, input_fn, output_fn)
+        return (spell.spell_id, None, target_mode.actions, slot_id, None, {"spell_mode": mode, "item_id": item_id}) if item_id is not None else None
+
+    if spell.spell_id == "telekinetic_projectile":
+        target_id = _choose_target(
+            target_mode.targets, inspection, input_fn, output_fn,
+            prompt="Telekinetic Projectile target:",
+        )
+        if target_id is None:
+            return None
+        item_id = _choose_ground_item(inspection, input_fn, output_fn)
+        if item_id is None:
+            return None
+        return spell.spell_id, target_id, target_mode.actions, slot_id, None, item_id
+
+    if spell.spell_id == "force_barrage":
+        shard_targets: list[str] = []
+        for shard_number in range(1, target_mode.actions + 1):
+            target_id = _choose_target(
+                target_mode.targets, inspection, input_fn, output_fn,
+                prompt=f"Force Barrage shard {shard_number} target:",
+            )
+            if target_id is None:
+                return None
+            shard_targets.append(target_id)
+        if use_arcane_bond:
+            return spell.spell_id, None, target_mode.actions, slot_id, None, tuple(shard_targets), {"use_arcane_bond": True}
+        return spell.spell_id, None, target_mode.actions, slot_id, None, tuple(shard_targets)
+
+    if spell.spell_id == "electric_arc":
+        target_ids: list[str] = []
+        for target_number in range(1, 3):
+            target_id = _choose_target(
+                tuple(target for target in target_mode.targets if target not in target_ids),
+                inspection, input_fn, output_fn,
+                prompt=f"Electric Arc target {target_number} (or cancel after the first):",
+            )
+            if target_id is None:
+                break
+            target_ids.append(target_id)
+        if not target_ids:
+            return None
+        return spell.spell_id, None, target_mode.actions, slot_id, None, tuple(target_ids)
+
+    if spell.spell_id == "breathe_fire":
+        direction_index = _choose_index(
+            "Breathe Fire direction:",
+            ("North", "North-East", "East", "South-East", "South", "South-West", "West", "North-West"),
+            input_fn, output_fn,
+        )
+        if direction_index is None:
+            return None
+        direction = (
+            Position(0, 1), Position(1, 1), Position(1, 0), Position(1, -1),
+            Position(0, -1), Position(-1, -1), Position(-1, 0), Position(-1, 1),
+        )[direction_index]
+        if use_arcane_bond:
+            return spell.spell_id, None, target_mode.actions, slot_id, None, direction, {"use_arcane_bond": True}
+        return spell.spell_id, None, target_mode.actions, slot_id, None, direction
+
+    spell_mode = None
+    if spell.spell_id == "ignition":
+        mode_index = _choose_index(
+            "Ignition form:", ("Ranged (2d4 fire)", "Melee (2d6 fire)"), input_fn, output_fn,
+        )
+        if mode_index is None:
+            return None
+        spell_mode = ("ranged", "melee")[mode_index]
+    elif spell.spell_id == "gouging_claw":
+        mode_index = _choose_index(
+            "Gouging Claw damage type:", ("Piercing", "Slashing"), input_fn, output_fn,
+        )
+        if mode_index is None:
+            return None
+        spell_mode = ("piercing", "slashing")[mode_index]
+    elif spell.spell_id == "sigil":
+        mode_index = _choose_index(
+            "Sigil visibility:", ("Visible", "Invisible"), input_fn, output_fn,
+        )
+        if mode_index is None:
+            return None
+        spell_mode = ("visible", "invisible")[mode_index]
+
+    if spell.spell_id in {"shield", "sure_strike", "angelic_halo", "courageous_anthem", "detect_magic"}:
         return spell.spell_id, None, target_mode.actions, slot_id, None
 
     target_id: str | None = None
@@ -1292,6 +1632,10 @@ def _choose_cast_inputs(
         )
         if target_id is None:
             return None
+    if spell_mode is not None:
+        return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {"spell_mode": spell_mode}
+    if use_arcane_bond:
+        return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {"use_arcane_bond": True}
     return spell.spell_id, target_id, target_mode.actions, slot_id, include_self
 
 
@@ -1543,12 +1887,15 @@ def run_terminal(
     from pf2e.content import (
         ANGELIC_FIRST_CAST_SETUP,
         ANGELIC_NEXT_ENCOUNTER_SETUP,
+        BOMBER_ALCHEMIST_NEXT_SETUP,
+        BOMBER_ALCHEMIST_SETUP,
         S1_SETUP,
         get_setup,
     )
     from pf2e.encounter import Encounter
     from pf2e.model import (
         Cast,
+        LingeringComposition,
         Choose,
         Crawl,
         EndTurn,
@@ -1561,6 +1908,9 @@ def run_terminal(
         Step,
         Stride,
         Strike,
+        QuickBomber,
+        QuickAlchemy,
+        ActivateAlchemy,
         TakeCover,
         RaiseShield,
         Sustain,
@@ -1570,10 +1920,11 @@ def run_terminal(
         SuppressAura,
         ResumeAura,
     )
-    from pf2e.skill_actions import Demoralize, Escape, Feint, Grapple, Trip
+    from pf2e.skill_actions import Demoralize, Escape, Feint, Grapple, Trip, TumbleThrough
     from pf2e.barbarian import Rage
     from pf2e.investigator import BattleMedicine, DeviseStratagem, RecallKnowledge
     from pf2e.swashbuckler import ConfidentFinisher
+    from pf2e.ranger import HuntPrey, HuntedShot
 
     if input_fn is None:
         input_fn = input
@@ -1678,7 +2029,10 @@ def run_terminal(
                 include_refocus=not inspection.in_progress and not is_s1,
                 include_next_encounter=(
                     not inspection.in_progress
-                    and getattr(setup, "setup_id", None) == ANGELIC_FIRST_CAST_SETUP.setup_id
+                    and getattr(setup, "setup_id", None) in {
+                        ANGELIC_FIRST_CAST_SETUP.setup_id,
+                        BOMBER_ALCHEMIST_SETUP.setup_id,
+                    }
                 ),
                 include_downtime=not inspection.in_progress and not is_s1,
                 include_examination=(
@@ -1693,6 +2047,41 @@ def run_terminal(
                         for actor in inspection.actors
                     )
                 ),
+                include_lead=(
+                    not inspection.in_progress
+                    and not is_s1
+                    and bool(getattr(setup, "investigations", ()))
+                    and any(
+                        "investigator_on_the_case" in getattr(actor, "abilities", ())
+                        and getattr(getattr(actor, "health_mode", None), "value", None) == "pc"
+                        and not getattr(actor, "unconscious", False)
+                        and not getattr(actor, "dead", False)
+                        for actor in inspection.actors
+                    )
+                ),
+                include_streetwise=(
+                    not inspection.in_progress and not is_s1
+                    and bool(getattr(setup, "streetwise", ()))
+                    and any(
+                        "Streetwise" in getattr(actor, "feats", ())
+                        and getattr(getattr(actor, "health_mode", None), "value", None) == "pc"
+                        and not getattr(actor, "unconscious", False) and not getattr(actor, "dead", False)
+                        for actor in inspection.actors
+                    )
+                ),
+                include_animal_empathy=(
+                    not inspection.in_progress and not is_s1
+                    and bool(getattr(setup, "animal_empathy", ()))
+                    and any("animal_empathy" in getattr(actor, "abilities", ()) and not getattr(actor, "unconscious", False) and not getattr(actor, "dead", False) for actor in inspection.actors)
+                ),
+                include_spell_substitution=(
+                    not inspection.in_progress and not is_s1
+                    and any("spell_substitution" in getattr(actor, "abilities", ()) for actor in inspection.actors)
+                ),
+                include_oracle_life_mode=(
+                    not inspection.in_progress and not is_s1
+                    and any("life_oracle" in getattr(actor, "abilities", ()) for actor in inspection.actors)
+                ),
             )
             output_fn(render_menu([label for _, label in menu_entries]))
             choice_text = _read_line("Choice:", input_fn, output_fn)
@@ -1706,6 +2095,7 @@ def run_terminal(
             if not inspection.in_progress and action_id not in {
                 "save", "load", "restart", "quit", "refocus", "next_encounter",
                 "record_rested", "daily_prepare", "forensic_examine",
+                "pursue_lead", "streetwise", "animal_empathy", "spell_substitution", "interrupt_spell_substitution", "oracle_life_mode",
             }:
                 output_fn("The encounter is finished; choose an available recovery or encounter action, Save, Load, Restart, or Quit.")
                 continue
@@ -1728,6 +2118,46 @@ def run_terminal(
                     _run_command(
                         game,
                         Stride(path=tuple(Position(x=x, y=y) for x, y in points)),
+                        output_fn,
+                    )
+                except ValueError as exc:
+                    output_fn(str(exc))
+            elif action_id == "quick_jump":
+                try:
+                    from pf2e.skill_actions import QuickJump
+
+                    raw_path = _read_line(
+                        "Quick Jump path, in order (for example B2 C2 D2):",
+                        input_fn,
+                        output_fn,
+                    )
+                    points = parse_path(
+                        raw_path,
+                        width=inspection.map_width,
+                        height=inspection.map_height,
+                    )
+                    _run_command(
+                        game,
+                        QuickJump(path=tuple(Position(x=x, y=y) for x, y in points)),
+                        output_fn,
+                    )
+                except ValueError as exc:
+                    output_fn(str(exc))
+            elif action_id == "tumble_through":
+                try:
+                    raw_path = _read_line(
+                        "Tumble Through path, in order (for example B2 C2 D2):",
+                        input_fn,
+                        output_fn,
+                    )
+                    points = parse_path(
+                        raw_path,
+                        width=inspection.map_width,
+                        height=inspection.map_height,
+                    )
+                    _run_command(
+                        game,
+                        TumbleThrough(path=tuple(Position(x=x, y=y) for x, y in points)),
                         output_fn,
                     )
                 except ValueError as exc:
@@ -1806,6 +2236,80 @@ def run_terminal(
                             ),
                             output_fn,
                         )
+            elif action_id == "quick_alchemy":
+                from pf2e.alchemist_content import BOMBER_FORMULA_IDS
+                from pf2e.alchemy_content import FORMULAS_BY_ID
+
+                formula_index = _choose_index(
+                    "Quick Alchemy formula:",
+                    tuple(FORMULAS_BY_ID[formula_id].name for formula_id in BOMBER_FORMULA_IDS),
+                    input_fn, output_fn,
+                )
+                if formula_index is not None:
+                    _run_command(game, QuickAlchemy("create_consumable", BOMBER_FORMULA_IDS[formula_index]), output_fn)
+            elif action_id == "activate_alchemy":
+                from pf2e.alchemist_content import BOMBER_FIELD_FORMULA_IDS
+
+                actor = game._state.creatures[engine_options.actor_id]
+                held = tuple(
+                    item_id for item_id in actor.held_items
+                    if item_id in game._state.infused_alchemy_items
+                    and game._state.infused_alchemy_items[item_id].formula_id
+                    not in BOMBER_FIELD_FORMULA_IDS
+                )
+                item_index = _choose_index(
+                    "Held alchemy item:",
+                    tuple(
+                        game._state.infused_alchemy_items[item_id].formula_id.replace("_", " ")
+                        for item_id in held
+                    ),
+                    input_fn, output_fn,
+                )
+                if item_index is not None:
+                    item_id = held[item_index]
+                    formula_id = game._state.infused_alchemy_items[item_id].formula_id
+                    if formula_id in {"bestial_mutagen_lesser", "cognitive_mutagen_lesser", "giant_centipede_venom"}:
+                        _run_command(game, ActivateAlchemy(item_id), output_fn)
+                    else:
+                        recipient_id = _choose_target(
+                            tuple(
+                                candidate.actor_id for candidate in inspection.actors
+                                if not candidate.dead and not candidate.unconscious
+                            ),
+                            inspection, input_fn, output_fn, prompt="Alchemy recipient:",
+                        )
+                        if recipient_id is not None:
+                            _run_command(game, ActivateAlchemy(item_id, recipient_id), output_fn)
+            elif action_id == "quick_bomber":
+                from pf2e.alchemist_content import BOMBER_FIELD_FORMULA_IDS
+                from pf2e.alchemy_content import FORMULAS_BY_ID
+                from pf2e.content import get_definition
+                from pf2e.space import grid_distance_feet
+
+                actor = game._state.creatures[engine_options.actor_id]
+                formula_index = _choose_index(
+                    "Prepared bomb:", tuple(
+                        FORMULAS_BY_ID[formula_id].name for formula_id in BOMBER_FIELD_FORMULA_IDS
+                    ), input_fn, output_fn,
+                )
+                if formula_index is not None:
+                    formula_id = BOMBER_FIELD_FORMULA_IDS[formula_index]
+                    attack = next(
+                        candidate for candidate in get_definition(actor.definition_id).attacks
+                        if candidate.item_id == formula_id
+                    )
+                    target_ids = tuple(
+                        candidate.actor_id for candidate in inspection.actors
+                        if candidate.actor_id != actor.actor_id
+                        and not candidate.defeated
+                        and grid_distance_feet(
+                            actor.position,
+                            game._state.creatures[candidate.actor_id].position,
+                        ) <= (attack.max_range_ft or 0)
+                    )
+                    target_id = _choose_target(target_ids, inspection, input_fn, output_fn)
+                    if target_id is not None:
+                        _run_command(game, QuickBomber(target_id, formula_id), output_fn)
             elif action_id == "devise_stratagem":
                 target_id = _choose_devise_target(
                     inspection,
@@ -1860,6 +2364,19 @@ def run_terminal(
                         output_fn(f"Question: {record.question}")
                         skill = _choose_recall_skill(record, input_fn, output_fn)
                         if skill is not None:
+                            from pf2e.content import get_definition
+                            actor = game._state.creatures.get(inspection.turn_actor_id or "")
+                            definition = get_definition(actor.definition_id) if actor is not None else None
+                            use_assurance = False
+                            if definition is not None and f"assurance_{skill}" in definition.abilities:
+                                method = _choose_index(
+                                    "Recall Knowledge method:",
+                                    ("Roll check", f"Use Assurance ({skill.title()})"),
+                                    input_fn, output_fn,
+                                )
+                                if method is None:
+                                    continue
+                                use_assurance = method == 1
                             _run_command(
                                 game,
                                 RecallKnowledge(
@@ -1867,6 +2384,7 @@ def run_terminal(
                                     question=record.question,
                                     skill=skill,
                                     target_id=target_id,
+                                    use_assurance=use_assurance,
                                 ),
                                 output_fn,
                             )
@@ -1883,6 +2401,33 @@ def run_terminal(
                         game.forensic_examine(actor_id, examination_key),
                         output_fn,
                     )
+            elif action_id == "pursue_lead":
+                selected = _choose_pursue_lead(
+                    setup,
+                    game,
+                    inspection,
+                    input_fn,
+                    output_fn,
+                )
+                if selected is not None:
+                    actor_id, case_id, clue_key = selected
+                    _run_result(
+                        game.pursue_lead(actor_id, case_id, clue_key),
+                        output_fn,
+                    )
+            elif action_id == "streetwise":
+                selected = _choose_streetwise(setup, inspection, input_fn, output_fn)
+                if selected is not None:
+                    actor_id, question_key, mode, settlement_key = selected
+                    _run_result(
+                        game.streetwise(actor_id, question_key, mode=mode, settlement_key=settlement_key),
+                        output_fn,
+                    )
+            elif action_id == "animal_empathy":
+                selected = _choose_animal_empathy(setup, inspection, input_fn, output_fn)
+                if selected is not None:
+                    actor_id, question_key, action = selected
+                    _run_result(game.animal_empathy(actor_id, question_key, action=action), output_fn)
             elif action_id == "battle_medicine":
                 target_id = _choose_target(
                     getattr(engine_options, "battle_medicine_targets", ()),
@@ -1914,6 +2459,58 @@ def run_terminal(
                             damage_type=damage_type,
                             nonlethal=nonlethal,
                         ),
+                        output_fn,
+                    )
+            elif action_id == "flurry_of_blows":
+                strike_inputs = _choose_strike_inputs(
+                    tuple(
+                        option for option in engine_options.strikes
+                        if option.attack_id in {"fist", "kama"}
+                    ),
+                    inspection,
+                    input_fn,
+                    output_fn,
+                )
+                if strike_inputs is not None:
+                    from pf2e.monk import FlurryOfBlows
+                    from pf2e.model import PairedStrikeSelection
+
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    _run_command(
+                        game,
+                        FlurryOfBlows(PairedStrikeSelection(target_id, attack_id, damage_type, nonlethal)),
+                        output_fn,
+                    )
+            elif action_id == "hunt_prey":
+                target_id = _choose_target(
+                    tuple(
+                        actor.actor_id for actor in inspection.actors
+                        if actor.actor_id != engine_options.actor_id and not actor.defeated
+                    ),
+                    inspection,
+                    input_fn,
+                    output_fn,
+                    prompt="Hunt Prey target:",
+                )
+                if target_id is not None:
+                    _run_command(game, HuntPrey(target_id), output_fn)
+            elif action_id == "hunted_shot":
+                strike_inputs = _choose_strike_inputs(
+                    tuple(
+                        option for option in engine_options.strikes
+                        if option.attack_id == "shortbow"
+                    ),
+                    inspection,
+                    input_fn,
+                    output_fn,
+                )
+                if strike_inputs is not None:
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    from pf2e.model import PairedStrikeSelection
+
+                    _run_command(
+                        game,
+                        HuntedShot(PairedStrikeSelection(target_id, attack_id, damage_type, nonlethal)),
                         output_fn,
                     )
             elif action_id == "confident_finisher":
@@ -2116,6 +2713,10 @@ def run_terminal(
                 )
                 if target_id is not None:
                     _run_command(game, LayOnHands(target_id=target_id), output_fn)
+            elif action_id == "nudge_the_scales":
+                target_id = _choose_encounter_actor("Nudge the Scales target:", inspection, engine_options.actor_id, input_fn, output_fn, include_actor=True)
+                if target_id is not None and engine_options.actor_id is not None:
+                    _run_result(game.nudge_the_scales(engine_options.actor_id, target_id), output_fn)
             elif action_id == "suppress_aura":
                 _run_command(game, SuppressAura(), output_fn)
             elif action_id == "resume_aura":
@@ -2148,6 +2749,25 @@ def run_terminal(
                 )
                 if orb_id is not None:
                     _run_command(game, Dismiss(orb_id=orb_id), output_fn)
+            elif action_id == "dismiss_life_link":
+                actor_id = engine_options.actor_id
+                effect = next(
+                    (
+                        item for item in game._state.active_effects
+                        if item.kind == "life_link" and item.source_actor_id == actor_id
+                    ),
+                    None,
+                )
+                if effect is None:
+                    output_fn("No active Life Link is available to dismiss.")
+                else:
+                    _run_command(game, Dismiss(effect_id=effect.effect_id), output_fn)
+            elif action_id == "drain_bonded_item":
+                from pf2e.wizard import DrainBondedItem
+
+                item_id = _choose_held_item(inspection, input_fn, output_fn)
+                if item_id is not None:
+                    _run_command(game, DrainBondedItem(item_id), output_fn)
             elif action_id == "cast":
                 cast_inputs = _choose_cast_inputs(
                     engine_options.spells,
@@ -2161,6 +2781,10 @@ def run_terminal(
                     color = None
                     attachment_actor_id = None
                     replacement_orb_id = None
+                    target_ids = None
+                    area_direction = None
+                    use_arcane_bond = False
+                    spell_mode = None
                     if len(cast_inputs) == 10:
                         (
                             spell_id,
@@ -2186,8 +2810,32 @@ def run_terminal(
                             color,
                             attachment_actor_id,
                         ) = cast_inputs
+                    elif len(cast_inputs) == 7:
+                        spell_id, target_id, actions, slot_id, include_self, special_input, bond_input = cast_inputs
+                        use_arcane_bond = bond_input == {"use_arcane_bond": True}
+                        if spell_id == "force_barrage":
+                            target_ids, item_id, area_direction = special_input, None, None
+                        elif spell_id == "electric_arc":
+                            target_ids, item_id, area_direction = special_input, None, None
+                        elif spell_id == "breathe_fire":
+                            area_direction, item_id, target_ids = special_input, None, None
+                        else:
+                            raise ValueError("unsupported bonded spell input")
                     elif len(cast_inputs) == 6:
-                        spell_id, target_id, actions, slot_id, include_self, item_id = cast_inputs
+                        spell_id, target_id, actions, slot_id, include_self, special_input = cast_inputs
+                        if spell_id == "force_barrage":
+                            target_ids, item_id, area_direction = special_input, None, None
+                        elif spell_id == "electric_arc":
+                            target_ids, item_id, area_direction = special_input, None, None
+                        elif spell_id == "breathe_fire":
+                            area_direction, item_id, target_ids = special_input, None, None
+                        elif isinstance(special_input, dict) and special_input.get("spell_mode") in {"ranged", "melee", "piercing", "slashing", "visible", "invisible"}:
+                            spell_mode = special_input["spell_mode"]
+                            item_id = special_input.get("item_id")
+                        elif special_input == {"use_arcane_bond": True}:
+                            use_arcane_bond = True
+                        else:
+                            item_id, target_ids, area_direction = special_input, None, None
                     else:
                         spell_id, target_id, actions, slot_id, include_self = cast_inputs
                     _run_command(
@@ -2203,9 +2851,15 @@ def run_terminal(
                             color=color,
                             attachment_actor_id=attachment_actor_id,
                             replacement_orb_id=replacement_orb_id,
+                            target_ids=target_ids,
+                            area_direction=area_direction,
+                            use_arcane_bond=use_arcane_bond,
+                            spell_mode=spell_mode,
                         ),
                         output_fn,
                     )
+            elif action_id == "lingering_composition":
+                _run_command(game, LingeringComposition(), output_fn)
             elif action_id == "end_turn":
                 _run_command(game, EndTurn(), output_fn)
             elif action_id == "refocus":
@@ -2217,10 +2871,15 @@ def run_terminal(
                     )
                     _run_result(game.refocus(actor_id), output_fn)
             elif action_id == "next_encounter":
-                result = game.next_encounter(ANGELIC_NEXT_ENCOUNTER_SETUP)
+                next_setup = (
+                    BOMBER_ALCHEMIST_NEXT_SETUP
+                    if getattr(setup, "setup_id", None) == BOMBER_ALCHEMIST_SETUP.setup_id
+                    else ANGELIC_NEXT_ENCOUNTER_SETUP
+                )
+                result = game.next_encounter(next_setup)
                 _run_result(result, output_fn)
                 if result.status is not ResultStatus.REJECTED:
-                    setup = ANGELIC_NEXT_ENCOUNTER_SETUP
+                    setup = next_setup
             elif action_id == "record_rested":
                 actor_ids = _choose_downtime_actor_group(inspection, input_fn, output_fn)
                 if actor_ids is not None:
@@ -2248,7 +2907,29 @@ def run_terminal(
                         "Daily Preparation advances one hour once, restores the selected "
                         "casters' actual spell and Focus resources, and ends only their Light."
                     )
-                    _run_result(game.daily_prepare(actor_ids), output_fn)
+                    preparations = _choose_daily_preparations(game, actor_ids, input_fn, output_fn)
+                    if preparations is not None:
+                        _run_result(game.daily_prepare(actor_ids, preparations), output_fn)
+            elif action_id == "oracle_life_mode":
+                actor_id = _choose_refocus_actor(inspection, input_fn, output_fn)
+                if actor_id is not None:
+                    mode = _read_line("Oracle mode (life/death):", input_fn, output_fn).strip().lower()
+                    _run_result(game.set_oracle_life_mode(actor_id, mode), output_fn)
+            elif action_id == "spell_substitution":
+                actor_ids = _choose_downtime_actor_group(inspection, input_fn, output_fn)
+                if actor_ids is not None and len(actor_ids) == 1:
+                    slot_id = _read_line("Prepared rank-1 slot id:", input_fn, output_fn).strip()
+                    spell_id = _read_line("Replacement spell id:", input_fn, output_fn).strip()
+                    result = game.start_spell_substitution(actor_ids[0], slot_id, spell_id)
+                    _run_result(result, output_fn)
+                    if result.status is ResultStatus.COMPLETED:
+                        elapsed = _read_integer("Uninterrupted elapsed seconds to advance (max 600):", input_fn, output_fn)
+                        if elapsed is not None:
+                            _run_result(game.advance_spell_substitution(actor_ids[0], elapsed), output_fn)
+            elif action_id == "interrupt_spell_substitution":
+                actor_ids = _choose_downtime_actor_group(inspection, input_fn, output_fn)
+                if actor_ids is not None and len(actor_ids) == 1:
+                    _run_result(game.interrupt_spell_substitution(actor_ids[0]), output_fn)
             elif action_id == "save":
                 raw_path = _read_line(
                     f"Save file [{save_path}]; press Enter to use it:",

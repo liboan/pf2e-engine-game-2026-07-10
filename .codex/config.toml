@@ -1,3 +1,4 @@
+model_catalog_json = "/Users/andrewlee/.codex/worktrees/45673ef6-8f9a-40a9-a1c9-e699d44667ca/pf2e-engine-game-2026-07-10/.codex/model-catalogs/luna-v2-20260918.json"
 [mcp_servers.playwright]
 enabled = false
 

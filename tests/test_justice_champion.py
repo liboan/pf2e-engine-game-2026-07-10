@@ -263,7 +263,7 @@ def test_terminal_drives_justice_actions_and_quits_cleanly() -> None:
     # and quit from the dog turn. These are the menu indices emitted by the
     # real terminal; no direct state mutation is used by this smoke path.
     output = BoundedTranscript()
-    answers = iter(("2", "1", "2", "1", "9", "8", "1", "8", "8", "13"))
+    answers = iter(("2", "1", "2", "1", "9", "8", "1", "8", "8", "14"))
     input_fn = BoundedInput(
         lambda: next(answers),
         max_calls=32,

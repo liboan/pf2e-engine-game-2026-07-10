@@ -26,6 +26,18 @@ from .model import Position
 from .space import grid_distance_feet
 
 
+# The encounter and persistence layers share this finite routing set so a
+# targeted spell's dim-light flat-check continuation has the same live and
+# saved validation boundary.
+CONCEALMENT_TARGETED_SPELL_IDS = frozenset({
+    "divine_lance", "heal", "soothe", "fear", "void_warp", "guidance", "stabilize",
+    "runic_weapon", "runic_body", "force_bolt", "frostbite", "enfeeble",
+    "telekinetic_projectile", "ignition", "gouging_claw", "tangle_vine",
+    "tempest_surge",
+    "life_link", "vitality_lash",
+})
+
+
 @dataclass(frozen=True, slots=True)
 class SpellDefinition:
     """Fixed reviewed spell facts needed by the current S3 roster."""
@@ -45,6 +57,57 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
         spell.spell_id: spell
         for spell in (
             SpellDefinition(
+                "lingering_composition",
+                "Lingering Composition",
+                (0,),
+                frozenset({"bard", "concentrate", "focus", "spellshape"}),
+                None,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1769",
+            ),
+            SpellDefinition(
+                "force_bolt",
+                "Force Bolt",
+                (1,),
+                frozenset({"focus", "force", "manipulate", "wizard"}),
+                30,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1896",
+            ),
+            SpellDefinition(
+                "tempest_surge", "Tempest Surge", (2,),
+                frozenset({"air", "concentrate", "druid", "electricity", "focus", "manipulate", "uncommon"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1860",
+            ),
+            SpellDefinition(
+                "life_link", "Life Link", (1,),
+                frozenset({"focus", "healing", "manipulate", "oracle", "vitality", "uncommon"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=2081",
+            ),
+            SpellDefinition(
+                "vitality_lash", "Vitality Lash", (2,),
+                frozenset({"cantrip", "concentrate", "manipulate", "vitality"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1744",
+            ),
+            SpellDefinition(
+                "force_barrage",
+                "Force Barrage",
+                (1, 2, 3),
+                frozenset({"concentrate", "force", "manipulate"}),
+                120,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1536",
+            ),
+            SpellDefinition(
+                "breathe_fire",
+                "Breathe Fire",
+                (2,),
+                frozenset({"concentrate", "fire", "manipulate"}),
+                None,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1457",
+            ),
+            SpellDefinition(
                 "divine_lance",
                 "Divine Lance",
                 (2,),
@@ -61,6 +124,59 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 30,
                 True,
                 "https://2e.aonprd.com/Spells.aspx?ID=1745",
+            ),
+            SpellDefinition(
+                "shield",
+                "Shield",
+                (1,),
+                frozenset({"cantrip", "concentrate", "force"}),
+                None,
+                True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1671",
+            ),
+            SpellDefinition(
+                "electric_arc",
+                "Electric Arc",
+                (2,),
+                frozenset({"cantrip", "concentrate", "electricity", "manipulate"}),
+                30,
+                True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1509",
+            ),
+            SpellDefinition(
+                "telekinetic_projectile", "Telekinetic Projectile", (2,),
+                frozenset({"attack", "cantrip", "concentrate", "manipulate"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1718",
+            ),
+            SpellDefinition(
+                "frostbite", "Frostbite", (2,),
+                frozenset({"cantrip", "cold", "concentrate", "manipulate"}), 60, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1539",
+            ),
+            SpellDefinition(
+                "ignition", "Ignition", (2,),
+                frozenset({"attack", "cantrip", "concentrate", "fire", "manipulate"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1565",
+            ),
+            SpellDefinition(
+                "caustic_blast", "Caustic Blast", (2,),
+                frozenset({"acid", "cantrip", "concentrate", "manipulate"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1461",
+            ),
+            SpellDefinition(
+                "gouging_claw", "Gouging Claw", (2,),
+                frozenset({"attack", "cantrip", "concentrate", "manipulate", "morph"}), 5, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1546",
+            ),
+            SpellDefinition(
+                "tangle_vine", "Tangle Vine", (2,),
+                frozenset({"attack", "cantrip", "concentrate", "manipulate", "plant", "wood"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1713",
+            ),
+            SpellDefinition(
+                "gale_blast", "Gale Blast", (2,),
+                frozenset({"air", "cantrip", "concentrate", "manipulate"}), None, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1994",
             ),
             SpellDefinition(
                 "guidance",
@@ -117,6 +233,15 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 False,
                 "https://2e.aonprd.com/Spells.aspx?ID=2093",
             ),
+            SpellDefinition(
+                "courageous_anthem",
+                "Courageous Anthem",
+                (1,),
+                frozenset({"bard", "cantrip", "composition", "concentrate", "emotion", "mental"}),
+                None,
+                True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1763",
+            ),
             # These entries are part of the staged Angelic repertoire ledger.
             # Light's point cast is admitted by the first orb slice; other
             # entries still require their own explicit encounter procedures.
@@ -133,7 +258,7 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 "fear",
                 "Fear",
                 (2,),
-                frozenset({"auditory", "concentrate", "emotion", "fear", "mental"}),
+                frozenset({"concentrate", "emotion", "fear", "manipulate", "mental"}),
                 30,
                 False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1524",
@@ -156,9 +281,65 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1709",
             ),
+            SpellDefinition(
+                "enfeeble", "Enfeeble", (2,),
+                frozenset({"concentrate", "manipulate"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1513",
+            ),
+            SpellDefinition(
+                "runic_body", "Runic Body", (2,),
+                frozenset({"concentrate", "manipulate"}), None, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1657",
+            ),
+            SpellDefinition(
+                "command", "Command", (2,),
+                frozenset({"auditory", "concentrate", "linguistic", "manipulate", "mental"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1470",
+            ),
+            SpellDefinition(
+                "stoke_the_heart", "Stoke the Heart", (1,),
+                frozenset({"cantrip", "concentrate", "emotion", "hex", "witch"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1892",
+            ),
+            SpellDefinition(
+                "forbidding_ward", "Forbidding Ward", (2,),
+                frozenset({"cantrip", "concentrate", "manipulate"}), 30, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1535",
+            ),
+            SpellDefinition(
+                "sigil", "Sigil", (2,),
+                frozenset({"cantrip", "concentrate", "manipulate"}), 5, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1673",
+            ),
+            SpellDefinition(
+                "detect_magic", "Detect Magic", (2,),
+                frozenset({"cantrip", "concentrate", "detection", "manipulate"}), None, True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1485",
+            ),
+            SpellDefinition(
+                "patrons_puppet", "Patron's Puppet", (0,),
+                frozenset({"focus", "witch"}), None, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1882",
+            ),
         )
     }
 )
+
+
+# This direct-spell slice deliberately supports only the staged Wizard's
+# ordinary loose staff.  Its one Bulk and bludgeoning profile are fixed facts
+# of this finite content menu; other object shapes await authored Bulk/type
+# data rather than receiving invented defaults.
+TELEKINETIC_PROJECTILE_OBJECTS: Mapping[str, tuple[int, str]] = MappingProxyType(
+    {"staff": (1, "bludgeoning")}
+)
+
+
+def telekinetic_projectile_object_profile(
+    definition_id: str,
+) -> tuple[int, str] | None:
+    """Return the supported loose object's (Bulk, physical damage type)."""
+    return TELEKINETIC_PROJECTILE_OBJECTS.get(definition_id)
 
 
 def spell_traits(spell_id: str, actions: int | None = None) -> frozenset[str]:
@@ -223,13 +404,14 @@ class VoidWarpEffect:
 def divine_lance_damage(
     degree: DegreeOfSuccess,
     roll: Callable[[int], int],
+    modifier: int = 0,
 ) -> DamageResult | None:
     """Roll Divine Lance damage on a hit; a miss does not roll damage."""
     _check_degree(degree)
     if degree < DegreeOfSuccess.SUCCESS:
         return None
     return resolve_damage(
-        DamagePacket("Divine Lance", "spirit", dice_sides=4, dice_count=2, modifier=0),
+        DamagePacket("Divine Lance", "spirit", dice_sides=4, dice_count=2, modifier=modifier),
         roll,
         critical=degree is DegreeOfSuccess.CRITICAL_SUCCESS,
     )
@@ -254,11 +436,23 @@ def basic_save_damage(total: int, degree: DegreeOfSuccess) -> int:
 def void_warp_effect(
     degree: DegreeOfSuccess,
     roll: Callable[[int], int],
+    *,
+    status_damage_bonus: int = 0,
 ) -> VoidWarpEffect:
-    """Roll Void Warp, apply its basic-save damage, and report enfeebled 1."""
+    """Roll Void Warp, apply its basic-save damage, and report enfeebled 1.
+
+    ``status_damage_bonus`` is a typed bonus already resolved by the
+    encounter.  It joins the raw damage roll before the spell's basic-save
+    adjustment, as status bonuses to damage rolls require.
+    """
     _check_degree(degree)
+    if type(status_damage_bonus) is not int or status_damage_bonus < 0:
+        raise ValueError("Void Warp status damage bonus must be a non-negative integer")
     rolled = resolve_damage(
-        DamagePacket("Void Warp", "void", dice_sides=4, dice_count=2, modifier=0),
+        DamagePacket(
+            "Void Warp", "void", dice_sides=4, dice_count=2,
+            modifier=status_damage_bonus,
+        ),
         roll,
     )
     total = basic_save_damage(rolled.total, degree)

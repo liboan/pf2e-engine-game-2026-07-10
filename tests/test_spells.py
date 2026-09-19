@@ -30,10 +30,35 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
         "heal",
         "soothe",
         "angelic_halo",
+        "courageous_anthem",
+        "lingering_composition",
+        "force_bolt",
+            "tempest_surge",
+            "life_link",
+            "vitality_lash",
+        "shield",
+        "force_barrage",
+        "breathe_fire",
         "light",
         "fear",
         "runic_weapon",
         "sure_strike",
+        "electric_arc",
+        "telekinetic_projectile",
+        "frostbite",
+        "enfeeble",
+        "runic_body",
+        "ignition",
+        "caustic_blast",
+        "gouging_claw",
+        "tangle_vine",
+        "gale_blast",
+        "stoke_the_heart",
+        "patrons_puppet",
+        "command",
+        "forbidding_ward",
+        "sigil",
+        "detect_magic",
     }
     with pytest.raises(TypeError):
         SPELLS["new"] = SPELLS["heal"]  # type: ignore[index]
@@ -49,6 +74,30 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
     assert "light" in SPELLS["light"].traits
     assert SPELLS["runic_weapon"].action_costs == (2,)
     assert SPELLS["runic_weapon"].unavailable_reason is None
+    assert SPELLS["courageous_anthem"].action_costs == (1,)
+    assert SPELLS["courageous_anthem"].range_ft is None
+    assert SPELLS["courageous_anthem"].traits == frozenset(
+        {"bard", "cantrip", "composition", "concentrate", "emotion", "mental"}
+    )
+    assert SPELLS["lingering_composition"].action_costs == (0,)
+    assert SPELLS["lingering_composition"].traits == frozenset(
+        {"bard", "concentrate", "focus", "spellshape"}
+    )
+    assert SPELLS["shield"].action_costs == (1,)
+    assert SPELLS["shield"].range_ft is None
+    assert SPELLS["shield"].cantrip is True
+    assert SPELLS["shield"].traits == frozenset({"cantrip", "concentrate", "force"})
+    assert SPELLS["force_bolt"].action_costs == (1,)
+    assert SPELLS["force_bolt"].range_ft == 30
+    assert SPELLS["force_barrage"].action_costs == (1, 2, 3)
+    assert SPELLS["electric_arc"].action_costs == (2,)
+    assert SPELLS["electric_arc"].range_ft == 30
+    assert SPELLS["electric_arc"].traits == frozenset(
+        {"cantrip", "concentrate", "electricity", "manipulate"}
+    )
+    assert SPELLS["force_barrage"].range_ft == 120
+    assert SPELLS["breathe_fire"].action_costs == (2,)
+    assert SPELLS["breathe_fire"].range_ft is None
     assert SPELLS["fear"].unavailable_reason is None
     assert SPELLS["sure_strike"].action_costs == (1,)
     assert SPELLS["sure_strike"].traits == frozenset({"concentrate", "fortune"})

@@ -149,6 +149,14 @@ class CreatureDefinition:
     carried_item_bulk: tuple[tuple[str, int], ...] = ()
     damage_defenses: tuple[DamageDefense, ...] = ()
     item_instances: tuple[ItemInstance, ...] = ()
+    # Spell Substitution is kept as a finite owned-book ledger for the one
+    # staged Wizard. It is not a general spellbook/catalogue model.
+    spell_substitution_book_id: str | None = None
+    spell_substitution_book: tuple["SpellbookSpellDefinition", ...] = ()
+    # Familiars are present, targetable creatures but do not receive an
+    # independent initiative turn.  Their owner supplies their finite actions.
+    initiative_exempt: bool = False
+    familiar_owner_actor_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -181,6 +189,11 @@ class EncounterSetup:
     # Ambient illumination for this local scene.  Existing setups retain the
     # bright default; the Light prerequisite adds a dim diagnostic fixture.
     ambient_light: str = "bright"
+    # Finite environmental provenance for Storm Born. These never stand in
+    # for darkness, cover, or ordinary weapon targeting.
+    weather_ranged_spell_attack_circumstance_penalty: int = 0
+    weather_perception_circumstance_penalty: int = 0
+    weather_concealment: bool = False
     # Authored Recall Knowledge subjects/questions for a scene.  The tuple is
     # intentionally opaque to the core model; Investigator owns the concrete
     # record and its rule interpretation.
@@ -188,6 +201,14 @@ class EncounterSetup:
     # Authored outside-combat Forensic Acumen examination records. The tuple
     # remains opaque to the core model; Investigator owns their interpretation.
     examinations: tuple[object, ...] = ()
+    # Authored On the Case records. The tuple remains opaque to the core
+    # model; Investigator owns the literal case and clue interpretation.
+    investigations: tuple[object, ...] = ()
+    # Finite authored Streetwise questions for this settlement. Investigator
+    # owns the record interpretation and persistence of its separate paths.
+    streetwise: tuple[object, ...] = ()
+    # Finite Animal Empathy dialogue records. Druid owns their meaning.
+    animal_empathy: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -213,6 +234,31 @@ class Strike:
     # Intelligence for the eligible Strike. ``None`` keeps ordinary Strikes
     # on their printed attribute and preserves legacy construction.
     use_intelligence: bool | None = None
+
+
+@dataclass(frozen=True)
+class QuickBomber:
+    """Draw one authored bomb and make its Strike as one action."""
+
+    target_id: str
+    formula_id: str
+    only_primary_splash: bool = False
+
+
+@dataclass(frozen=True)
+class QuickAlchemy:
+    """Create one finite infused consumable or temporary Quick Vial."""
+
+    mode: str
+    formula_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ActivateAlchemy:
+    """Use one held selected infused formula item on a literal recipient."""
+
+    item_id: str
+    target_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -242,6 +288,25 @@ class Cast:
     color: str | None = None
     attachment_actor_id: str | None = None
     replacement_orb_id: str | None = None
+    # Force Barrage allocates one shard per action. This literal list keeps
+    # each target selection atomic without changing existing single-target
+    # Cast construction.
+    target_ids: tuple[str, ...] | None = None
+    # Direction vector for the finite Breathe Fire cone template. Kept
+    # independent of Light's point-targeted intent.
+    area_direction: Position | None = None
+    # Consume the current-turn Arcane Bond permission for this prepared cast.
+    use_arcane_bond: bool = False
+    # Finite printed attack-profile choice for cantrips such as Ignition and
+    # Gouging Claw. ``None`` is only valid for spells without such a choice.
+    spell_mode: str | None = None
+
+
+@dataclass(frozen=True)
+class LingeringComposition:
+    """Prepare the Maestro's next one-round composition cantrip."""
+
+    pass
 
 
 @dataclass(frozen=True)
@@ -262,9 +327,10 @@ class Sustain:
 
 @dataclass(frozen=True)
 class Dismiss:
-    """Dismiss one of the active caster-owned Light orbs."""
+    """Dismiss one bounded owned spell effect or Light orb."""
 
-    orb_id: str
+    orb_id: str | None = None
+    effect_id: str | None = None
 
 
 # Descriptive aliases keep callers free to distinguish these from any future
@@ -370,7 +436,7 @@ class ToggleAura(FamilyCommand):
     active: bool
 
 
-Command = Stride | Step | Strike | ViciousSwing | Cast | Sustain | Dismiss | TakeCover | DismissCover | RaiseShield | Interact | Release | Stand | Crawl | Flee | EndTurn | Choose | FamilyCommand
+Command = Stride | Step | Strike | QuickBomber | QuickAlchemy | ActivateAlchemy | ViciousSwing | Cast | LingeringComposition | Sustain | Dismiss | TakeCover | DismissCover | RaiseShield | Interact | Release | Stand | Crawl | Flee | EndTurn | Choose | FamilyCommand
 
 
 class ResultStatus(str, Enum):
@@ -439,6 +505,7 @@ class ActorView:
     health_mode: HealthMode = HealthMode.PROTOTYPE
     temporary_hp_source_id: str | None = None
     temporary_hp_expires_at_seconds: int | None = None
+    temporary_hp_expires_at_source_start: int = 0
     barbarian_state: "BarbarianState | None" = None
     dying: int = 0
     wounded: int = 0
@@ -646,12 +713,32 @@ class CreatureState:
     focus_points: int = 0
     focus_capacity: int = 0
     flourish_used_round: int = 0
+    # Composition's once-per-turn limit belongs to the source turn, not to an
+    # active effect. The marker is persisted because an extended composition
+    # may be saved before a later turn replaces it.
+    composition_cast_at_start: int = 0
+    # Lingering Composition is a spellshape free action. It has exactly one
+    # legal successor: the next action must cast the qualifying composition.
+    lingering_composition_pending: bool = False
     must_leave_occupied: bool = False
     temporary_hp: int = 0
     temporary_hp_source_id: str | None = None
     temporary_hp_expires_at_seconds: int | None = None
+    temporary_hp_expires_at_source_start: int = 0
     hunted_prey: "HuntedPreyState | None" = None
     precision_used_round: int = 0
+    # Arcane Bond is a literal once-daily, current-turn permission. The
+    # completed prepared-slot history stays separate from ordinary slot spend.
+    arcane_bond_used_day: int = 0
+    arcane_bond_recast_until_start: int = 0
+    arcane_bond_item_id: str | None = None
+    arcane_bond_eligible_slots: set[str] = field(default_factory=set)
+    spell_substitution: "SpellSubstitutionState | None" = None
+    # Shield is a literal magical defense rather than an inventory item. Its
+    # one-turn raised state and post-Block absolute cooldown must both survive
+    # saved combat and scene changes.
+    magic_shield_expires_at_start: int = 0
+    shield_recast_available_at_seconds: int = 0
     # Swashbuckler Panache is encounter-scoped. A ``None`` expiry means the
     # actor has lasting panache; otherwise the value is the actor-end counter
     # at which temporary panache expires.
@@ -674,6 +761,38 @@ class CreatureState:
     # this is separate from subject-keyed Recall Knowledge history so an
     # immediate follow-up may intentionally reuse that subject.
     investigator_examinations_completed: set[str] = field(default_factory=set)
+    # On the Case state is keyed by authored case IDs. Questions, clues and
+    # useful-creature bindings remain in investigator_content.
+    investigator_active_cases: set[str] = field(default_factory=set)
+    investigator_solved_cases: set[str] = field(default_factory=set)
+    investigator_abandoned_cases: set[str] = field(default_factory=set)
+    investigator_awareness: set[str] = field(default_factory=set)
+    investigator_lead_cooldown_until: int = 0
+    investigator_clue_in_cooldown_until: int = 0
+    # Streetwise Recall Knowledge and Gather Information have deliberately
+    # separate authored attempt limits. Results carry through scene changes.
+    investigator_streetwise_recall_attempts: dict[str, int] = field(default_factory=dict)
+    investigator_streetwise_gather_attempts: dict[str, int] = field(default_factory=dict)
+    investigator_streetwise_results: dict[str, str] = field(default_factory=dict)
+    druid_animal_empathy_attempts: dict[str, int] = field(default_factory=dict)
+    druid_animal_empathy_results: dict[str, str] = field(default_factory=dict)
+    druid_animal_empathy_attitudes: dict[str, str] = field(default_factory=dict)
+    oracle_cursebound: int = 0
+    oracle_life_mode: str = "life"
+    oracle_life_mode_selected_day: int = 0
+    # The selected Faith's Flamekeeper's per-turn patron benefit is deliberately
+    # a narrow saved gate.  Familiar recovery timing is intentionally absent.
+    witch_patron_used_start: int = 0
+    # Patron's Puppet and Restored Spirit have distinct per-turn gates.  Keep
+    # their saved counters separate so using the former never suppresses the
+    # latter's optional recipient benefit.
+    witch_restored_spirit_used_start: int = 0
+    # The hex trait permits at most one Cast-a-hex action in a Witch turn.
+    witch_hex_cast_start: int = 0
+    # A minion receives one two-action allotment per owner turn.
+    minion_commanded_start: int = 0
+    # Literal turn-begins trigger gate for the selected Patron's Puppet.
+    witch_turn_activity_start: int = 0
 
     @property
     def defeated(self) -> bool:
@@ -806,6 +925,8 @@ class ActionContinuation:
     spell_check: CheckResult | None = None
     spell_save_degree: int | None = None
     target_ids: tuple[str, ...] = ()
+    spell_area_direction: Position | None = None
+    spell_mode: str | None = None
     ranged_penalty: int = 0
     guidance_bonus: int = 0
     feint_off_guard_applied: bool = False
@@ -838,6 +959,18 @@ class ActionContinuation:
     # Investigator attack stratagem intent survives every reaction/choice
     # continuation until the actual Strike roll consumes the stored die.
     use_intelligence: bool | None = None
+    # Tumble Through reaches its check only after any clear lead-in squares
+    # and their movement reactions have resolved. Keep the prepared action
+    # facts on that movement continuation so a reaction/save can resume it.
+    tumble_command: "FamilyCommand | None" = None
+    tumble_saved_check: "SavedCheckContext | None" = None
+    tumble_distance: int | None = None
+    # A paid paired activity retains this parent while each subordinate Strike
+    # passes through the ordinary reaction/check/damage continuation.
+    paired_strike: "PairedStrikeContinuation | None" = None
+    # Bomber may deliberately restrict a bomb splash to its primary target.
+    # The chosen scope must survive a Hero/reaction continuation.
+    bomber_only_primary_splash: bool = False
 
 
 @dataclass(frozen=True)
@@ -866,12 +999,21 @@ class DamageResolution:
     pending_defense_choice: DefenseChoice | None = None
     shield_block_status: str | None = None
     shield_block_instance_id: str | None = None
+    shield_block_magic: bool = False
     shield_block_record: "ShieldBlockRecord | None" = None
     # Justice Champion's protection is attached to this damage event, not to
     # the target's ordinary defenses. These facts survive each saved choice.
     justice_checked: bool = False
     justice_actor_id: str | None = None
     justice_protected: bool = False
+    # A Life Link reduction is part of this exact damage event.  Keeping the
+    # literal effect/source evidence on a saved health choice prevents load
+    # validation from either reapplying it or treating its pre-temp-HP result
+    # as an accounting mismatch.
+    life_link_effect_id: str | None = None
+    life_link_source_actor_id: str | None = None
+    life_link_transfer: int = 0
+    bomber_only_primary_splash: bool = False
 
 
 @dataclass(frozen=True)
@@ -885,6 +1027,7 @@ class ShieldBlockRecord:
     damage_to_shield: int
     shield_hp_before: int
     shield_hp_after: int
+    magic: bool = False
 
 
 @dataclass(frozen=True)
@@ -958,6 +1101,12 @@ class PairedStrikeContinuation:
     next_index: int = 0
     outcomes: tuple[PairedStrikeOutcome, ...] = ()
     stage: str = "selecting"
+    # Flurry's same-recipient same-type defenses are allocated chronologically.
+    # Weakness is spent once; resistance carries its unused value forward.
+    defense_target_id: str | None = None
+    defense_damage_type: str | None = None
+    spent_weaknesses: tuple[str, ...] = ()
+    resistance_remaining: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -980,6 +1129,7 @@ class ActiveConditionEffect:
     value: int
     expiration: EffectExpiration
     dc: int | None = None
+    command_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1002,6 +1152,26 @@ class PreparedSlotState:
     spent: bool = False
 
 
+@dataclass(frozen=True)
+class SpellbookSpellDefinition:
+    """One finite legal entry in the staged Wizard's owned spellbook."""
+
+    spell_id: str
+    rank: int
+    source: str
+    permitted_sources: tuple[str, ...] = ()
+
+
+@dataclass
+class SpellSubstitutionState:
+    """Saved ten-minute replacement work before it changes a prepared slot."""
+
+    slot_id: str
+    original_spell_id: str
+    replacement_spell_id: str
+    elapsed_seconds: int = 0
+
+
 @dataclass
 class SpontaneousSlotState:
     """Mutable remaining uses for one spontaneous rank pool."""
@@ -1022,6 +1192,49 @@ class ActiveSpellEffect:
     value: int
     expires_at_source_start: int
     expires_at_world_time: int | None = None
+    # Sustained spells have an ordinary "through the next turn" deadline and
+    # a separate printed total cap.  Stoke uses both; legacy effects leave
+    # these at zero.
+    sustain_limit_source_start: int = 0
+    sustain_limit_world_time: int | None = None
+    sustain_expires_at_source_end: int = 0
+    # For Forbidding Ward, the enemy whose effects the ward counters.
+    selected_enemy_actor_id: str | None = None
+    # Life Link reduces only the first qualifying damage event to its target
+    # each encounter round.  A round marker belongs to the literal link, not
+    # the target, so save/load cannot accidentally replay its reduction.
+    life_link_used_round: int = 0
+
+
+@dataclass(frozen=True)
+class PersistentDamageEffect:
+    """One literal persistent-damage condition, keyed by target and type."""
+
+    effect_id: str
+    source_actor_id: str
+    target_actor_id: str
+    spell_id: str
+    damage_type: str
+    dice: tuple[int, ...] = ()
+    flat: int = 0
+    expires_at_world_time: int | None = None
+
+
+@dataclass(frozen=True)
+class GiantCentipedeVenomAffliction:
+    """The selected injury poison's literal ongoing state.
+
+    This stays separate from persistent damage: its DC 17 Fortitude lifecycle
+    and stage facts are poison rules, not the generic DC 15 flat recovery rule.
+    """
+
+    effect_id: str
+    source_actor_id: str
+    target_actor_id: str
+    dc: int
+    stage: int
+    expires_at_world_time: int
+    next_save_at_target_end: int
 
 
 @dataclass(frozen=True)
@@ -1039,10 +1252,11 @@ class ActiveItemSpellEffect:
     source_actor_id: str
     item_id: str
     expires_at_source_start: int
-    expires_at_world_time: int
+    expires_at_world_time: int | None
     potency: int = 1
     striking_dice: int = 2
     magical: bool = True
+    visible: bool = True
 
 
 @dataclass(frozen=True)
@@ -1110,6 +1324,8 @@ class EncounterState:
     actor_end_counts: dict[str, int] = field(default_factory=dict)
     feint_off_guard_effects: list["FeintOffGuardEffect"] = field(default_factory=list)
     active_effects: list[ActiveSpellEffect] = field(default_factory=list)
+    persistent_effects: list[PersistentDamageEffect] = field(default_factory=list)
+    giant_centipede_venom_afflictions: list[GiantCentipedeVenomAffliction] = field(default_factory=list)
     active_item_effects: list[ActiveItemSpellEffect] = field(default_factory=list)
     guidance_immunities: dict[str, int] = field(default_factory=dict)
     taking_cover: set[str] = field(default_factory=set)
@@ -1144,6 +1360,11 @@ class EncounterState:
     # ``investigator.py``; keeping this list on encounter state lets allies
     # consume their own grant independently.
     investigator_weakness_bonuses: list[object] = field(default_factory=list)
+    # Alchemy keeps creator and daily-preparation provenance separate from
+    # ordinary equipment. Dynamic items are present only while unopened.
+    alchemy_states: dict[str, object] = field(default_factory=dict)
+    infused_alchemy_items: dict[str, object] = field(default_factory=dict)
+    consumed_infused_item_ids: set[str] = field(default_factory=set)
 
 
 @dataclass

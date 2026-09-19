@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pf2e.terminal as terminal
+import pf2e.content as content
 from pf2e.content import CREATURES, SETUPS, get_definition, get_setup
 from pf2e.encounter import Encounter
 from pf2e.model import Choose, EndTurn, ResultStatus, Strike
@@ -28,12 +30,14 @@ def _started_game(*rolls: int) -> Encounter:
     return game
 
 
-def test_braggart_sheet_and_setup_remain_staged_with_legal_fixed_grants() -> None:
+def test_braggart_sheet_and_setup_are_catalogued_with_legal_fixed_grants() -> None:
     definition = get_definition("swashbuckler_braggart_level_1")
     setup = get_setup(SETUP_ID)
 
-    assert definition not in CREATURES.values()
-    assert setup.setup_id not in SETUPS
+    assert CREATURES[definition.definition_id] is definition
+    assert SETUPS[setup.setup_id] is setup
+    assert definition.definition_id not in content._STAGED_CREATURES
+    assert setup.setup_id not in content._STAGED_SETUPS
     assert definition.class_name == "Swashbuckler"
     assert definition.abilities[:2] == ("swashbuckler", "swashbuckler_braggart")
     assert "Intimidating Glare" in definition.feats
@@ -42,6 +46,22 @@ def test_braggart_sheet_and_setup_remain_staged_with_legal_fixed_grants() -> Non
     assert definition.stowed_items == ("dagger_2", "dagger_3")
     assert {item.definition_id for item in definition.item_instances} == {"dagger"}
     assert setup.placements[0].definition_id == definition.definition_id
+
+
+def test_main_selects_the_catalogued_braggart_setup(monkeypatch) -> None:
+    seen = {}
+
+    def capture_run(**kwargs):
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(terminal, "run_terminal", capture_run)
+    assert terminal.main(["play", SETUP_ID, "--seed", "13", "--save-path", "braggart-save.json"]) == 0
+    assert seen == {
+        "setup": get_setup(SETUP_ID),
+        "seed": 13,
+        "save_path": "braggart-save.json",
+    }
 
 
 def test_braggart_demoralize_panache_and_ordinary_precise_strike() -> None:
@@ -305,7 +325,9 @@ def test_terminal_inspection_surfaces_panache_and_effective_speed() -> None:
     rendered = render_inspection(result.inspection, include_sheets=True)
     assert "Panache active" in rendered
     assert "Speed 30 ft" in rendered
-    assert "remain unsupported" in render_support_summary(SETUP_ID)
+    summary = render_support_summary(SETUP_ID)
+    assert "Tumble Through" in summary
+    assert "Flying Blade thrown dagger attacks" in summary
 
 
 def test_terminal_braggart_completes_demoralize_and_precise_strike_victory() -> None:

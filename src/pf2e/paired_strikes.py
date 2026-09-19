@@ -67,7 +67,6 @@ def start_paired_strikes(
     )
     if reason is not None:
         return FamilyProcedureResult(rejection=reason)
-
     hook = getattr(context.encounter, "_resolve_subordinate_strike", None)
     if not callable(hook):
         return FamilyProcedureResult(
@@ -75,6 +74,9 @@ def start_paired_strikes(
         )
 
     actor = context.actor
+    require_permitted = getattr(context.encounter, "_require_action_permitted", None)
+    if callable(require_permitted):
+        require_permitted(context.state, actor, activity_id.rsplit(":", 1)[-1], frozenset({"flourish"}))
     # The paired activity pays once; each subordinate Strike increments MAP
     # and pays its ordinary incidental costs in the core single-Strike hook.
     actor.actions_remaining -= action_cost
@@ -276,7 +278,7 @@ def validate_first_selection(
     )
     if attack_definition is None:
         return f"Attack {selection.attack_id!r} is not supported for this creature."
-    attack = context.encounter._select_attack(actor, selection.attack_id)
+    attack = context.encounter._select_attack(state, actor, selection.attack_id)
     if attack is None:
         return f"Attack {selection.attack_id!r} is not currently equipped or usable."
 
@@ -314,7 +316,10 @@ def second_strike_options(
         monk_weapons_only = False
     elif activity_id == "monk:flurry_of_blows":
         targets = tuple(context.state.creatures)
-        first_attack_id = None
+        # This selected Monk slice permits a pair only with the same attack
+        # identity.  That keeps the shared defense record within one damage
+        # type while broad mixed-type resistance remains undecided.
+        first_attack_id = first.attack_id
         ranged_only = False
         monk_weapons_only = True
     else:

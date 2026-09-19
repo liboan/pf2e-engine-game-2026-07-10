@@ -4,9 +4,11 @@ This is a local Python PF2e engine with a numbered terminal interface. You choos
 
 ## Project state and scope
 
-The approved S3i expansion is in progress: implement one selected representative build for each of the 16 Player Core and Player Core 2 classes at level 1, then level 2, then review the demonstrated implementation with Astra for useful generalization. Each selected build needs complete rules behavior and actual encounter/save evidence. Every printed subclass and nested option is not required; feat, spell, school, domain, and Alchemy menus stay deliberately small. Explicitly granted, labeled above-level fundamental-rune test gear is allowed. See the [approved roster and scope](docs/plan/06-class-and-content-expansion.md).
+The approved S3i roster remains in scope: one selected representative build for each of the 16 Player Core and Player Core 2 classes, with complete supported rules behavior and actual encounter/save evidence for every accepted slice. The authorized generalization phase is complete: shared spell-save provenance now serves ten paths; finite preparation routing and validation serve Wizard, Druid, Witch, and fixed preparations; and the existing finite `BombFacts` model serves two admitted bombs. The changes were adopted by real callers, replaced paths were removed, relevant defects were repaired, and an independent review completed. Every printed subclass and nested option remains out of scope, and feat, spell, school, domain, and Alchemy menus stay deliberately small. Explicitly granted, labeled above-level fundamental-rune test gear is allowed. See the [approved roster and scope](docs/plan/06-class-and-content-expansion.md).
 
-The [current work and recovery page](docs/work-log/ACTIVE.md) is the source for verified working counts, active owners, dependencies, blockers, last executable checkpoints, and next actions. [STATUS](STATUS.md) summarizes delivered evidence and current limits; it does not replace that recovery table.
+Further recipient progression is deferred until a new actual adopter or demonstrated drift justifies it: common save handling already covers the major risk, while remaining eligibility, completion, and rider behavior differs. Paired-policy and turn-walk work are optional. Poison, minion, and universal rules frameworks, unrelated content expansion, and wholesale rewrites remain outside scope.
+
+The [current work and recovery page](docs/work-log/ACTIVE.md) is the source for verified working counts, accepted and partial roster state, active owners, dependencies, blockers, last executable checkpoints, and next actions. [STATUS](STATUS.md) summarizes delivered evidence and current limits; it does not replace that recovery table.
 
 The pre-S3i `engine-only` baseline (`185e52b`) is historical: 21 supported setups, 16 accepted added interaction encounters, and 211 passing full-suite tests. It remains a reference checkpoint, not the current S3i working count.
 
@@ -24,6 +26,9 @@ python -m pf2e play s3 --seed 13
 python -m pf2e play s2_fleet_diagonal_assault --seed 13
 python -m pf2e play s3_long_lane_crossfire --seed 13
 python -m pf2e play sorcerer_angelic_first_cast --seed 13
+python -m pf2e play staged_braggart_swashbuckler_vs_guard_dog --seed 13
+python -m pf2e play investigator_forensic_vs_two_guard_dogs --seed 13
+python -m pf2e play staged_ranger_precision_bow --seed 13
 ```
 
 Each run starts with initiative Hero Point choices; resolve each before the first turn. Choose `Quit` in the menu to exit.
@@ -43,6 +48,27 @@ Fear, Runic Weapon, focus and spontaneous resources, saved choices, and the
 existing recovery/carry path. Broader Sorcerer and Angelic options remain
 outside scope, including offensive Heal against undead; above-level granted
 gear used by diagnostic fixtures remains explicitly labeled.
+
+The curated `staged_braggart_swashbuckler_vs_guard_dog` ID remains stable for
+existing saves and now selects the level-1 Braggart Swashbuckler from the normal
+catalog. Its admitted play covers Braggart Panache, Tumble Through, ordinary
+and first-increment Flying Blade dagger Strikes, Confident Finisher, physical
+dagger landing/recovery, and saved choices. Other styles, weapons, returning
+weapons, projectile paths, and level-2 Swashbuckler options remain outside scope.
+
+The curated `investigator_forensic_vs_two_guard_dogs` and
+`investigator_forensic_healing_vs_ally` IDs now select the level-1 Forensic
+Investigator from the normal catalog. Their bounded play includes Devise a
+Stratagem, Known Weaknesses, Battle Medicine, Forensic Acumen, Pursue a Lead,
+Skill Stratagem, and the authored Streetwise Recall/Gather paths with saved
+results. Other Investigator methodologies, settlements, bribes, and level-2
+options remain outside scope.
+
+The curated `staged_ranger_precision_bow` ID now selects the level-1 Precision
+Ranger from the normal catalog. Its combat-only play covers Fleet movement,
+Hunt Prey, Precision damage, ordinary shortbow Strikes, Hunted Shot, range,
+reactions, Grabbed reload-0 handling, and saved continuations. Seek, Track,
+Forager, and exploration procedures remain outside this accepted combat slice.
 
 `--seed` selects repeatable automatic rolls. For controlled checks, the public `Encounter.start(setup, rolls=...)` API accepts individual die faces in draw order. For example, `rolls=(20, 19, 20, 4, 1)` on `S2_PC_DUEL_SETUP` supplies Fighter A's and Fighter B's initiative d20s, then a Strike d20, its fist d4 damage roll, and the next Strike d20. Queries and rejected commands do not consume faces. Saves preserve the sequence cursor, so `Encounter.load(path)` resumes at the next face. If a requested roll exhausts the sequence, the action is rejected and the cursor stays put; the engine does not fall back to random dice.
 

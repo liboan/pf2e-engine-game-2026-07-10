@@ -14,7 +14,7 @@ from pf2e.content import (
     get_setup,
 )
 from pf2e.opponent_content import SKELETON_GUARD, ZOMBIE_SHAMBLER
-from pf2e.ranger_monk_content import RANGER_MONK_SETUPS
+from pf2e.ranger_monk_content import RANGER_MONK_SETUPS, RANGER_PRECISION
 from pf2e.barbarian_content import (
     ANIMAL_BARBARIAN_DEFINITIONS,
     ANIMAL_BARBARIAN_INITIAL_STATES,
@@ -48,6 +48,7 @@ def test_expansion_catalog_excludes_the_accepted_bear_runtime_slice() -> None:
     for setup in ANIMAL_BARBARIAN_SETUPS.values():
         assert SETUPS[setup.setup_id] == setup
     assert RANGER_MONK_SETUPS[0].setup_id in EXPANSION_SETUPS
+    assert RANGER_PRECISION.definition_id not in EXPANSION_CREATURES
     assert FIRST_FAMILIES_UNDEAD_STARTER.setup_id in EXPANSION_SETUPS
     assert EXPANSION_SETUPS[FIRST_FAMILIES_UNDEAD_STARTER.setup_id] == FIRST_FAMILIES_UNDEAD_STARTER
     assert EXPANSION_CREATURES[SKELETON_GUARD.definition.definition_id] == SKELETON_GUARD.definition

@@ -28,7 +28,7 @@ from .model import (
 
 @dataclass(frozen=True)
 class ConfidentFinisher(FamilyCommand):
-    """One-action melee Finisher that replaces Precise Strike damage."""
+    """One-action Finisher that replaces Precise Strike damage."""
 
     family_id = "martial"
     target_id: str
@@ -148,15 +148,30 @@ def precise_strike_damage_term(
     attack: AttackDefinition,
     *,
     finisher: bool = False,
+    distance_ft: int | None = None,
 ) -> DamageTerm | None:
     """Return Precise Strike's precision term for an eligible attack.
 
     Confident Finisher replaces this ordinary +2 term with 2d6 precision.
+    Flying Blade extends this only to a qualifying thrown Strike in its first
+    range increment, so callers resolving a ranged attack provide distance.
     """
 
     if not is_swashbuckler(definition):
         return None
-    if "melee" not in attack.traits or not ({"agile", "finesse"} & attack.traits):
+    if not ({"agile", "finesse"} & attack.traits):
+        return None
+    melee = "melee" in attack.traits
+    flying_blade = "Flying Blade" in definition.feats
+    thrown_first_increment = (
+        flying_blade
+        and "ranged" in attack.traits
+        and "thrown" in attack.traits
+        and attack.range_increment_ft is not None
+        and distance_ft is not None
+        and 0 < distance_ft <= attack.range_increment_ft
+    )
+    if not melee and not thrown_first_increment:
         return None
     return DamageTerm(
         source="swashbuckler_precise_strike",
@@ -197,12 +212,12 @@ def confident_finisher_failure_damage(
     return DamageResult((failure,), amount, 1, amount)
 
 
-def effective_speed_ft(actor: CreatureState, definition: CreatureDefinition) -> int:
-    """Return the actor's land Speed after Stylish Combatant's panache bonus."""
+def effective_speed_ft(actor: CreatureState, definition: CreatureDefinition, conditions=()) -> int:
+    """Return land Speed after Panache and non-stacking circumstance penalties."""
 
-    if is_swashbuckler(definition) and actor.panache:
-        return definition.land_speed_ft + 5
-    return definition.land_speed_ft
+    base = definition.land_speed_ft + (5 if is_swashbuckler(definition) and actor.panache else 0)
+    penalties = [effect.value for effect in conditions if effect.kind == "speed_penalty"]
+    return max(0, base - (max(penalties) if penalties else 0))
 
 
 def clear_panache(actor: CreatureState) -> None:

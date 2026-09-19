@@ -41,9 +41,23 @@ from .model import (
     SavedCheckContext,
 )
 from .conditions import CheckContext, ConditionValue
-from .skill_content import DEMORALIZE, ESCAPE, FEINT, GRAPPLE, TRIP, maneuver_target_size_allowed
+from .skill_content import (
+    DEMORALIZE,
+    ESCAPE,
+    FEINT,
+    GRAPPLE,
+    TRIP,
+    TUMBLE_THROUGH,
+    maneuver_target_size_allowed,
+)
 from .space import grid_distance_feet, in_bounds, is_adjacent, step_cost
-from .swashbuckler import apply_bravado_result, effective_speed_ft, is_braggart, stylish_combatant_modifiers
+from .swashbuckler import (
+    apply_bravado_result,
+    effective_speed_ft,
+    is_braggart,
+    is_swashbuckler,
+    stylish_combatant_modifiers,
+)
 
 
 Roll = Callable[[int], int]
@@ -316,6 +330,14 @@ class Grapple(FamilyCommand):
 
 
 @dataclass(frozen=True)
+class QuickJump(FamilyCommand):
+    """Use the selected Quick Jump feat for a one-action horizontal Long Jump."""
+
+    family_id: ClassVar[str] = "martial"
+    path: tuple[Position, ...]
+
+
+@dataclass(frozen=True)
 class Escape(FamilyCommand):
     family_id: ClassVar[str] = "martial"
     impediment_id: str
@@ -356,6 +378,20 @@ class Demoralize(FamilyCommand):
 class Feint(FamilyCommand):
     family_id: ClassVar[str] = "martial"
     target_id: str
+
+
+@dataclass(frozen=True)
+class TumbleThrough(FamilyCommand):
+    """One-action Acrobatics movement through a supported enemy square."""
+
+    family_id: ClassVar[str] = "martial"
+    path: tuple[Position, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.path, tuple) or not self.path:
+            raise TypeError("Tumble Through needs a nonempty tuple of path squares")
+        if any(not isinstance(point, Position) for point in self.path):
+            raise TypeError("Tumble Through path squares must be Position records")
 
 
 def _resolve_skill_check(
@@ -682,6 +718,75 @@ def _target(context: FamilyProcedureContext, target_id: str):
     return actor
 
 
+def _tumble_target(context: FamilyProcedureContext, path: tuple[Position, ...]):
+    """Find the single supported enemy square crossed by a Tumble path."""
+
+    if not isinstance(path, tuple) or not path:
+        raise ValueError("Tumble Through requires a nonempty path")
+    current = context.actor.position
+    target = None
+    for point in path:
+        if not isinstance(point, Position) or not in_bounds(
+            point, context.state.map_width, context.state.map_height
+        ):
+            raise ValueError("Tumble Through path leaves the supported map")
+        try:
+            step_cost(current, point, context.actor.diagonals_this_turn)
+        except ValueError as error:
+            raise ValueError("Tumble Through path must visit adjacent grid squares") from error
+        occupant = context.encounter._occupant_at(
+            context.state, point, except_actor=context.actor.actor_id
+        )
+        if occupant is not None:
+            if occupant.team == context.actor.team and not occupant.defeated and not occupant.unconscious and not occupant.dead:
+                raise ValueError("Tumble Through cannot enter an allied creature's space")
+            if occupant.team != context.actor.team and not occupant.defeated and not occupant.dead:
+                if target is not None and target.actor_id != occupant.actor_id:
+                    raise NotImplementedError("Tumble Through across multiple enemy spaces is not admitted")
+                target = occupant
+            elif not context.encounter._can_share_with_body(context.actor, occupant):
+                raise ValueError("Tumble Through path is blocked by an occupied square")
+        current = point
+    if target is None:
+        raise ValueError("Tumble Through requires a path through an active enemy space")
+    target_index = next(
+        index for index, point in enumerate(path)
+        if point == target.position
+    )
+    if target_index >= len(path) - 1:
+        # The source gives the failure result when Speed cannot carry the
+        # creature all the way through the enemy's space. Ending on the
+        # enemy square is the supported one-square form of that boundary.
+        raise ValueError("Tumble Through path must continue beyond the enemy's space")
+    if _definition(target).size not in {"tiny", "small", "medium"} or _definition(context.actor).size not in {"tiny", "small", "medium"}:
+        raise NotImplementedError("Tumble Through currently admits supported one-square Tiny, Small, or Medium creatures only")
+    return target
+
+
+def _tumble_path_cost(context: FamilyProcedureContext, path: tuple[Position, ...], target) -> int:
+    distance = 0
+    diagonals = context.actor.diagonals_this_turn
+    current = context.actor.position
+    for point in path:
+        cost, diagonal_count = step_cost(current, point, diagonals)
+        if point == target.position:
+            cost *= 2
+        distance += cost
+        diagonals += diagonal_count
+        current = point
+    return distance
+
+
+def _tumble_remaining_path(context: FamilyProcedureContext, path: tuple[Position, ...]) -> tuple[Position, ...]:
+    """Return the unperformed suffix after a clear lead-in has moved."""
+
+    try:
+        current_index = path.index(context.actor.position)
+    except ValueError:
+        return path
+    return path[current_index + 1:]
+
+
 def _check_maneuver(
     context: FamilyProcedureContext,
     target,
@@ -745,6 +850,10 @@ def _action_id(command: FamilyCommand) -> str:
         return "demoralize"
     if isinstance(command, Feint):
         return "feint"
+    if isinstance(command, TumbleThrough):
+        return "tumble_through"
+    if isinstance(command, QuickJump):
+        return "quick_jump"
     raise TypeError("unknown skill-action command")
 
 
@@ -757,6 +866,10 @@ def _check_statistic(command: FamilyCommand) -> str:
         return "intimidation"
     if isinstance(command, Feint):
         return "deception"
+    if isinstance(command, TumbleThrough):
+        return "acrobatics"
+    if isinstance(command, QuickJump):
+        return "athletics"
     raise TypeError("unknown skill-action command")
 
 
@@ -1123,6 +1236,30 @@ def _start_skill_action_check(
             attack_traits=frozenset({"melee"}),
             actor_end_counts=context.state.actor_end_counts,
         ))
+    if isinstance(command, TumbleThrough):
+        # Tumble's check occurs on entering the enemy square.  Move through
+        # any clear lead-in squares first, including their ordinary departure
+        # reaction windows, then resolve the saved check at the enemy space.
+        target = _tumble_target(context, command.path)
+        target_index = next(index for index, point in enumerate(command.path) if point == target.position)
+        continuation = ActionContinuation(
+            kind="movement",
+            actor_id=context.actor.actor_id,
+            target_id=target.actor_id,
+            path=command.path[:target_index],
+            movement_kind="tumble_through",
+            mode="tumble_through",
+            stage="tumble_through_lead_in",
+            seen_reactors=[],
+            tumble_command=command,
+            tumble_saved_check=saved,
+            tumble_distance=_tumble_path_cost(context, command.path, target),
+        )
+        return FamilyProcedureResult(
+            events=tuple(context.encounter._advance_continuation(
+                context.state, context.dice, continuation
+            ))
+        )
     # The shared target gate must precede Guidance and the underlying skill
     # result. Assurance already has a saved fixed result, so it follows the
     # same gate and simply skips the later Hero Point skill reroll.
@@ -1173,7 +1310,207 @@ def _finish_checked_action(
         return _finish_demoralize(context, command, saved_check)
     if isinstance(command, Feint):
         return _finish_feint(context, command, saved_check)
+    if isinstance(command, TumbleThrough):
+        return _finish_tumble_through(context, command, saved_check)
+    if isinstance(command, QuickJump):
+        return _finish_quick_jump(context, command, saved_check)
     return FamilyProcedureResult(unsupported="The saved skill-action command is not admitted.")
+
+
+def _quick_jump_path(context: FamilyProcedureContext, command: QuickJump) -> tuple[Position, ...]:
+    """Validate the flat-map horizontal path chosen before the Long Jump check."""
+    actor = context.actor
+    if actor.prone:
+        raise ValueError("Stand before using Quick Jump.")
+    if effective_speed_ft(actor, context.definition, _conditions_for_target(context, actor)) < 15:
+        raise ValueError("Quick Jump requires at least 15-foot Speed.")
+    if not isinstance(command.path, tuple) or not command.path:
+        raise ValueError("Quick Jump requires a nonempty straight horizontal path.")
+    current = actor.position
+    direction: tuple[int, int] | None = None
+    distance = 0
+    for point in command.path:
+        if not isinstance(point, Position) or not in_bounds(
+            point, context.state.map_width, context.state.map_height
+        ):
+            raise ValueError("Quick Jump path leaves the supported map.")
+        delta = (point.x - current.x, point.y - current.y)
+        if delta not in {(1, 0), (-1, 0), (0, 1), (0, -1)}:
+            raise ValueError("Quick Jump supports a straight cardinal horizontal path.")
+        if direction is None:
+            direction = delta
+        elif delta != direction:
+            raise ValueError("Quick Jump path must remain straight.")
+        occupant = context.encounter._occupant_at(
+            context.state, point, except_actor=actor.actor_id
+        )
+        if occupant is not None and not occupant.defeated:
+            raise ValueError("Quick Jump path is blocked by an occupied square.")
+        distance += 5
+        current = point
+    if distance > effective_speed_ft(actor, context.definition, _conditions_for_target(context, actor)):
+        raise ValueError("Quick Jump cannot exceed your Speed.")
+    if actor.must_leave_occupied:
+        raise ValueError("Move out of the occupied ally's space before using Quick Jump.")
+    return command.path
+
+
+def _finish_quick_jump(
+    context: FamilyProcedureContext,
+    command: QuickJump,
+    check_context: SavedCheckContext,
+) -> FamilyProcedureResult:
+    """Apply a Quick Jump Long Jump result through ordinary movement reactions."""
+    check = check_context.result
+    if check is None:
+        return FamilyProcedureResult(rejection="Quick Jump requires a resolved Athletics check.")
+    path = _quick_jump_path(context, command)
+    distance_by_degree = {
+        DegreeOfSuccess.CRITICAL_SUCCESS: 30,
+        DegreeOfSuccess.SUCCESS: 15,
+        DegreeOfSuccess.FAILURE: 5,
+        DegreeOfSuccess.CRITICAL_FAILURE: 0,
+    }
+    maximum = min(
+        distance_by_degree[check.degree], effective_speed_ft(context.actor, context.definition, _conditions_for_target(context, context.actor))
+    )
+    events = [Event(
+        "quick_jump_check",
+        context.actor.actor_id,
+        None,
+        f"{context.actor.label} attempts Quick Jump: {check.degree.label()} "
+        f"({check.total} vs DC {check.dc}); up to {maximum} feet.",
+        check=check,
+    )]
+    if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
+        context.actor.prone = True
+        events.append(Event(
+            "condition_applied", context.actor.actor_id, context.actor.actor_id,
+            f"{context.actor.label} falls prone after the failed Quick Jump.", check=check,
+        ))
+        return _complete_action_unless_paused(context, events)
+    jumped_path = path[: maximum // 5]
+    if not jumped_path:
+        return _complete_action_unless_paused(context, events)
+    continuation = ActionContinuation(
+        kind="movement",
+        actor_id=context.actor.actor_id,
+        path=jumped_path,
+        movement_kind="quick_jump",
+        seen_reactors=[],
+    )
+    events.append(Event(
+        "quick_jump_started", context.actor.actor_id, None,
+        f"{context.actor.label} begins a {len(jumped_path) * 5}-foot Quick Jump.",
+    ))
+    events.extend(context.encounter._advance_continuation(
+        context.state, context.dice, continuation
+    ))
+    return FamilyProcedureResult(events=tuple(events))
+
+
+def _bravado_event(context: FamilyProcedureContext, result: str | None, check: CheckResult) -> Event | None:
+    if result is None:
+        return None
+    if result == "panache_gained":
+        text = f"{context.actor.label} gains Panache from Bravado."
+    elif result == "panache_gained_temporarily":
+        text = f"{context.actor.label} gains temporary Panache from Bravado through the end of the next turn."
+    elif result == "panache_refreshed":
+        text = f"{context.actor.label}'s Panache becomes lasting."
+    else:
+        text = f"{context.actor.label}'s temporary Panache is extended."
+    return Event(result, context.actor.actor_id, None, text, check=check)
+
+
+def _finish_tumble_through(
+    context: FamilyProcedureContext,
+    command: TumbleThrough,
+    check_context: SavedCheckContext,
+) -> FamilyProcedureResult:
+    """Apply the Acrobatics result, then enter normal movement reactions."""
+
+    lead_in = check_context.parent_continuation
+    movement_path = command.path
+    try:
+        if lead_in is not None and lead_in.stage == "tumble_through_lead_in":
+            movement_path = _tumble_remaining_path(context, command.path)
+            target = _tumble_target(context, movement_path)
+            if target.actor_id != lead_in.target_id:
+                raise ValueError("The Tumble Through enemy space changed before the check resolved.")
+            distance = lead_in.tumble_distance
+            if distance is None:
+                raise ValueError("The saved Tumble Through movement distance is missing.")
+        else:
+            target = _tumble_target(context, movement_path)
+            distance = _tumble_path_cost(context, movement_path, target)
+    except NotImplementedError as error:
+        return FamilyProcedureResult(unsupported=str(error))
+    except ValueError as error:
+        return FamilyProcedureResult(rejection=str(error))
+    check = check_context.result
+    if check is None:
+        return FamilyProcedureResult(rejection="The saved Tumble Through check has not been resolved.")
+    events: list[Event] = [_event_check("tumble_through", context.actor, target, check)]
+    # The movement limit is fixed when the action begins. Bravado grants its
+    # Panache result after the check; it cannot retroactively add five feet to
+    # the movement that was already attempted.
+    enough_speed = distance <= effective_speed_ft(context.actor, context.definition, _conditions_for_target(context, context.actor))
+    success = check.degree >= DegreeOfSuccess.SUCCESS and enough_speed
+    bravado_degree = (
+        check.degree
+        if success or check.degree is DegreeOfSuccess.CRITICAL_FAILURE
+        else DegreeOfSuccess.FAILURE
+    )
+    panache = apply_bravado_result(
+        context.actor,
+        context.definition,
+        bravado_degree,
+        current_end_count=context.state.actor_end_counts.get(context.actor.actor_id, 0),
+    )
+    panache_event = _bravado_event(context, panache, check)
+    if panache_event is not None:
+        events.append(panache_event)
+    if success:
+        continuation = ActionContinuation(
+            kind="movement",
+            actor_id=context.actor.actor_id,
+            target_id=target.actor_id,
+            path=movement_path,
+            movement_kind="tumble_through",
+            mode="tumble_through",
+            stage="tumble_through_success",
+            seen_reactors=list(lead_in.seen_reactors) if lead_in is not None else [],
+        )
+        events.extend(context.encounter._advance_continuation(context.state, context.dice, continuation))
+        return FamilyProcedureResult(events=tuple(events))
+
+    reason = "fails the Acrobatics check" if check.degree < DegreeOfSuccess.SUCCESS else (
+        f"does not have enough Speed to cross the enemy's space ({distance} feet required)"
+    )
+    events.append(Event(
+        "tumble_through_failed",
+        context.actor.actor_id,
+        target.actor_id,
+        f"{context.actor.label}'s Tumble Through {reason}; movement ends in {context.actor.position.x},{context.actor.position.y}.",
+        check=check,
+        position=context.actor.position,
+    ))
+    # Failure triggers reactions as if the actor moved out of its starting
+    # square, even though the actor remains there. The movement continuation
+    # gives the ordinary reaction/save machinery a persisted parent.
+    continuation = ActionContinuation(
+        kind="movement",
+        actor_id=context.actor.actor_id,
+        target_id=target.actor_id,
+        path=(),
+        movement_kind="tumble_through",
+        mode="tumble_through",
+        stage="tumble_through_failure",
+        seen_reactors=[],
+    )
+    events.extend(context.encounter._advance_continuation(context.state, context.dice, continuation))
+    return FamilyProcedureResult(events=tuple(events))
 
 
 def _complete_action_unless_paused(context: FamilyProcedureContext, events: list[Event]) -> FamilyProcedureResult:
@@ -1326,8 +1663,11 @@ def _escape(context: FamilyProcedureContext, command: Escape) -> FamilyProcedure
     if context.escape_locked:
         return FamilyProcedureResult(rejection="A critical failure bars Escape until the start of your next turn.")
     effect = _active_effect(context, command.impediment_id)
-    if effect is None or effect.target_actor_id != context.actor.actor_id or effect.kind not in {"grabbed", "immobilized", "restrained"}:
-        return FamilyProcedureResult(rejection="Escape must select a current grabbed, immobilized, or restrained effect on the acting creature.")
+    if effect is None or effect.target_actor_id != context.actor.actor_id or (
+        effect.kind not in {"grabbed", "immobilized", "restrained"}
+        and not (effect.kind == "speed_penalty" and effect.effect_id.startswith("tangle_vine:"))
+    ):
+        return FamilyProcedureResult(rejection="Escape must select a current grabbed, immobilized, restrained, or Tangle Vine effect on the acting creature.")
     if effect.source_actor_id not in context.state.creatures:
         return FamilyProcedureResult(unsupported="Escape against a non-creature effect needs a source-specific difficulty rule.")
     source = context.state.creatures[effect.source_actor_id]
@@ -1368,15 +1708,20 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
     outcome = escape_outcome_from_check(check_context.result)
     events = [_event_check("escape", context.actor, source, outcome.check)]
     if outcome.free_of_selected_impediment:
+        linked_vine = effect.effect_id.startswith("tangle_vine:")
         removed_effects = tuple(
             current for current in context.state.condition_effects
-            if current.source_actor_id == effect.source_actor_id
-            and current.target_actor_id == context.actor.actor_id
-            and current.kind in {"grabbed", "immobilized", "restrained"}
+            if (
+                current.effect_id == effect.effect_id
+                or (
+                    linked_vine
+                    and current.effect_id.rsplit(":", 1)[0] == effect.effect_id.rsplit(":", 1)[0]
+                )
+            )
         )
         removed_ids = {current.effect_id for current in removed_effects}
         context.state.condition_effects = [current for current in context.state.condition_effects if current.effect_id not in removed_ids]
-        events.append(Event("condition_removed", context.actor.actor_id, source.actor_id, f"{context.actor.label} escapes the grabbed, immobilized, or restrained effects imposed by {source.label}.", check=outcome.check))
+        events.append(Event("condition_removed", context.actor.actor_id, source.actor_id, f"{context.actor.label} escapes the selected effect imposed by {source.label}.", check=outcome.check))
     if outcome.retry_blocked_until_next_turn:
         # Core persists this action-only lockout separately from conditions so
         # it cannot leak into skill/DC modifier calculation.
@@ -1410,7 +1755,7 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
 
 
 def _escape_stride_destinations(context: FamilyProcedureContext):
-    if context.actor.prone or effective_speed_ft(context.actor, _definition(context.actor)) < 10:
+    if context.actor.prone or effective_speed_ft(context.actor, _definition(context.actor), _conditions_for_target(context, context.actor)) < 10:
         return ()
     destinations = []
     for dx in (-1, 0, 1):
@@ -1687,6 +2032,43 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
     """Run one of the currently admitted common skill-action procedures."""
 
     command = context.command
+    if isinstance(command, QuickJump):
+        if context.actor.actions_remaining < 1:
+            return FamilyProcedureResult(rejection="Quick Jump requires one action.")
+        if "Quick Jump" not in context.definition.feats:
+            return FamilyProcedureResult(unsupported="Quick Jump is not admitted for this creature.")
+        try:
+            _quick_jump_path(context, command)
+        except ValueError as error:
+            return FamilyProcedureResult(rejection=str(error))
+        from .skill_content import QUICK_JUMP
+
+        return _start_skill_action_check(
+            context, command, "athletics", 15, QUICK_JUMP.traits
+        )
+    if isinstance(command, TumbleThrough):
+        if context.actor.actions_remaining < TUMBLE_THROUGH.action_cost:
+            return FamilyProcedureResult(rejection="Tumble Through requires one action.")
+        try:
+            target = _tumble_target(context, command.path)
+            dc = _save_dc(context, target, "reflex")
+            traits = TUMBLE_THROUGH.traits if is_swashbuckler(context.definition) else frozenset({"move"})
+            context.require_action_permitted(TUMBLE_THROUGH.action_id, traits)
+        except NotImplementedError as error:
+            return FamilyProcedureResult(unsupported=str(error))
+        except ValueError as error:
+            return FamilyProcedureResult(rejection=str(error))
+        return _start_skill_action_check(
+            context,
+            command,
+            "acrobatics",
+            dc,
+            traits,
+            extra_modifiers=(
+                stylish_combatant_modifiers(context.definition)
+                if is_swashbuckler(context.definition) else ()
+            ),
+        )
     if isinstance(command, Feint):
         if context.actor.actions_remaining < FEINT.action_cost:
             return FamilyProcedureResult(rejection="Feint requires one action.")
@@ -1758,7 +2140,7 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
         command = pending.family_command
         saved = pending.saved_check
         if (
-            not isinstance(command, (Trip, Grapple, Demoralize, Feint))
+            not isinstance(command, (Trip, Grapple, Demoralize, Feint, TumbleThrough))
             or saved is None
             or (saved.result is not None and not getattr(command, "use_assurance", False))
             or continuation.stage != f"{_action_id(command)}_skill_targeting"
@@ -1854,7 +2236,7 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
         saved = pending.saved_check
         action_id = pending.procedure_id.split(":")[1]
         if (
-            not isinstance(command, (Trip, Grapple, Escape, Demoralize, Feint))
+            not isinstance(command, (Trip, Grapple, Escape, Demoralize, Feint, TumbleThrough, QuickJump))
             or _action_id(command) != action_id
             or saved is None or saved.result is not None
             or continuation.stage != f"{action_id}_skill_guidance"
@@ -1878,7 +2260,7 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
         saved = pending.saved_check
         action_id = pending.procedure_id.split(":")[1]
         if (
-            not isinstance(command, (Trip, Grapple, Escape, Demoralize, Feint))
+            not isinstance(command, (Trip, Grapple, Escape, Demoralize, Feint, TumbleThrough, QuickJump))
             or _action_id(command) != action_id
             or saved is None or saved.result is None or saved.reroll_used
             or continuation.stage != f"{action_id}_skill_hero_point"
@@ -2021,7 +2403,7 @@ def validate_pending(context: FamilyProcedureContext) -> None:
         command = pending.family_command
         continuation = pending.continuation
         saved = pending.saved_check
-        if not isinstance(command, (Trip, Grapple, Escape, Demoralize, Feint)) or saved is None or continuation is None:
+        if not isinstance(command, (Trip, Grapple, Escape, Demoralize, Feint, TumbleThrough, QuickJump)) or saved is None or continuation is None:
             raise ValueError("save has an incomplete skill-action check choice")
         action_id = _action_id(command)
         is_guidance = pending.procedure_id == f"skill_actions:{action_id}:guidance"
@@ -2120,7 +2502,7 @@ def validate_targeting_pending(context: FamilyProcedureContext) -> None:
     if (
         pending is None
         or continuation is None
-        or not isinstance(command, (Trip, Grapple, Demoralize, Feint))
+        or not isinstance(command, (Trip, Grapple, Demoralize, Feint, TumbleThrough))
         or saved is None
         or pending.kind != "concealment_hero_reroll"
         or pending.family_id != "martial"

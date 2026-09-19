@@ -69,7 +69,7 @@ def _ranger_definition(edge: str) -> CreatureDefinition:
         hp=20,
         ac=18,
         perception=7,
-        land_speed_ft=25,
+        land_speed_ft=30,
         attacks=(
             AttackDefinition(
                 attack_id="shortbow",
@@ -94,7 +94,7 @@ def _ranger_definition(edge: str) -> CreatureDefinition:
             AttackDefinition(
                 attack_id="fist",
                 name="Fist",
-                modifier=4,
+                modifier=7,
                 reach_ft=5,
                 traits=frozenset({"attack", "melee", "agile", "finesse", "nonlethal", "unarmed"}),
                 damage_type="bludgeoning",
@@ -108,20 +108,20 @@ def _ranger_definition(edge: str) -> CreatureDefinition:
         kind="pc",
         health_mode=HealthMode.PC,
         abilities=(*_RANGER_ABILITIES, f"hunter_edge_{edge}"),
-        feats=("Natural Skill", "Forager", f"Hunter's Edge ({label})", "Hunted Shot"),
+        feats=("Natural Skill", "Forager", "Fleet", f"Hunter's Edge ({label})", "Hunted Shot"),
         ability_modifiers=_RANGER_ABILITY_MODIFIERS,
         skills=_RANGER_SKILLS,
         saves=_RANGER_SAVES,
         proficiencies=_RANGER_PROFICIENCIES,
         sheet_notes=(
-            "Level-1 Human Ranger; Scout background. Key attribute Dexterity +4; ancestry/background/free boosts recorded in the selected ability modifiers.",
+            "Level-1 Versatile Human Ranger; the heritage selects the general feat Fleet, increasing land Speed from 25 to 30 feet. Key attribute Dexterity +4; ancestry/background/free boosts recorded in the selected ability modifiers.",
             "Class skills: Nature and Survival, plus Acrobatics, Athletics, Medicine, and Stealth. Scout's duplicate Survival training grants Deception as the replacement skill, and adds Forest Lore and Forager; Natural Skill trains Crafting and Society.",
             "Hunt Prey is a one-action concentrate action with no numeric range limit. Select one printed Hunter's Edge; this build uses the displayed edge.",
             "Hunted Shot is the selected level-1 class feat. Both subordinate Strikes use this held reload-0 shortbow and target current hunted prey; each consumes an arrow.",
-            "Shortbow: 1d6 piercing, range increment 60 feet, maximum 360 feet, deadly d10; no Strength damage.",
+            "Shortbow: 1d6 piercing, range increment 60 feet, maximum 360 feet, deadly d10; no Strength damage. Fist: +7 using Dexterity through finesse, 1d4+1 bludgeoning using Strength for damage.",
             "Human ancestry HP 8 + Ranger class HP 10 + Constitution 2 = 20 HP. Leather armor, trained light armor, Dexterity +4 gives AC 18.",
-            "Sources: https://2e.aonprd.com/Classes.aspx?ID=36; https://2e.aonprd.com/Backgrounds.aspx; https://2e.aonprd.com/Actions.aspx?ID=2257; https://2e.aonprd.com/HuntersEdge.aspx?ID=4; https://2e.aonprd.com/HuntersEdge.aspx?ID=5; https://2e.aonprd.com/HuntersEdge.aspx?ID=6; https://2e.aonprd.com/Feats.aspx?ID=4861; https://2e.aonprd.com/Feats.aspx?ID=4479; https://2e.aonprd.com/Weapons.aspx?ID=437",
-            "Forager is a granted exploration skill feat; the encounter engine does not claim an exploration procedure for it.",
+            "Sources: https://2e.aonprd.com/Classes.aspx?ID=36; https://2e.aonprd.com/Heritages.aspx?ID=262; https://2e.aonprd.com/Feats.aspx?ID=5150; https://2e.aonprd.com/Traits.aspx?ID=602; https://2e.aonprd.com/Actions.aspx?ID=2257; https://2e.aonprd.com/HuntersEdge.aspx?ID=4; https://2e.aonprd.com/HuntersEdge.aspx?ID=5; https://2e.aonprd.com/HuntersEdge.aspx?ID=6; https://2e.aonprd.com/Feats.aspx?ID=4861; https://2e.aonprd.com/Feats.aspx?ID=4479; https://2e.aonprd.com/Weapons.aspx?ID=437",
+            "Forager remains a granted exploration skill feat recorded on this sheet; it does not gate the combat-only Ranger acceptance.",
         ),
         held_items=("shortbow",),
         worn_items=("leather_armor",),
@@ -232,7 +232,7 @@ MONK = CreatureDefinition(
         "Powerful Fist changes fist damage to 1d6 and removes the –2 circumstance penalty for a lethal fist Strike.",
         "Monastic Weaponry is the selected level-1 class feat. The held kama is a one-handed martial monk weapon: 1d6 slashing, agile, trip; it may replace an unarmed Strike in Flurry.",
         "Sources: https://2e.aonprd.com/Classes.aspx?ID=60; https://2e.aonprd.com/Backgrounds.aspx?ID=432; https://2e.aonprd.com/Feats.aspx?ID=5979; https://2e.aonprd.com/Feats.aspx?ID=4479; https://2e.aonprd.com/Weapons.aspx",
-        "Quick Jump is the background's granted skill feat; no special jumping procedure is claimed in this combat-focused slice.",
+        "Quick Jump is the background's granted skill feat; the selected slice supports its one-action horizontal Long Jump result on these flat maps.",
     ),
     held_items=("kama",),
     hero_points=1,
@@ -270,3 +270,29 @@ RANGER_MONK_SETUP = EncounterSetup(
 )
 
 RANGER_MONK_SETUPS = (RANGER_MONK_SETUP,)
+
+
+MONK_KAMA_FLURRY_SETUP = EncounterSetup(
+    setup_id="staged_monk_kama_flurry",
+    name="Staged Monk Kama Flurry",
+    width=5,
+    height=3,
+    placements=(
+        CreaturePlacement("monk", MONK.definition_id, "Monk", "blue", Position(1, 1)),
+        CreaturePlacement("guard_dog_a", "guard_dog_mc2924", "Guard Dog A", "red", Position(2, 1)),
+        CreaturePlacement("guard_dog_b", "guard_dog_mc2924", "Guard Dog B", "red", Position(2, 2)),
+    ),
+)
+
+
+RANGER_PRECISION_BOW_SETUP = EncounterSetup(
+    setup_id="staged_ranger_precision_bow",
+    name="Staged Precision Ranger Bow",
+    width=26,
+    height=3,
+    placements=(
+        CreaturePlacement("ranger", RANGER_PRECISION.definition_id, "Precision Ranger", "blue", Position(0, 1)),
+        CreaturePlacement("guard_dog_a", "guard_dog_mc2924", "Guard Dog A", "red", Position(24, 1)),
+        CreaturePlacement("guard_dog_b", "guard_dog_mc2924", "Guard Dog B", "red", Position(20, 2)),
+    ),
+)

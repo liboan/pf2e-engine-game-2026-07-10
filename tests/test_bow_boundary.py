@@ -90,22 +90,17 @@ def test_reload_profile_survives_encounter_save_and_load(tmp_path) -> None:
     assert loaded_bow.reload == 0
 
 
-def test_grabbed_reload_zero_bow_strike_is_unsupported_without_spending_anything() -> None:
+def test_grabbed_reload_zero_bow_checks_before_launch_without_spending_arrow_or_map() -> None:
     game = _game()
     _grab_archer(game)
-    before_state = deepcopy(game._state)
-    before_dice = game._dice.to_data()
-
     result = game.execute(Strike("guard_dog_a", "shortbow"))
 
-    assert result.status is ResultStatus.UNSUPPORTED
-    assert "Grabbed" in result.message
-    assert "reload-0" in result.message
-    assert "awaits adjudication" in result.message
-    assert game._state == before_state
-    assert game._dice.to_data() == before_dice
+    assert result.status is ResultStatus.PAUSED
+    choice = result.inspection.choice
+    assert choice is not None and choice.kind == "grabbed_manipulate_hero_reroll"
+    assert any(event.kind == "grabbed_manipulate_flat_check" for event in result.events)
     archer = game._state.creatures["fighter_r"]
-    assert archer.actions_remaining == before_state.creatures["fighter_r"].actions_remaining
+    assert archer.actions_remaining == 2
     assert archer.strikes_this_turn == 0
     assert archer.ammunition["arrow"] == 20
 
@@ -152,4 +147,7 @@ def test_ungrabbed_ranged_strike_still_offers_the_existing_reactive_strike() -> 
     assert result.inspection.choice.kind == "reaction"
     assert result.inspection.choice.owner_actor_id == "fighter_m"
     assert game._state.creatures["fighter_r"].actions_remaining == 2
-    assert game._state.creatures["fighter_r"].ammunition["arrow"] == 19
+    # The arrow and MAP commit only when the ranged attack actually launches,
+    # after a possible Reactive Strike resolves.
+    assert game._state.creatures["fighter_r"].ammunition["arrow"] == 20
+    assert game._state.creatures["fighter_r"].strikes_this_turn == 0

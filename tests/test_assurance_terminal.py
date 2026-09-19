@@ -23,14 +23,14 @@ def test_terminal_dispatches_numbered_assurance_trip_without_a_second_choice() -
         inputs=[
             "2", "1",  # keep Fighter A's initiative
             "2", "1",  # keep Fighter B's initiative
-            "13",      # Trip (Assurance)
+            "14",      # Trip (Assurance)
             "1", "1",  # Fighter B; free hand
-            "19",      # quit from the ordinary action menu
+            "20",      # quit from the ordinary action menu
         ],
     )
 
     assert result == 0
-    assert "13. Trip (Assurance)" in transcript
+    assert "14. Trip (Assurance)" in transcript
     assert "Fighter A uses Assurance (Athletics) for Trip against Fighter B: Failure (13 vs DC 16)." in transcript
     assert transcript.count("Choice prompt action:") == 2
     assert "may use Guidance for this check" not in transcript
@@ -44,13 +44,13 @@ def test_terminal_assurance_save_load_can_finish_a_real_encounter(tmp_path) -> N
         inputs=[
             "2", "1",  # keep Fighter A's initiative
             "2", "1",  # keep Fighter B's initiative
-            "13", "1", "1",  # Trip (Assurance), Fighter B, free hand
-            "16", "",  # save at the post-Assurance action boundary
-            "17", "",  # load the saved action boundary
+            "14", "1", "1",  # Trip (Assurance), Fighter B, free hand
+            "17", "",  # save at the post-Assurance action boundary
+            "18", "",  # load the saved action boundary
             "4", "1", "1", "1", "1",  # longsword, Fighter B, slashing, default damage
             "2", "1",  # keep the ordinary Strike check
             "2", "1",  # apply the normal health outcome
-            "5",  # quit after the blue team wins
+            "6",  # quit after the blue team wins
         ],
     )
 

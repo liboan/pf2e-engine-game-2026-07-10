@@ -18,7 +18,7 @@ import pytest
 import pf2e.content as content
 from pf2e import Rage
 from pf2e.encounter import Encounter
-from pf2e.investigator import DeviseStratagem, RecallKnowledge
+from pf2e.investigator import ATTACK_STRATAGEM, DeviseStratagem, RecallKnowledge
 from pf2e.investigator_content import (
     FORENSIC_INVESTIGATOR_HEALING_SETUP,
     GUARD_DOG_KNOWLEDGE,
@@ -116,7 +116,7 @@ def test_healthy_known_weaknesses_fight_saves_ordered_check_wins_and_carries_sub
     _settle_initiative(game)
     assert game.inspect().turn_actor_id == "forensic_investigator"
 
-    started = game.execute(DeviseStratagem("healing_dog", known_weaknesses=True))
+    started = game.execute(DeviseStratagem("healing_dog", mode=ATTACK_STRATAGEM, known_weaknesses=True))
     assert started.status is ResultStatus.PAUSED
     assert started.inspection.choice is not None
     assert started.inspection.choice.kind == "family_action"
@@ -268,7 +268,7 @@ def test_known_weaknesses_bonus_ignores_skill_attack_and_wrong_target_then_miss_
     _register(monkeypatch, setup)
     game = Encounter.start(setup, rolls=(20, 10, 2, 1, 20, 14, 10, 1, 1))
     _settle_initiative(game)
-    started = game.execute(DeviseStratagem("knowledge_dog", known_weaknesses=True))
+    started = game.execute(DeviseStratagem("knowledge_dog", mode=ATTACK_STRATAGEM, known_weaknesses=True))
     assert started.status is ResultStatus.PAUSED
     assert _choose(game, "keep").status is ResultStatus.COMPLETED
     assert {

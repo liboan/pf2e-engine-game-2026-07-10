@@ -1,8 +1,8 @@
-"""Level-1 Braggart Swashbuckler staged content.
+"""Curated level-1 Braggart Swashbuckler content.
 
 This is the first public Swashbuckler slice: Braggart Demoralize, Panache,
-ordinary melee Precise Strike, and melee Confident Finisher. Flying Blade's
-thrown attack and Tumble Through remain explicitly deferred.
+ordinary melee Precise Strike, melee Confident Finisher, and Flying Blade
+throws through a dagger's first range increment. Tumble Through is supported.
 
 Sources checked 2026-09-16:
 
@@ -12,8 +12,9 @@ Sources checked 2026-09-16:
 * https://2e.aonprd.com/Actions.aspx?ID=2395
 * https://2e.aonprd.com/Actions.aspx?ID=2818
 * https://2e.aonprd.com/Traits.aspx?ID=802
+* https://2e.aonprd.com/Actions.aspx?ID=2370
 * https://2e.aonprd.com/Feats.aspx?ID=6130
-* https://2e.aonprd.com/Weapons.aspx?ID=400 (Dagger)
+* https://2e.aonprd.com/Weapons.aspx?ID=358 (Dagger)
 """
 
 from .items import ItemInstance
@@ -34,6 +35,21 @@ BRAGGART_SWASHBUCKLER = CreatureDefinition(
             modifier=7,
             reach_ft=5,
             traits=frozenset({"attack", "melee", "agile", "finesse", "thrown", "weapon"}),
+            damage_type="piercing",
+            damage_dice=(4,),
+            damage_modifier=2,
+            item_id="dagger",
+            attack_attribute="dexterity",
+            damage_attribute="strength",
+            range_increment_ft=10,
+            max_range_ft=60,
+        ),
+        AttackDefinition(
+            attack_id="dagger_thrown",
+            name="Dagger (Thrown)",
+            modifier=7,
+            reach_ft=0,
+            traits=frozenset({"attack", "ranged", "agile", "finesse", "thrown", "weapon"}),
             damage_type="piercing",
             damage_dice=(4,),
             damage_modifier=2,
@@ -114,17 +130,17 @@ BRAGGART_SWASHBUCKLER = CreatureDefinition(
         "Braggart makes Demoralize a bravado action. Stylish Combatant adds +1 circumstance to the in-combat check.",
         "Panache grants a +5-foot status bonus to Speed; success or critical success is lasting, while ordinary failure lasts through the end of the next turn.",
         "Ordinary Dagger Strikes are agile and finesse melee attacks and add +2 precision from Precise Strike, with or without panache.",
-        "Three individually tracked daggers are granted; melee Confident Finisher is supported, while thrown attacks and Tumble Through remain unsupported in this staged first slice.",
+        "Three individually tracked daggers are granted. Flying Blade permits agile or finesse thrown dagger Precise Strike and Confident Finisher only in the first 10-foot range increment; a thrown dagger lands in the target's cell for ordinary recovery.",
         "Starting gear is leather armor and three daggers; the selected sheet preserves the remaining starting money as an authored inventory note.",
         "Selected skills: Acrobatics, Athletics, Deception, Diplomacy, Intimidation, Nature, Stealth, Survival, Thievery, and Warfare Lore.",
-        "Sources: https://2e.aonprd.com/Classes.aspx?ID=63; https://2e.aonprd.com/Styles.aspx; https://2e.aonprd.com/Traits.aspx?ID=801; https://2e.aonprd.com/Actions.aspx?ID=2395; https://2e.aonprd.com/Actions.aspx?ID=2818; https://2e.aonprd.com/Traits.aspx?ID=802; https://2e.aonprd.com/Feats.aspx?ID=6130; https://2e.aonprd.com/Weapons.aspx?ID=400",
+        "Sources: https://2e.aonprd.com/Classes.aspx?ID=63; https://2e.aonprd.com/Styles.aspx; https://2e.aonprd.com/Traits.aspx?ID=801; https://2e.aonprd.com/Actions.aspx?ID=2370; https://2e.aonprd.com/Actions.aspx?ID=2395; https://2e.aonprd.com/Actions.aspx?ID=2818; https://2e.aonprd.com/Traits.aspx?ID=802; https://2e.aonprd.com/Feats.aspx?ID=6130; https://2e.aonprd.com/Weapons.aspx?ID=358",
     ),
 )
 
 
 BRAGGART_SWASHBUCKLER_SETUP = EncounterSetup(
     setup_id="staged_braggart_swashbuckler_vs_guard_dog",
-    name="Staged Braggart Panache, Precise Strike, and Confident Finisher",
+    name="Curated Braggart Panache, Precise Strike, and Confident Finisher",
     width=5,
     height=3,
     placements=(

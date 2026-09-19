@@ -46,7 +46,7 @@ class _MainPlayScript:
                 "1",  # Choose the caster as Blood Magic recipient.
                 "2",  # Resolve the restored willingness choice.
                 "1",  # The ally is willing.
-                "18",  # Quit after the supported cast.
+                "19",  # Quit after the supported cast.
             )
         )
 

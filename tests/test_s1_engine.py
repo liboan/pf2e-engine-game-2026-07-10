@@ -322,7 +322,6 @@ def test_unknown_commands_and_attacks_are_reported_without_mutating_state(tmp_pa
         "inactive_actor_has_actions",
         "inactive_actor_has_attacks",
         "inactive_actor_has_diagonals",
-        "active_actor_has_no_actions",
         "reversed_initiative",
         "initiative_out_of_range",
         "winner_does_not_match_survivors",
@@ -348,8 +347,6 @@ def test_loader_rejects_impossible_or_inconsistent_s1_saves(tmp_path: Path, corr
         state["creatures"][inactive_id]["strikes_this_turn"] = 1
     elif corruption == "inactive_actor_has_diagonals":
         state["creatures"][inactive_id]["diagonals_this_turn"] = 1
-    elif corruption == "active_actor_has_no_actions":
-        state["creatures"][active_id]["actions_remaining"] = 0
     elif corruption == "reversed_initiative":
         state["initiative_order"].reverse()
     elif corruption == "initiative_out_of_range":

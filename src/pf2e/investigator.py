@@ -21,7 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Protocol
 
-from .checks import CheckResult, DegreeOfSuccess, Modifier, resolve_check
+from .checks import CheckResult, DegreeOfSuccess, Modifier, resolve_assurance_check, resolve_check
+from .conditions import CheckContext
 from .damage import DamageTerm, roll_damage_terms
 from .health import healing as pc_healing
 from .model import (
@@ -33,11 +34,13 @@ from .model import (
     FamilyProcedureContext,
     FamilyProcedureResult,
     HealthMode,
+    SavedCheckContext,
 )
 from .space import grid_distance_feet
 
 
 DEVISE_ABILITY = "investigator_devise_stratagem"
+ON_THE_CASE_ABILITY = "investigator_on_the_case"
 FORENSIC_MEDICINE_ABILITY = "investigator_forensic_medicine"
 FORENSIC_ACUMEN_ABILITY = "investigator_forensic_acumen"
 BATTLE_MEDICINE_ABILITY = "investigator_battle_medicine"
@@ -61,15 +64,16 @@ class _ActorWithStratagem(Protocol):
 class DeviseStratagem(FamilyCommand):
     """Use Devise a Stratagem against one visible creature.
 
-    ``free_action`` is intentionally explicit.  Lead-aware free use belongs
-    to the later investigation slice; this first public action accepts only
-    the ordinary one-action form and rejects an attempted free use rather
-    than silently ignoring that field.
+    ``free_action`` is intentionally explicit.  The admitted lead-aware
+    form still follows the ordinary once-per-round and target gates.
     """
 
     family_id: ClassVar[str] = "martial"
     target_id: str
-    mode: str = ATTACK_STRATAGEM
+    # Omit the mode for the ordinary public action: the player sees the die
+    # before choosing either stratagem.  An explicit mode is retained for
+    # bounded internal callers that already present that choice themselves.
+    mode: str | None = None
     free_action: bool = False
     known_weaknesses: bool = False
 
@@ -87,10 +91,39 @@ class RecallKnowledge(FamilyCommand):
     # through a saved command; ordinary Recall Knowledge leaves this at zero.
     circumstance_bonus: int = 0
     forensic_follow_up: bool = False
+    # Assurance is a declared alternative method, never an inferred result.
+    use_assurance: bool = False
 
 
 # Alias retained for callers that use the full action name.
 RecallKnowledgeAction = RecallKnowledge
+
+
+@dataclass(frozen=True)
+class PursueLead(FamilyCommand):
+    """Examine one authored clue for the Investigator's active case."""
+
+    family_id: ClassVar[str] = "martial"
+    case_id: str
+    clue_key: str | None = None
+    open_investigation: bool = True
+    replace_case_id: str | None = None
+
+
+PursueALead = PursueLead
+
+
+@dataclass(frozen=True)
+class InvestigationCheck(FamilyCommand):
+    """Resolve one authored relevant check, including Clue In's trigger."""
+
+    family_id: ClassVar[str] = "martial"
+    check_key: str
+    statistic: str | None = None
+    target_id: str | None = None
+
+
+InvestigationSkillCheck = InvestigationCheck
 
 
 @dataclass(frozen=True)
@@ -103,6 +136,16 @@ class ForensicExamination(FamilyCommand):
 
 ForensicExamine = ForensicExamination
 ExamineBody = ForensicExamination
+
+
+@dataclass(frozen=True)
+class Streetwise(FamilyCommand):
+    """Resolve one finite Streetwise Recall or Gather Information attempt."""
+
+    family_id: ClassVar[str] = "martial"
+    question_key: str
+    mode: str
+    settlement_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -147,7 +190,8 @@ class InvestigatorStratagemState:
 
     target_id: str
     die: int
-    mode: str
+    # ``None`` exists only while the persisted attack/skill choice is open.
+    mode: str | None
     round_number: int
     turn_start: int
     consumed: bool = False
@@ -162,7 +206,7 @@ def validate_stratagem_state(state: InvestigatorStratagemState) -> None:
         raise ValueError("saved Investigator stratagem requires a target")
     if type(state.die) is not int or not 1 <= state.die <= 20:
         raise ValueError("saved Investigator stratagem die must be from 1 through 20")
-    if state.mode not in {ATTACK_STRATAGEM, SKILL_STRATAGEM}:
+    if state.mode not in {None, ATTACK_STRATAGEM, SKILL_STRATAGEM}:
         raise ValueError("saved Investigator stratagem has an unknown mode")
     if type(state.round_number) is not int or state.round_number < 1:
         raise ValueError("saved Investigator stratagem round must be positive")
@@ -277,6 +321,76 @@ def stratagem_for_attack(
     if state.round_number != round_number or state.turn_start != turn_start:
         return None
     return state
+
+
+def skill_stratagem_for_check(
+    actor: _ActorWithStratagem,
+    *,
+    target_id: str | None,
+    qualifies: bool,
+    round_number: int,
+    turn_start: int,
+) -> InvestigatorStratagemState | None:
+    """Return a current Skill Stratagem for its exact authored subject."""
+
+    state = getattr(actor, "investigator_stratagem", None)
+    if state is None:
+        return None
+    validate_stratagem_state(state)
+    if (
+        state.mode != SKILL_STRATAGEM
+        or state.consumed
+        or state.target_id != target_id
+        or state.round_number != round_number
+        or state.turn_start != turn_start
+    ):
+        return None
+    return state if qualifies else None
+
+
+def skill_stratagem_blocks_strike(
+    actor: _ActorWithStratagem,
+    *,
+    target_id: str,
+    round_number: int,
+    turn_start: int,
+) -> bool:
+    """Whether a current Skill Stratagem forbids a Strike on its target."""
+
+    state = getattr(actor, "investigator_stratagem", None)
+    if state is None:
+        return False
+    validate_stratagem_state(state)
+    return (
+        state.mode == SKILL_STRATAGEM
+        and state.target_id == target_id
+        and state.round_number == round_number
+        and state.turn_start == turn_start
+    )
+
+
+def consume_skill_stratagem(
+    actor: _ActorWithStratagem,
+    *,
+    target_id: str | None,
+    qualifies: bool,
+    round_number: int,
+    turn_start: int,
+) -> InvestigatorStratagemState | None:
+    """Consume the current Skill Stratagem only after its check resolves."""
+
+    state = skill_stratagem_for_check(
+        actor,
+        target_id=target_id,
+        qualifies=qualifies,
+        round_number=round_number,
+        turn_start=turn_start,
+    )
+    if state is None:
+        return None
+    consumed = replace(state, consumed=True)
+    actor.investigator_stratagem = consumed
+    return consumed
 
 
 def consume_stratagem(
@@ -493,6 +607,12 @@ def _finalize_knowledge(
         return FamilyProcedureResult(rejection="The saved Recall Knowledge check has not been resolved.")
     check = saved.result
     actor = context.actor
+    if (
+        check.degree is DegreeOfSuccess.CRITICAL_FAILURE
+        and any(effect.kind == "alchemy_cognitive_mutagen_lesser" and effect.target_actor_id == actor.actor_id for effect in context.state.active_effects)
+    ):
+        check = replace(check, degree=DegreeOfSuccess.FAILURE)
+        saved = replace(saved, result=check)
     attempts = actor.investigator_knowledge_attempts.get(record.subject_key, 0)
     answer, critical = _knowledge_answer(record, check.degree)
     actor.investigator_knowledge_attempts[record.subject_key] = attempts + 1
@@ -501,6 +621,12 @@ def _finalize_knowledge(
     if check.degree in {DegreeOfSuccess.FAILURE, DegreeOfSuccess.CRITICAL_FAILURE} or attempts + 1 >= len(record.dc_progression):
         actor.investigator_knowledge_exhausted.add(record.subject_key)
     events = [_knowledge_check_event(actor, target, record, check, answer, critical=critical)]
+    _consume_skill_stratagem_for_check(
+        context,
+        target_id=getattr(target, "actor_id", None),
+        statistic=saved.context.statistic,
+        modifiers=saved.modifiers,
+    )
     if answer is None:
         events.append(Event(
             "recall_knowledge_no_information",
@@ -547,6 +673,52 @@ def _finalize_knowledge(
     return FamilyProcedureResult(events=tuple(events))
 
 
+def _skill_stratagem_modifier(
+    context: FamilyProcedureContext,
+    *,
+    target_id: str | None,
+    statistic: str,
+    raises_investigation_bonus: bool,
+) -> Modifier | None:
+    """Return Skill Stratagem's one typed bonus for an authored live target."""
+
+    attribute = context.encounter._skill_attribute(statistic)
+    qualifies = statistic == "perception" or attribute in {"intelligence", "wisdom", "charisma"}
+    state = skill_stratagem_for_check(
+        context.actor,
+        target_id=target_id,
+        qualifies=qualifies,
+        round_number=context.state.round_number,
+        turn_start=context.state.actor_start_counts.get(context.actor.actor_id, 0),
+    )
+    if state is None:
+        return None
+    if raises_investigation_bonus:
+        return Modifier(2, "circumstance", "Pursue a Lead (Skill Stratagem)")
+    return Modifier(1, "circumstance", "Skill Stratagem")
+
+
+def _consume_skill_stratagem_for_check(
+    context: FamilyProcedureContext,
+    *,
+    target_id: str | None,
+    statistic: str,
+    modifiers: tuple[Modifier, ...],
+) -> None:
+    """Consume only a resolved check which actually received this benefit."""
+
+    if not any(modifier.source in {"Skill Stratagem", "Pursue a Lead (Skill Stratagem)"} for modifier in modifiers):
+        return
+    attribute = context.encounter._skill_attribute(statistic)
+    consume_skill_stratagem(
+        context.actor,
+        target_id=target_id,
+        qualifies=statistic == "perception" or attribute in {"intelligence", "wisdom", "charisma"},
+        round_number=context.state.round_number,
+        turn_start=context.state.actor_start_counts.get(context.actor.actor_id, 0),
+    )
+
+
 def _resolve_recall_knowledge(
     context: FamilyProcedureContext,
     command: RecallKnowledge,
@@ -577,12 +749,42 @@ def _resolve_recall_knowledge(
         return FamilyProcedureResult(rejection="This Recall Knowledge subject is exhausted.")
     attempts = context.actor.investigator_knowledge_attempts.get(record.subject_key, 0)
     dc = _knowledge_dc(record, attempts, skill)
+    skill_modifier = _skill_stratagem_modifier(
+        context,
+        target_id=getattr(target, "actor_id", None),
+        statistic=skill,
+        raises_investigation_bonus=False,
+    )
+    if command.use_assurance:
+        if f"assurance_{skill}" not in context.definition.abilities:
+            return FamilyProcedureResult(rejection=f"{context.actor.label} has no admitted Assurance ({skill.title()}).")
+        rank = next(
+            (rank for name, rank, _modifier in context.definition.skills if name == skill),
+            None,
+        )
+        rank_bonus = {"trained": 2, "expert": 4, "master": 6, "legendary": 8}.get(rank)
+        if rank_bonus is None:
+            return FamilyProcedureResult(rejection="Assurance requires a trained admitted skill.")
+        proficiency_bonus = context.definition.level + rank_bonus
+        result = resolve_assurance_check(
+            proficiency_bonus, dc, traits=frozenset({"secret", "skill"}),
+        )
+        saved = SavedCheckContext(
+            check_owner_actor_id=context.actor.actor_id,
+            context=CheckContext(skill, None, frozenset({"secret", "skill"})),
+            dc=dc,
+            modifiers=(Modifier(proficiency_bonus, "untyped", "Assurance proficiency bonus"),),
+            result=result,
+        )
+        return _finalize_knowledge(
+            context, record, target, command, saved, known_weaknesses=known_weaknesses,
+        )
     try:
         saved = context.prepare_skill_check(
             skill,
             dc,
             traits=frozenset({"secret", "skill"}),
-            extra_modifiers=additional_modifiers,
+            extra_modifiers=(*additional_modifiers, *((skill_modifier,) if skill_modifier is not None else ())),
         )
         saved = context.resolve_saved_check(saved)
     except (NotImplementedError, ValueError) as error:
@@ -627,6 +829,316 @@ def _resolve_recall_knowledge(
             "Choose whether to reroll the Recall Knowledge check.",
         ),))
     return _finalize_knowledge(context, record, target, command, saved, known_weaknesses=known_weaknesses)
+
+
+def _investigation_records(context: FamilyProcedureContext) -> tuple[Any, ...]:
+    """Return the scene's finite authored On the Case records."""
+    setup_id = getattr(context.state, "setup_id", None)
+    if not isinstance(setup_id, str):
+        return ()
+    from .content import get_setup
+
+    return tuple(getattr(get_setup(setup_id), "investigations", ()))
+
+
+def _investigation_content(
+    context: FamilyProcedureContext,
+    case_id: str,
+) -> Any | None:
+    if not isinstance(case_id, str) or not case_id:
+        return None
+    matches = tuple(
+        record for record in _investigation_records(context)
+        if getattr(record, "case_id", None) == case_id
+    )
+    return matches[0] if len(matches) == 1 else None
+
+
+def _investigation_check_content(
+    context: FamilyProcedureContext,
+    case_id: str,
+    check_key: str,
+) -> Any | None:
+    case = _investigation_content(context, case_id)
+    if case is None:
+        return None
+    matches = tuple(
+        record for record in getattr(case, "relevant_checks", ())
+        if getattr(record, "check_key", None) == check_key
+    )
+    return matches[0] if len(matches) == 1 else None
+
+
+def _sync_investigation_awareness(context: FamilyProcedureContext) -> None:
+    """Project current authored helper bindings into the actor's saved state."""
+    awareness: set[str] = set()
+    for case_id in context.actor.investigator_active_cases:
+        case = _investigation_content(context, case_id)
+        if case is not None:
+            awareness.update(getattr(case, "known_helper_actor_ids", ()))
+    context.actor.investigator_awareness = awareness
+
+
+def _resolve_pursue_lead(
+    context: FamilyProcedureContext,
+    command: PursueLead,
+) -> FamilyProcedureResult:
+    """Resolve the authored one-minute Pursue a Lead activity transactionally."""
+    if ON_THE_CASE_ABILITY not in context.definition.abilities:
+        return FamilyProcedureResult(unsupported="Pursue a Lead requires the Investigator's On the Case feature.")
+    if context.state.in_progress:
+        return FamilyProcedureResult(rejection="Pursue a Lead is only available outside combat.")
+    if context.state.pending_choice is not None:
+        return FamilyProcedureResult(rejection="A pending choice must be resolved before pursuing a lead.")
+    if context.actor.health_mode is not HealthMode.PC or context.actor.unconscious or context.actor.dead:
+        return FamilyProcedureResult(rejection="Pursue a Lead requires a conscious living PC.")
+    if type(command.open_investigation) is not bool:
+        return FamilyProcedureResult(rejection="open_investigation must be a boolean.")
+    case = _investigation_content(context, command.case_id)
+    if case is None:
+        return FamilyProcedureResult(rejection="No authored investigation matches that case.")
+    clues = tuple(getattr(case, "clues", ()))
+    if command.clue_key is None:
+        if len(clues) != 1:
+            return FamilyProcedureResult(rejection="Choose one authored clue to pursue.")
+        clue = clues[0]
+    else:
+        matches = tuple(item for item in clues if item.clue_key == command.clue_key)
+        if len(matches) != 1:
+            return FamilyProcedureResult(rejection="No authored clue matches that selection.")
+        clue = matches[0]
+    if command.case_id in context.actor.investigator_abandoned_cases:
+        return FamilyProcedureResult(rejection="That abandoned investigation cannot be reopened until daily preparation.")
+    if command.replace_case_id is not None and (
+        not isinstance(command.replace_case_id, str)
+        or not command.replace_case_id
+        or not command.open_investigation
+    ):
+        return FamilyProcedureResult(rejection="A replacement case requires opening the investigation.")
+    if clue.confirmed and context.actor.investigator_lead_cooldown_until > context.state.world_time_seconds:
+        return FamilyProcedureResult(rejection="Pursue a Lead is unavailable during its ten-minute cooldown.")
+    active = set(context.actor.investigator_active_cases)
+    if command.open_investigation and clue.confirmed:
+        if command.case_id in active:
+            return FamilyProcedureResult(rejection="That investigation is already active.")
+        if len(active) >= 2:
+            if command.replace_case_id is None:
+                return FamilyProcedureResult(rejection="Choose an active investigation to abandon before opening a third case.")
+            if command.replace_case_id not in active or command.replace_case_id == command.case_id:
+                return FamilyProcedureResult(rejection="The replacement must name one different active investigation.")
+        elif command.replace_case_id is not None:
+            if command.replace_case_id not in active or command.replace_case_id == command.case_id:
+                return FamilyProcedureResult(rejection="The replacement must name one different active investigation.")
+    elif command.replace_case_id is not None:
+        return FamilyProcedureResult(rejection="A replacement is only needed when opening a confirmed third case.")
+
+    elapsed = 60
+    context.encounter._advance_elapsed_time(context.state, elapsed)
+    if not clue.confirmed:
+        return FamilyProcedureResult(events=(Event(
+            "pursue_lead_inconsequential",
+            context.actor.actor_id,
+            None,
+            f"{context.actor.label} examines {clue.label} for 1 minute; the detail is inconsequential.",
+            details=(clue.result, f"world time advanced to {context.state.world_time_seconds} seconds"),
+        ),))
+
+    context.actor.investigator_lead_cooldown_until = context.state.world_time_seconds + 600
+    events: list[Event] = [Event(
+        "pursue_lead",
+        context.actor.actor_id,
+        None,
+        f"{context.actor.label} pursues {case.name} by examining {clue.label} for 1 minute.",
+        details=(
+            f"Question: {case.question}",
+            f"Larger mystery: {case.larger_mystery_fact}",
+            clue.result,
+            f"Pursue a Lead available again at world time {context.actor.investigator_lead_cooldown_until} seconds",
+        ),
+    )]
+    if command.open_investigation:
+        if command.replace_case_id is not None:
+            active.remove(command.replace_case_id)
+            context.actor.investigator_abandoned_cases.add(command.replace_case_id)
+            context.actor.investigator_solved_cases.discard(command.replace_case_id)
+            events.append(Event(
+                "investigation_abandoned",
+                context.actor.actor_id,
+                None,
+                f"{context.actor.label} abandons {command.replace_case_id} to open {case.name}.",
+            ))
+        active.add(case.case_id)
+        context.actor.investigator_active_cases = active
+        _sync_investigation_awareness(context)
+        events.append(Event(
+            "investigation_opened",
+            context.actor.actor_id,
+            None,
+            f"{context.actor.label} opens investigation {case.name}: {case.question}",
+            details=(f"Investigation bonus: +1 circumstance",),
+        ))
+    else:
+        events.append(Event(
+            "investigation_open_declined",
+            context.actor.actor_id,
+            None,
+            f"{context.actor.label} declines to open investigation {case.name}; the ten-minute lead cooldown still begins.",
+        ))
+    return FamilyProcedureResult(events=tuple(events))
+
+
+def _find_investigation_owner(context: FamilyProcedureContext, case_id: str, recipient_id: str):
+    for actor in context.state.creatures.values():
+        if (
+            actor.actor_id != recipient_id
+            and actor.health_mode is HealthMode.PC
+            and not actor.unconscious
+            and not actor.dead
+            and case_id in actor.investigator_active_cases
+        ):
+            return actor
+    return None
+
+
+def _finish_investigation_check(
+    context: FamilyProcedureContext,
+    record: Any,
+    saved,
+    *,
+    bonus_used: bool,
+) -> FamilyProcedureResult:
+    if saved.result is None:
+        return FamilyProcedureResult(rejection="The saved investigation check has not been resolved.")
+    check = saved.result
+    answer = record.result if check.degree in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS} else "No useful information is found."
+    events = [Event(
+        "investigation_check",
+        context.actor.actor_id,
+        getattr(record, "target_actor_id", None),
+        f"{context.actor.label} investigates: {check.degree.label()} ({check.total} vs DC {check.dc}). {answer}",
+        check=check,
+        details=(
+            f"Question: {record.question}",
+            "Pursue a Lead bonus +1 circumstance applied." if bonus_used else "No Pursue a Lead bonus applied.",
+        ),
+    )]
+    _consume_skill_stratagem_for_check(
+        context,
+        target_id=getattr(record, "target_actor_id", None),
+        statistic=saved.context.statistic,
+        modifiers=saved.modifiers,
+    )
+    events.extend(context.encounter._complete_action(context.state, context.actor, [], dice=context.dice))
+    return FamilyProcedureResult(events=tuple(events))
+
+
+def _resolve_investigation_check(
+    context: FamilyProcedureContext,
+    command: InvestigationCheck,
+) -> FamilyProcedureResult:
+    active_matches = tuple(
+        (case, check)
+        for case_id in context.actor.investigator_active_cases
+        for case in (_investigation_content(context, case_id),)
+        if case is not None
+        for check in getattr(case, "relevant_checks", ())
+        if check.check_key == command.check_key
+    )
+    if not active_matches:
+        # An ally's check is resolved on the investigator's active case.
+        active_matches = tuple(
+            (case, check)
+            for investigator in context.state.creatures.values()
+            if investigator.health_mode is HealthMode.PC
+            for case_id in investigator.investigator_active_cases
+            for case in (_investigation_content(context, case_id),)
+            if case is not None
+            for check in getattr(case, "relevant_checks", ())
+            if check.check_key == command.check_key
+            and context.actor.actor_id in getattr(check, "helper_actor_ids", ())
+        )
+    if len(active_matches) != 1:
+        return FamilyProcedureResult(rejection="No unique active authored investigation check matches that selection.")
+    case, record = active_matches[0]
+    if command.statistic is not None and command.statistic != record.statistic:
+        return FamilyProcedureResult(rejection="That statistic is not authored for this investigation check.")
+    if command.target_id is not None and command.target_id != record.target_actor_id:
+        return FamilyProcedureResult(rejection="That target is not authored for this investigation check.")
+    if record.target_actor_id is not None:
+        target = context.state.creatures.get(record.target_actor_id)
+        if target is None or target.defeated:
+            return FamilyProcedureResult(rejection="The authored investigation target is no longer available.")
+    if context.actor.actions_remaining < 1:
+        return FamilyProcedureResult(rejection="An investigation check requires one action.")
+    traits = frozenset(record.traits) | frozenset({"skill"})
+    own_lead_bonus = case.case_id in context.actor.investigator_active_cases
+    skill_modifier = _skill_stratagem_modifier(
+        context,
+        target_id=getattr(record, "target_actor_id", None),
+        statistic=record.statistic,
+        raises_investigation_bonus=own_lead_bonus,
+    )
+    try:
+        context.require_action_permitted("investigation_check", traits)
+        saved = context.prepare_skill_check(
+            record.statistic,
+            record.dc,
+            traits=traits,
+            extra_modifiers=(
+                (skill_modifier,)
+                if skill_modifier is not None
+                else (Modifier(1, "circumstance", "Pursue a Lead"),) if own_lead_bonus else ()
+            ),
+        )
+    except (NotImplementedError, ValueError) as error:
+        return FamilyProcedureResult(unsupported=str(error))
+    context.commit_family_action(actions=1)
+    investigator = _find_investigation_owner(context, case.case_id, context.actor.actor_id)
+    if (
+        investigator is not None
+        and investigator.reaction_available
+        and investigator.investigator_clue_in_cooldown_until <= context.state.world_time_seconds
+    ):
+        continuation = ActionContinuation(
+            kind="family_action",
+            actor_id=context.actor.actor_id,
+            target_id=record.target_actor_id,
+            reaction_trigger="clue_in",
+            stage="investigator_clue_in",
+        )
+        context.encounter._set_pending(
+            context.state,
+            kind="reaction",
+            owner_actor_id=investigator.actor_id,
+            prompt=(
+                f"{investigator.label} may use Clue In to aid {context.actor.label}'s authored investigation check."
+            ),
+            options=(ChoiceOption("use", "Use Clue In (+1 circumstance)"), ChoiceOption("decline", "Decline")),
+            details=(
+                "Clue In is a concentrate Investigator reaction; the triggering creature receives the bonus.",
+                "Communication traits: auditory, linguistic",
+                "Investigation check traits: " + ", ".join(record.traits or ("skill",)),
+            ),
+            actor_id=context.actor.actor_id,
+            target_id=record.target_actor_id,
+            continuation=continuation,
+            family_id="martial",
+            procedure_id="investigator:clue_in",
+            saved_check=saved,
+            family_command=command,
+            is_reaction=True,
+        )
+        return FamilyProcedureResult(events=(Event(
+            "clue_in_triggered",
+            investigator.actor_id,
+            context.actor.actor_id,
+            f"{context.actor.label} attempts {record.question}; {investigator.label} can use Clue In.",
+        ),))
+    try:
+        saved = context.resolve_saved_check(saved)
+    except (NotImplementedError, ValueError) as error:
+        return FamilyProcedureResult(unsupported=str(error))
+    return _finish_investigation_check(context, record, saved, bonus_used=own_lead_bonus)
 
 
 def _examination_records(context: FamilyProcedureContext) -> tuple[Any, ...]:
@@ -892,6 +1404,154 @@ def _resolve_forensic_examination(
     return _finalize_examination(context, record, body, command, saved)
 
 
+def _streetwise_records(context: FamilyProcedureContext) -> tuple[Any, ...]:
+    """Return the finite Streetwise content authored for this exact scene."""
+    setup_id = getattr(context.state, "setup_id", None)
+    if not isinstance(setup_id, str):
+        return ()
+    from .content import get_setup
+
+    return tuple(getattr(get_setup(setup_id), "streetwise", ()))
+
+
+def _streetwise_content(
+    context: FamilyProcedureContext, question_key: str, settlement_key: str | None
+) -> Any | None:
+    records = tuple(
+        item for item in _streetwise_records(context)
+        if getattr(item, "question_key", None) == question_key
+        and (settlement_key is None or getattr(item, "settlement_key", None) == settlement_key)
+    )
+    return records[0] if len(records) == 1 else None
+
+
+def _streetwise_finalize(
+    context: FamilyProcedureContext,
+    record: Any,
+    command: Streetwise,
+    saved,
+    *,
+    elapsed_already_charged: bool = False,
+) -> FamilyProcedureResult:
+    if saved.result is None:
+        return FamilyProcedureResult(rejection="The saved Streetwise check has not been resolved.")
+    check = saved.result
+    actor = context.actor
+    attempts = (
+        actor.investigator_streetwise_recall_attempts
+        if command.mode == "recall"
+        else actor.investigator_streetwise_gather_attempts
+    )
+    attempts[record.question_key] = attempts.get(record.question_key, 0) + 1
+    if command.mode == "recall":
+        answer = record.recall_success_answer if check.degree in {
+            DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS,
+        } else None
+        kind = "streetwise_recall"
+        duration = 0
+    else:
+        answer = (
+            record.gather_success_answer
+            if check.degree in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS}
+            else record.gather_critical_failure_answer
+            if check.degree is DegreeOfSuccess.CRITICAL_FAILURE
+            else record.gather_failure_answer
+        )
+        kind = "streetwise_gather"
+        duration = record.gather_duration_seconds
+        if not elapsed_already_charged:
+            context.encounter._advance_elapsed_time(context.state, duration)
+    if answer is not None:
+        actor.investigator_streetwise_results[record.question_key] = answer
+    text = answer or "No reliable local account answers that question."
+    return FamilyProcedureResult(events=(Event(
+        kind,
+        actor.actor_id,
+        None,
+        f"{actor.label} uses Society for {('Recall Knowledge' if command.mode == 'recall' else 'Gather Information')}: "
+        f"{check.degree.label()} ({check.total} vs DC {check.dc}). {text}",
+        check=check,
+        details=(
+            f"Settlement: {record.settlement_label}",
+            f"Question: {record.question}",
+            "Streetwise uses Society instead of Diplomacy.",
+            *( (f"Gather Information elapsed time: {duration} seconds",) if duration else () ),
+        ),
+    ),))
+
+
+def _resolve_streetwise(
+    context: FamilyProcedureContext, command: Streetwise
+) -> FamilyProcedureResult:
+    if command.mode not in {"recall", "gather"}:
+        return FamilyProcedureResult(rejection="Streetwise mode must be 'recall' or 'gather'.")
+    record = _streetwise_content(context, command.question_key, command.settlement_key)
+    if record is None:
+        return FamilyProcedureResult(rejection="No authored Streetwise question matches that selection.")
+    if context.state.in_progress:
+        return FamilyProcedureResult(rejection="Streetwise is only available outside combat.")
+    if context.actor.health_mode is not HealthMode.PC or context.actor.unconscious or context.actor.dead:
+        return FamilyProcedureResult(rejection="Streetwise requires a conscious living PC.")
+    if "Streetwise" not in context.definition.feats:
+        return FamilyProcedureResult(unsupported="Streetwise requires the Streetwise skill feat.")
+    if command.mode == "recall" and context.actor.actor_id not in record.familiar_actor_ids:
+        return FamilyProcedureResult(rejection="Streetwise Recall Knowledge requires an authored familiar settlement.")
+    attempts = (
+        context.actor.investigator_streetwise_recall_attempts
+        if command.mode == "recall"
+        else context.actor.investigator_streetwise_gather_attempts
+    )
+    limit = record.recall_attempt_limit if command.mode == "recall" else record.gather_attempt_limit
+    if attempts.get(record.question_key, 0) >= limit:
+        return FamilyProcedureResult(rejection="That authored Streetwise attempt is exhausted.")
+    dc = record.recall_dc if command.mode == "recall" else record.gather_dc
+    own_lead_bonus = record.investigation_case_id in context.actor.investigator_active_cases
+    skill_modifier = _skill_stratagem_modifier(
+        context,
+        target_id=None,
+        statistic="society",
+        raises_investigation_bonus=own_lead_bonus,
+    )
+    modifiers = (
+        *((Modifier(1, "circumstance", "Pursue a Lead"),) if own_lead_bonus else ()),
+        *((skill_modifier,) if skill_modifier is not None else ()),
+    )
+    try:
+        saved = context.prepare_skill_check(
+            "society", dc, traits=frozenset({"secret", "skill"}), extra_modifiers=modifiers,
+        )
+        saved = context.resolve_saved_check(saved)
+    except (NotImplementedError, ValueError) as error:
+        return FamilyProcedureResult(unsupported=str(error))
+    if context.actor.hero_points > 0:
+        duration = record.gather_duration_seconds if command.mode == "gather" else 0
+        if duration:
+            # The elapsed activity begins before its persisted reroll choice.
+            context.encounter._advance_elapsed_time(context.state, duration)
+        context.present_choice(
+            f"investigator:streetwise:{command.mode}:hero_point",
+            context.actor.actor_id,
+            f"{context.actor.label} may spend a Hero Point to reroll the Streetwise Society check.",
+            (ChoiceOption("reroll", "Spend a Hero Point to reroll"), ChoiceOption("keep", "Keep the current result")),
+            ActionContinuation(
+                kind="family_action", actor_id=context.actor.actor_id,
+                target_id=None, stage=f"streetwise_{command.mode}_hero_point",
+            ),
+            details=(
+                f"Settlement: {record.settlement_label}", f"Question: {record.question}",
+                *( (f"Gather Information elapsed time: {duration} seconds",) if duration else () ),
+            ),
+            saved_check=saved,
+            family_command=command,
+        )
+        return FamilyProcedureResult(events=(Event(
+            f"streetwise_{command.mode}_started", context.actor.actor_id, None,
+            f"{context.actor.label} begins Streetwise {command.mode}; choose whether to reroll the Society check.",
+            check=saved.result,
+        ),))
+    return _streetwise_finalize(context, record, command, saved)
+
+
 def recall_knowledge_target_ids(encounter, state, actor, definition) -> tuple[str, ...]:
     """Project the legal authored Recall Knowledge targets for the action menu."""
     context = FamilyProcedureContext(
@@ -924,19 +1584,18 @@ def _handle_devise(
         return FamilyProcedureResult(
             unsupported="Devise a Stratagem is not admitted for this creature."
         )
-    if command.mode not in {ATTACK_STRATAGEM, SKILL_STRATAGEM}:
+    if command.mode not in {None, ATTACK_STRATAGEM, SKILL_STRATAGEM}:
         return FamilyProcedureResult(
-            rejection="Devise a Stratagem mode must be 'attack' or 'skill'."
+            rejection="Devise a Stratagem mode must be 'attack', 'skill', or omitted for a choice."
         )
-    if command.mode == SKILL_STRATAGEM:
+    if command.free_action and (
+        not getattr(context.actor, "investigator_active_cases", set())
+        or command.target_id not in getattr(context.actor, "investigator_awareness", set())
+    ):
         return FamilyProcedureResult(
-            unsupported="Skill Stratagem is outside the first Investigator play slice."
+            rejection="Free Devise a Stratagem requires an active investigation and authored awareness of the target."
         )
-    if command.free_action:
-        return FamilyProcedureResult(
-            unsupported="Free Devise a Stratagem requires an active investigation subject; lead support is not yet admitted."
-        )
-    if context.actor.actions_remaining < 1:
+    if not command.free_action and context.actor.actions_remaining < 1:
         return FamilyProcedureResult(rejection="Devise a Stratagem requires one action.")
     target = _active_target(context, command.target_id)
     if target is None:
@@ -971,7 +1630,8 @@ def _handle_devise(
         skill = next(iter(dict(record.allowed_skills)), None)
         if skill is None:
             return FamilyProcedureResult(rejection="Known Weaknesses has no eligible Recall Knowledge skill.")
-        context.commit_family_action(actions=1)
+        if not command.free_action:
+            context.commit_family_action(actions=1)
         knowledge = _resolve_recall_knowledge(
             context,
             RecallKnowledge(record.subject_key, record.question, skill, target.actor_id),
@@ -980,35 +1640,24 @@ def _handle_devise(
         if knowledge.rejection or knowledge.unsupported:
             return knowledge
         if context.state.pending_choice is not None:
+            # The embedded Recall Knowledge save must retain whether Devise
+            # was free and whether it still needs the ordinary post-roll
+            # mode choice through save/load and Hero Point resolution.
+            continuation = context.state.pending_choice.continuation
+            if continuation is not None:
+                if command.mode is None:
+                    continuation.mode = "free_devise:choose" if command.free_action else "choose"
+                elif command.free_action:
+                    continuation.mode = "free_devise"
+                else:
+                    continuation.mode = "attack"
             return knowledge
         events = list(knowledge.events)
         return _draw_devise_after_knowledge(context, command, target, events)
     die = context.dice.draw(20)
-    context.commit_family_action(actions=1)
-    state = InvestigatorStratagemState(
-        target_id=target.actor_id,
-        die=die,
-        mode=command.mode,
-        round_number=context.state.round_number,
-        turn_start=turn_start,
-    )
-    context.actor.investigator_stratagem = state
-    if command.mode == ATTACK_STRATAGEM:
-        text = (
-            f"{context.actor.label} devises an attack stratagem against {target.label}; "
-            f"the stored preliminary d20 is {die}."
-        )
-    else:
-        text = (
-            f"{context.actor.label} devises a skill stratagem against {target.label}; "
-            f"the stored preliminary d20 is {die}."
-        )
-    events = [Event("devise_stratagem", context.actor.actor_id, target.actor_id, text)]
-    return FamilyProcedureResult(
-        events=tuple(context.encounter._complete_action(
-            context.state, context.actor, events, dice=context.dice
-        ))
-    )
+    if not command.free_action:
+        context.commit_family_action(actions=1)
+    return _store_devise_stratagem(context, command, target, die, [])
 
 
 def _draw_devise_after_knowledge(
@@ -1020,6 +1669,21 @@ def _draw_devise_after_knowledge(
     """Finalize Known Weaknesses then draw Devise's single stored d20."""
     die = context.dice.draw(20)
     turn_start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+    return _store_devise_stratagem(context, command, target, die, events, after_known_weaknesses=True)
+
+
+def _store_devise_stratagem(
+    context: FamilyProcedureContext,
+    command: DeviseStratagem,
+    target,
+    die: int,
+    events: list[Event],
+    *,
+    after_known_weaknesses: bool = False,
+) -> FamilyProcedureResult:
+    """Store the rolled face and, for public Devise, persist its mode menu."""
+
+    turn_start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
     context.actor.investigator_stratagem = InvestigatorStratagemState(
         target_id=target.actor_id,
         die=die,
@@ -1027,13 +1691,54 @@ def _draw_devise_after_knowledge(
         round_number=context.state.round_number,
         turn_start=turn_start,
     )
+    suffix = " after Known Weaknesses" if after_known_weaknesses else ""
+    if command.mode is None:
+        events.append(Event(
+            "devise_stratagem",
+            context.actor.actor_id,
+            target.actor_id,
+            f"{context.actor.label} devises a stratagem against {target.label}{suffix}; "
+            f"the stored preliminary d20 is {die}. Choose attack or skill stratagem.",
+        ))
+        context.present_choice(
+            "investigator:devise_stratagem:mode",
+            context.actor.actor_id,
+            f"Choose an attack or skill stratagem against {target.label}.",
+            (
+                ChoiceOption(ATTACK_STRATAGEM, "Attack Stratagem"),
+                ChoiceOption(SKILL_STRATAGEM, "Skill Stratagem"),
+            ),
+            ActionContinuation(
+                kind="family_action",
+                actor_id=context.actor.actor_id,
+                target_id=target.actor_id,
+                stage="investigator_devise_stratagem_mode",
+                mode="free_devise" if command.free_action else None,
+            ),
+            target_id=target.actor_id,
+            details=(
+                "Attack Stratagem uses the stored d20 for the first Strike against this target.",
+                "Skill Stratagem blocks Strikes against this target and grants its next relevant check a circumstance bonus.",
+            ),
+            family_command=command,
+        )
+        events.append(Event(
+            "choice_offered",
+            context.actor.actor_id,
+            target.actor_id,
+            "Choose attack or skill stratagem after seeing the stored d20.",
+        ))
+        return FamilyProcedureResult(events=tuple(events))
+    mode_label = "attack" if command.mode == ATTACK_STRATAGEM else "skill"
     events.append(Event(
         "devise_stratagem",
         context.actor.actor_id,
         target.actor_id,
-        f"{context.actor.label} devises an attack stratagem against {target.label} after Known Weaknesses; "
+        f"{context.actor.label} devises a {mode_label} stratagem against {target.label}{suffix}; "
         f"the stored preliminary d20 is {die}.",
     ))
+    if command.free_action:
+        return FamilyProcedureResult(events=tuple(events))
     return FamilyProcedureResult(events=tuple(context.encounter._complete_action(
         context.state, context.actor, events, dice=context.dice
     )))
@@ -1367,15 +2072,24 @@ def _handle_recall_knowledge(
     context.commit_family_action(actions=1)
     return _resolve_recall_knowledge(
         context,
-        RecallKnowledge(record.subject_key, record.question, skill, target.actor_id),
+        RecallKnowledge(
+            record.subject_key, record.question, skill, target.actor_id,
+            use_assurance=command.use_assurance,
+        ),
     )
 
 
 def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | None:
     if isinstance(context.command, DeviseStratagem):
         return _handle_devise(context, context.command)
+    if isinstance(context.command, PursueLead):
+        return _resolve_pursue_lead(context, context.command)
+    if isinstance(context.command, InvestigationCheck):
+        return _resolve_investigation_check(context, context.command)
     if isinstance(context.command, ForensicExamination):
         return _resolve_forensic_examination(context, context.command)
+    if isinstance(context.command, Streetwise):
+        return _resolve_streetwise(context, context.command)
     if isinstance(context.command, RecallKnowledge):
         return _handle_recall_knowledge(context, context.command)
     if isinstance(context.command, BattleMedicine):
@@ -1387,6 +2101,136 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult | No
     pending, choice = context.pending, context.choice
     if pending is None or choice is None:
         return None
+    if pending.procedure_id in {
+        "investigator:streetwise:recall:hero_point",
+        "investigator:streetwise:gather:hero_point",
+    }:
+        command = pending.family_command
+        saved = pending.saved_check
+        continuation = pending.continuation
+        if not isinstance(command, Streetwise) or saved is None or continuation is None:
+            return FamilyProcedureResult(rejection="The saved Streetwise Hero Point choice is incomplete.")
+        if continuation.stage != f"streetwise_{command.mode}_hero_point":
+            return FamilyProcedureResult(rejection="The saved Streetwise Hero Point choice is stale.")
+        if choice.option_id == "reroll":
+            try:
+                saved = context.reroll_skill_check(saved)
+            except (NotImplementedError, ValueError) as error:
+                return FamilyProcedureResult(rejection=str(error))
+        elif choice.option_id != "keep":
+            return FamilyProcedureResult(rejection="Choose whether to reroll the Streetwise Society check.")
+        record = _streetwise_content(context, command.question_key, command.settlement_key)
+        if record is None:
+            return FamilyProcedureResult(rejection="The authored Streetwise question is no longer available.")
+        return _streetwise_finalize(
+            context, record, command, saved,
+            elapsed_already_charged=command.mode == "gather",
+        )
+    if pending.procedure_id == "investigator:devise_stratagem:mode":
+        command = pending.family_command
+        continuation = pending.continuation
+        stored = context.actor.investigator_stratagem
+        if (
+            not isinstance(command, DeviseStratagem)
+            or command.mode is not None
+            or continuation is None
+            or continuation.kind != "family_action"
+            or continuation.stage != "investigator_devise_stratagem_mode"
+            or continuation.actor_id != context.actor.actor_id
+            or pending.owner_actor_id != context.actor.actor_id
+            or pending.target_id != command.target_id
+            or not isinstance(stored, InvestigatorStratagemState)
+            or stored.mode is not None
+            or stored.target_id != command.target_id
+            or stored.round_number != context.state.round_number
+            or stored.turn_start != context.state.actor_start_counts.get(context.actor.actor_id, 0)
+        ):
+            return FamilyProcedureResult(rejection="The saved Devise a Stratagem mode choice is stale.")
+        if choice.option_id not in {ATTACK_STRATAGEM, SKILL_STRATAGEM}:
+            return FamilyProcedureResult(rejection="Choose an attack or skill stratagem.")
+        context.actor.investigator_stratagem = replace(stored, mode=choice.option_id)
+        label = "Attack" if choice.option_id == ATTACK_STRATAGEM else "Skill"
+        events = [Event(
+            "devise_stratagem_mode",
+            context.actor.actor_id,
+            stored.target_id,
+            f"{context.actor.label} chooses {label} Stratagem against {stored.target_id}.",
+        )]
+        return FamilyProcedureResult(events=tuple(context.encounter._complete_action(
+            context.state, context.actor, events, dice=context.dice
+        )))
+    if pending.procedure_id == "investigator:clue_in":
+        command = pending.family_command
+        continuation = pending.continuation
+        saved = pending.saved_check
+        if (
+            not isinstance(command, InvestigationCheck)
+            or continuation is None
+            or continuation.stage != "investigator_clue_in"
+            or saved is None
+            or saved.result is not None
+            or pending.kind != "reaction"
+            or pending.is_reaction is not True
+            or pending.owner_actor_id is None
+        ):
+            return FamilyProcedureResult(rejection="The saved Clue In choice is incomplete or stale.")
+        owner = context.state.creatures.get(pending.owner_actor_id)
+        if owner is None or owner.actor_id == context.actor.actor_id:
+            return FamilyProcedureResult(rejection="The Clue In investigator is no longer available.")
+        case_matches = tuple(
+            (case, check)
+            for case_id in owner.investigator_active_cases
+            for case in (_investigation_content(context, case_id),)
+            if case is not None
+            for check in getattr(case, "relevant_checks", ())
+            if check.check_key == command.check_key
+            and context.actor.actor_id in getattr(check, "helper_actor_ids", ())
+        )
+        if len(case_matches) != 1:
+            return FamilyProcedureResult(rejection="The authored Clue In investigation check is no longer available.")
+        _case, record = case_matches[0]
+        if pending.target_id != getattr(record, "target_actor_id", None):
+            return FamilyProcedureResult(rejection="The saved Clue In target no longer matches its authored check.")
+        if choice.option_id == "use":
+            if (
+                not owner.reaction_available
+                or owner.investigator_clue_in_cooldown_until > context.state.world_time_seconds
+            ):
+                return FamilyProcedureResult(rejection="Clue In is no longer available this reaction window.")
+            owner.reaction_available = False
+            owner.investigator_clue_in_cooldown_until = context.state.world_time_seconds + 600
+            try:
+                saved = context.add_check_modifier(
+                    saved, Modifier(1, "circumstance", "Pursue a Lead (Clue In)")
+                )
+                saved = context.resolve_saved_check(saved)
+            except (NotImplementedError, ValueError) as error:
+                return FamilyProcedureResult(rejection=str(error))
+            result = _finish_investigation_check(context, record, saved, bonus_used=True)
+            if result.rejection or result.unsupported:
+                return result
+            return FamilyProcedureResult(events=(Event(
+                "clue_in_used",
+                owner.actor_id,
+                context.actor.actor_id,
+                f"{owner.label} uses Clue In; {context.actor.label} receives +1 circumstance to the investigation check.",
+                details=("Clue In has a ten-minute cooldown.", "Communication traits: auditory, linguistic"),
+            ), *result.events))
+        if choice.option_id == "decline":
+            try:
+                saved = context.resolve_saved_check(saved)
+            except (NotImplementedError, ValueError) as error:
+                return FamilyProcedureResult(rejection=str(error))
+            result = _finish_investigation_check(context, record, saved, bonus_used=False)
+            if result.rejection or result.unsupported:
+                return result
+            return FamilyProcedureResult(events=(Event(
+                "clue_in_declined",
+                owner.actor_id,
+                context.actor.actor_id,
+                f"{owner.label} declines Clue In; {context.actor.label}'s investigation check proceeds normally.",
+            ), *result.events))
+        return FamilyProcedureResult(rejection="Choose whether to use Clue In or decline.")
     if pending.procedure_id == "investigator:forensic_examination:follow_up":
         command = pending.family_command
         continuation = pending.continuation
@@ -1507,7 +2351,12 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult | No
             # finalized, exactly once.
             devise = DeviseStratagem(
                 target_id=target.actor_id,
-                mode=ATTACK_STRATAGEM,
+                mode=(
+                    None
+                    if continuation.mode in {"choose", "free_devise:choose"}
+                    else ATTACK_STRATAGEM
+                ),
+                free_action=continuation.mode in {"free_devise", "free_devise:choose"},
                 known_weaknesses=True,
             )
             return _draw_devise_after_knowledge(context, devise, target, events)
@@ -1537,6 +2386,87 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult | No
 
 def validate_pending(context: FamilyProcedureContext) -> None:
     pending = context.pending
+    if pending is not None and pending.procedure_id == "investigator:devise_stratagem:mode":
+        command = pending.family_command
+        continuation = pending.continuation
+        stored = context.actor.investigator_stratagem
+        if (
+            pending.kind != "family_action"
+            or pending.family_id != "martial"
+            or pending.owner_actor_id != context.actor.actor_id
+            or pending.actor_id != context.actor.actor_id
+            or not isinstance(command, DeviseStratagem)
+            or command.mode is not None
+            or continuation is None
+            or continuation.kind != "family_action"
+            or continuation.stage != "investigator_devise_stratagem_mode"
+            or continuation.actor_id != context.actor.actor_id
+            or continuation.target_id != command.target_id
+            or pending.target_id != command.target_id
+            or pending.options != (
+                ChoiceOption(ATTACK_STRATAGEM, "Attack Stratagem"),
+                ChoiceOption(SKILL_STRATAGEM, "Skill Stratagem"),
+            )
+            or not isinstance(stored, InvestigatorStratagemState)
+            or stored.mode is not None
+            or stored.target_id != command.target_id
+            or stored.round_number != context.state.round_number
+            or stored.turn_start != context.state.actor_start_counts.get(context.actor.actor_id, 0)
+        ):
+            raise ValueError("save has an invalid Devise a Stratagem mode choice")
+        return
+    if pending is not None and pending.procedure_id == "investigator:clue_in":
+        from .content import get_definition
+
+        command = pending.family_command
+        continuation = pending.continuation
+        saved = pending.saved_check
+        owner = context.state.creatures.get(pending.owner_actor_id or "")
+        if (
+            pending.kind != "reaction"
+            or pending.family_id != "martial"
+            or pending.is_reaction is not True
+            or not isinstance(command, InvestigationCheck)
+            or continuation is None
+            or continuation.kind != "family_action"
+            or continuation.stage != "investigator_clue_in"
+            or continuation.actor_id != pending.actor_id
+            or owner is None
+            or owner.actor_id == pending.actor_id
+            or ON_THE_CASE_ABILITY not in get_definition(owner.definition_id).abilities
+            or not owner.reaction_available
+            or owner.investigator_clue_in_cooldown_until > context.state.world_time_seconds
+            or pending.actor_id not in context.state.creatures
+            or saved is None
+            or saved.result is not None
+            or saved.check_owner_actor_id != pending.actor_id
+            or pending.options != (
+                ChoiceOption("use", "Use Clue In (+1 circumstance)"),
+                ChoiceOption("decline", "Decline"),
+            )
+        ):
+            raise ValueError("save has an invalid Clue In reaction choice")
+        matches = tuple(
+            (case, check)
+            for case_id in owner.investigator_active_cases
+            for case in (_investigation_content(context, case_id),)
+            if case is not None
+            for check in getattr(case, "relevant_checks", ())
+            if check.check_key == command.check_key
+            and pending.actor_id in getattr(check, "helper_actor_ids", ())
+        )
+        if len(matches) != 1:
+            raise ValueError("save has an unavailable Clue In authored check")
+        _case, record = matches[0]
+        if (
+            pending.target_id != getattr(record, "target_actor_id", None)
+            or saved.context.statistic != record.statistic
+            or saved.dc != record.dc
+            or saved.modifiers
+            and any(item.source == "Pursue a Lead (Clue In)" for item in saved.modifiers)
+        ):
+            raise ValueError("save has an inconsistent Clue In saved check")
+        return
     if pending is not None and pending.procedure_id == "investigator:forensic_examination:medicine_hero_point":
         command = pending.family_command
         continuation = pending.continuation
@@ -1665,6 +2595,53 @@ def validate_pending(context: FamilyProcedureContext) -> None:
             skill,
         ):
             raise ValueError("save has a Recall Knowledge check for an outdated DC")
+        return
+    if pending is not None and pending.procedure_id in {
+        "investigator:streetwise:recall:hero_point",
+        "investigator:streetwise:gather:hero_point",
+    }:
+        command = pending.family_command
+        continuation = pending.continuation
+        record = (
+            _streetwise_content(context, command.question_key, command.settlement_key)
+            if isinstance(command, Streetwise) else None
+        )
+        expected_mode = pending.procedure_id.split(":")[2]
+        attempts = (
+            context.actor.investigator_streetwise_recall_attempts
+            if expected_mode == "recall" else context.actor.investigator_streetwise_gather_attempts
+        )
+        limit = (
+            record.recall_attempt_limit if expected_mode == "recall" else record.gather_attempt_limit
+        ) if record is not None else 0
+        dc = (record.recall_dc if expected_mode == "recall" else record.gather_dc) if record is not None else -1
+        expected_modifiers = (
+            (Modifier(1, "circumstance", "Pursue a Lead"),)
+            if record is not None and record.investigation_case_id in context.actor.investigator_active_cases
+            else ()
+        )
+        if (
+            context.state.in_progress or pending.family_id != "martial"
+            or pending.owner_actor_id != context.actor.actor_id or pending.actor_id != context.actor.actor_id
+            or not isinstance(command, Streetwise) or command.mode != expected_mode or record is None
+            or (expected_mode == "recall" and context.actor.actor_id not in record.familiar_actor_ids)
+            or attempts.get(record.question_key, 0) >= limit
+            or continuation is None or continuation.kind != "family_action"
+            or continuation.stage != f"streetwise_{expected_mode}_hero_point"
+            or pending.saved_check is None or pending.saved_check.result is None
+            or pending.saved_check.check_owner_actor_id != context.actor.actor_id
+            or pending.saved_check.context.statistic != "society" or pending.saved_check.dc != dc
+            or tuple(
+                modifier for modifier in pending.saved_check.modifiers
+                if modifier.source == "Pursue a Lead"
+            ) != expected_modifiers
+            or context.actor.health_mode is not HealthMode.PC or context.actor.hero_points < 1
+            or pending.options != (
+                ChoiceOption("reroll", "Spend a Hero Point to reroll"),
+                ChoiceOption("keep", "Keep the current result"),
+            )
+        ):
+            raise ValueError("save has an invalid Streetwise Hero Point choice")
         return
     if (
         pending is None

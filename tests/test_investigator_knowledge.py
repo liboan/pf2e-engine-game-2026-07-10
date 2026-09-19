@@ -17,7 +17,7 @@ import pytest
 
 import pf2e.content as content
 from pf2e.encounter import Encounter
-from pf2e.investigator import DeviseStratagem, RecallKnowledge
+from pf2e.investigator import ATTACK_STRATAGEM, DeviseStratagem, RecallKnowledge
 from pf2e.investigator_content import (
     FORENSIC_INVESTIGATOR_HEALING_SETUP,
     FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
@@ -39,8 +39,8 @@ def _choose_keep(game: Encounter):
 def _investigator_game(setup, monkeypatch: pytest.MonkeyPatch, *rolls: int) -> Encounter:
     monkeypatch.setattr(
         content,
-        "_STAGED_SETUPS",
-        content._STAGED_SETUPS | {setup.setup_id: setup},
+        "SETUPS",
+        content.SETUPS | {setup.setup_id: setup},
     )
     game = Encounter.start(setup, rolls=rolls)
     for _ in range(8):
@@ -262,7 +262,7 @@ def test_known_weaknesses_orders_knowledge_before_devise_and_grants_targeted_all
     setup = replace(FORENSIC_INVESTIGATOR_HEALING_SETUP, knowledge=(knowledge,))
     game = _investigator_game(setup, monkeypatch, 20, 1, 2, 20, 14, 5, 4)
     started = game.execute(
-        DeviseStratagem("healing_dog", known_weaknesses=True)
+        DeviseStratagem("healing_dog", mode=ATTACK_STRATAGEM, known_weaknesses=True)
     )
     assert started.status is ResultStatus.PAUSED
     assert game._state.creatures["forensic_investigator"].investigator_stratagem is None
@@ -312,7 +312,7 @@ def test_known_weaknesses_bonus_expires_at_investigator_next_turn_start(
     knowledge = replace(GUARD_DOG_KNOWLEDGE, communication_recipients=("healing_ally",))
     setup = replace(FORENSIC_INVESTIGATOR_HEALING_SETUP, knowledge=(knowledge,))
     game = _investigator_game(setup, monkeypatch, 20, 1, 2, 20, 14)
-    assert game.execute(DeviseStratagem("healing_dog", known_weaknesses=True)).status is ResultStatus.PAUSED
+    assert game.execute(DeviseStratagem("healing_dog", mode=ATTACK_STRATAGEM, known_weaknesses=True)).status is ResultStatus.PAUSED
     _choose_keep(game)
     assert game._state.investigator_weakness_bonuses
 

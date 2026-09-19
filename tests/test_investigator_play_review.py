@@ -15,7 +15,7 @@ import pytest
 
 import pf2e.content as content
 from pf2e.encounter import Encounter
-from pf2e.investigator import DeviseStratagem, SKILL_STRATAGEM
+from pf2e.investigator import ATTACK_STRATAGEM, DeviseStratagem
 from pf2e.investigator_content import FORENSIC_INVESTIGATOR
 from pf2e.model import (
     CreaturePlacement,
@@ -97,7 +97,7 @@ def _nimble_setup(monkeypatch: pytest.MonkeyPatch) -> EncounterSetup:
     return setup
 
 
-def test_selected_sheet_is_complete_but_stays_staged() -> None:
+def test_selected_sheet_is_complete_and_catalogued() -> None:
     investigator = FORENSIC_INVESTIGATOR
     assert (investigator.hp, investigator.ac, investigator.perception) == (17, 17, 6)
     assert dict(investigator.ability_modifiers) == {
@@ -120,10 +120,10 @@ def test_selected_sheet_is_complete_but_stays_staged() -> None:
     assert len(investigator.feats) >= 4
     assert investigator.languages[0] == "Common"
     assert len(set(investigator.languages)) == 6
-    assert investigator.definition_id not in content.CREATURES
-    assert investigator.definition_id in content._STAGED_CREATURES
+    assert investigator.definition_id in content.CREATURES
+    assert investigator.definition_id not in content._STAGED_CREATURES
     setup_id = "investigator_forensic_vs_two_guard_dogs"
-    assert setup_id not in content.SETUPS and setup_id in content._STAGED_SETUPS
+    assert setup_id in content.SETUPS and setup_id not in content._STAGED_SETUPS
 
 
 def test_complete_two_target_fight_keeps_stratagem_for_selected_target(
@@ -134,7 +134,7 @@ def test_complete_two_target_fight_keeps_stratagem_for_selected_target(
     game = _investigator_game(20, 1, 2, 14, 10, 4, 3, 5, 1, 20, 1, 1)
     assert all(actor.hp == actor.max_hp for actor in game.inspect().actors)
 
-    devised = game.execute(DeviseStratagem("investigator_guard_dog_a"))
+    devised = game.execute(DeviseStratagem("investigator_guard_dog_a", mode=ATTACK_STRATAGEM))
     assert devised.status is ResultStatus.COMPLETED
     assert not any("recall" in (event.kind + event.text).lower() for event in devised.events)
     stored = game._state.creatures["forensic_investigator"].investigator_stratagem
@@ -189,7 +189,7 @@ def test_complete_two_target_fight_keeps_stratagem_for_selected_target(
     assert game.inspect().turn_actor_id == "forensic_investigator"
 
     assert game.execute(
-        DeviseStratagem("investigator_guard_dog_b")
+        DeviseStratagem("investigator_guard_dog_b", mode=ATTACK_STRATAGEM)
     ).status is ResultStatus.COMPLETED
     victory = game.execute(
         Strike(
@@ -211,7 +211,7 @@ def test_fixed_natural_one_consumes_once_then_normal_attack_can_use_hero(
 ) -> None:
     game = _investigator_game(20, 1, 2, 1, 20, 4)
     assert game.execute(
-        DeviseStratagem("investigator_guard_dog_a")
+        DeviseStratagem("investigator_guard_dog_a", mode=ATTACK_STRATAGEM)
     ).status is ResultStatus.COMPLETED
     failed = game.execute(
         Strike(
@@ -256,7 +256,7 @@ def test_fixed_natural_one_consumes_once_then_normal_attack_can_use_hero(
 def test_declining_intelligence_keeps_fixed_die_but_has_no_precision() -> None:
     game = _investigator_game(20, 1, 2, 14, 3)
     assert game.execute(
-        DeviseStratagem("investigator_guard_dog_a")
+        DeviseStratagem("investigator_guard_dog_a", mode=ATTACK_STRATAGEM)
     ).status is ResultStatus.COMPLETED
     strike = game.execute(
         Strike(
@@ -276,24 +276,24 @@ def test_declining_intelligence_keeps_fixed_die_but_has_no_precision() -> None:
     assert strike.inspection.choice is None
 
 
-def test_unsupported_modes_known_weakness_frequency_and_expiry_are_atomic() -> None:
+def test_invalid_mode_known_weakness_frequency_and_expiry_are_atomic() -> None:
     game = _investigator_game(20, 1, 2, 14, 14)
     before = game.inspect()
     dice_before = game._dice.to_data()
-    unsupported = game.execute(
-        DeviseStratagem("investigator_guard_dog_a", mode=SKILL_STRATAGEM)
+    invalid = game.execute(
+        DeviseStratagem("investigator_guard_dog_a", mode="invalid")
     )
-    assert unsupported.status is ResultStatus.UNSUPPORTED
+    assert invalid.status is ResultStatus.REJECTED
     assert game.inspect() == before and game._dice.to_data() == dice_before
 
     unsupported = game.execute(
-        DeviseStratagem("investigator_guard_dog_a", free_action=True)
+        DeviseStratagem("investigator_guard_dog_a", mode=ATTACK_STRATAGEM, free_action=True)
     )
-    assert unsupported.status is ResultStatus.UNSUPPORTED
+    assert unsupported.status is ResultStatus.REJECTED
     assert game.inspect() == before and game._dice.to_data() == dice_before
 
     known = game.execute(
-        DeviseStratagem("investigator_guard_dog_a", known_weaknesses=True)
+        DeviseStratagem("investigator_guard_dog_a", mode=ATTACK_STRATAGEM, known_weaknesses=True)
     )
     assert known.status is ResultStatus.PAUSED
     assert game.inspect().choice is not None
@@ -302,7 +302,7 @@ def test_unsupported_modes_known_weakness_frequency_and_expiry_are_atomic() -> N
 
     once_before = game.inspect()
     once_dice = game._dice.to_data()
-    repeated = game.execute(DeviseStratagem("investigator_guard_dog_b"))
+    repeated = game.execute(DeviseStratagem("investigator_guard_dog_b", mode=ATTACK_STRATAGEM))
     assert repeated.status is ResultStatus.REJECTED
     assert game.inspect() == once_before and game._dice.to_data() == once_dice
 
@@ -321,7 +321,7 @@ def test_saved_nimble_dodge_precedes_fixed_roll_consumption(
 ) -> None:
     game = Encounter.start(_nimble_setup(monkeypatch), rolls=(20, 1, 14, 3, 4))
     _settle_initiative(game)
-    assert game.execute(DeviseStratagem("thief_rogue")).status is ResultStatus.COMPLETED
+    assert game.execute(DeviseStratagem("thief_rogue", mode=ATTACK_STRATAGEM)).status is ResultStatus.COMPLETED
     attack = game.execute(
         Strike("thief_rogue", attack_id="shortsword", use_intelligence=True)
     )

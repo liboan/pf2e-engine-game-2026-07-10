@@ -104,7 +104,7 @@ class TemporaryHPResult:
 
 _CRITICAL_MODES = frozenset({"double", "unchanged", "critical_only"})
 _DEFENSE_KINDS = frozenset({"immunity", "weakness", "resistance"})
-_PHYSICAL_TYPES = frozenset({"bludgeoning", "piercing", "slashing"})
+_PHYSICAL_TYPES = frozenset({"bleed", "bludgeoning", "piercing", "slashing"})
 _DAMAGE_TYPES = frozenset(
     {
         "acid",

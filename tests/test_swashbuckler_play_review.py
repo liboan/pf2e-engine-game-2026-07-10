@@ -1,4 +1,4 @@
-"""Independent public-play review of the first staged Swashbuckler slice.
+"""Independent public-play review of the curated Braggart Swashbuckler slice.
 
 Rules references:
 - Swashbuckler: https://2e.aonprd.com/Classes.aspx?ID=63
@@ -61,8 +61,8 @@ def _settle_initiative(game: Encounter) -> None:
 def test_healthy_fight_saves_strike_and_bravado_check_then_wins(tmp_path: Path) -> None:
     definition = content.get_definition("swashbuckler_braggart_level_1")
     setup = content.get_setup(SETUP_ID)
-    assert definition not in content.CREATURES.values()
-    assert setup.setup_id not in content.SETUPS
+    assert definition in content.CREATURES.values()
+    assert setup.setup_id in content.SETUPS
     assert definition.background == "Warrior"
     assert "Intimidating Glare" in definition.feats
     assert (definition.class_name, definition.land_speed_ft) == ("Swashbuckler", 25)

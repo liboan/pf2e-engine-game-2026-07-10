@@ -40,6 +40,7 @@ from .sorcerer_content import (
 from .justice_content import JUSTICE_CHAMPION, JUSTICE_CHAMPION_SETUP
 from .investigator_content import (
     FORENSIC_INVESTIGATOR,
+    FORENSIC_INVESTIGATOR_HEALING_SETUP,
     FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
     INVESTIGATOR_DEFINITIONS,
     INVESTIGATOR_SETUPS,
@@ -47,9 +48,31 @@ from .investigator_content import (
 from .swashbuckler_content import (
     BRAGGART_SWASHBUCKLER,
     BRAGGART_SWASHBUCKLER_SETUP,
-    SWASHBUCKLER_DEFINITIONS,
-    SWASHBUCKLER_SETUPS,
 )
+from .bard_content import MAESTRO_BARD_STAGED, MAESTRO_BARD_ANTHEM_SETUP, MAESTRO_BARD_FEAR_SETUP
+from .ranger_monk_content import (
+    MONK,
+    MONK_KAMA_FLURRY_SETUP,
+    RANGER_PRECISION,
+    RANGER_PRECISION_BOW_SETUP,
+)
+from .wizard_content import (
+    BATTLE_MAGIC_WIZARD,
+    BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS,
+    BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP,
+    BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP,
+    BATTLE_MAGIC_WIZARD_NEXT_SETUP,
+    BATTLE_MAGIC_WIZARD_REACTION_SETUP,
+    BATTLE_MAGIC_WIZARD_RUNIC_BODY,
+    BATTLE_MAGIC_WIZARD_RUNIC_BODY_SETUP,
+    BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE,
+    BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE_SETUP,
+    BATTLE_MAGIC_WIZARD_SETUP,
+)
+from .druid_content import STORM_DRUID, STORM_DRUID_SETUP, STORM_DRUID_NEXT_SETUP, STORM_DRUID_SAVE_SETUP, STORM_DRUID_WEATHER_SETUP, STORM_DRUID_SOCIAL_SETUP
+from .oracle_content import LIFE_ORACLE, LIFE_ORACLE_NUDGE_SETUP, VOID_HEALING_ORACLE, LIFE_ORACLE_LASH_SETUP, LIFE_ORACLE_NEXT_SETUP
+from .alchemist_content import BOMBER_ALCHEMIST, BOMBER_ALCHEMIST_NEXT_SETUP, BOMBER_ALCHEMIST_SETUP
+from .witch_content import FAITHS_FLAMEKEEPER_WITCH, FLAMEKEEPER_FOX, COMMAND_TARGET, FAITHS_FLAMEKEEPER_SETUP, FAITHS_FLAMEKEEPER_NEXT_SETUP
 
 # Dim fixtures opt into the narrow lighting model with an explicit vision
 # fact in the assembled content. The selected Angelic sheet remains neutral
@@ -826,6 +849,26 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         ANGELIC_SORCERER_STAGED.definition_id: ANGELIC_SORCERER_STAGED,
         JUSTICE_CHAMPION.definition_id: JUSTICE_CHAMPION,
         WEAPON_IDENTITY_FIGHTER_M.definition_id: WEAPON_IDENTITY_FIGHTER_M,
+        BRAGGART_SWASHBUCKLER.definition_id: BRAGGART_SWASHBUCKLER,
+        # The reviewed selected Forensic Investigator keeps its original
+        # stable definition ID as it moves from staged to normal catalog.
+        **INVESTIGATOR_DEFINITIONS,
+        # Preserve the stable selected Ranger definition ID for saves made
+        # before this reviewed combat setup entered the normal catalog.
+        RANGER_PRECISION.definition_id: RANGER_PRECISION,
+        # The completed selected Battle Magic Wizard keeps its stable ID as
+        # it moves into the normal catalog; diagnostic alternates stay staged.
+        BATTLE_MAGIC_WIZARD.definition_id: BATTLE_MAGIC_WIZARD,
+        STORM_DRUID.definition_id: STORM_DRUID,
+        # Preserve the selected Oracle's stable ID while moving its completed
+        # representative encounter into the ordinary catalog.
+        LIFE_ORACLE.definition_id: LIFE_ORACLE,
+        FAITHS_FLAMEKEEPER_WITCH.definition_id: FAITHS_FLAMEKEEPER_WITCH,
+        FLAMEKEEPER_FOX.definition_id: FLAMEKEEPER_FOX,
+        COMMAND_TARGET.definition_id: COMMAND_TARGET,
+        # The selected Bomber retains its stable staged ID now that the full
+        # level-1 recovery, preparation, venom, and terminal route is admitted.
+        BOMBER_ALCHEMIST.definition_id: BOMBER_ALCHEMIST,
     }
 )
 
@@ -1185,21 +1228,37 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         SURE_STRIKE_WARPRIEST_SETUP.setup_id: SURE_STRIKE_WARPRIEST_SETUP,
         ANGELIC_FIRST_CAST_SETUP.setup_id: ANGELIC_FIRST_CAST_SETUP,
         JUSTICE_CHAMPION_SETUP.setup_id: JUSTICE_CHAMPION_SETUP,
+        BRAGGART_SWASHBUCKLER_SETUP.setup_id: BRAGGART_SWASHBUCKLER_SETUP,
+        RANGER_PRECISION_BOW_SETUP.setup_id: RANGER_PRECISION_BOW_SETUP,
+        **INVESTIGATOR_SETUPS,
         **DRAGON_BARBARIAN_SETUPS,
         **ANIMAL_BARBARIAN_SETUPS,
         **TYPED_DEFENSE_SETUPS,
         **{setup.setup_id: setup for setup in S2_INTERACTION_SETUPS},
         **{setup.setup_id: setup for setup in S3_INTERACTION_SETUPS},
+        BATTLE_MAGIC_WIZARD_SETUP.setup_id: BATTLE_MAGIC_WIZARD_SETUP,
+        STORM_DRUID_SETUP.setup_id: STORM_DRUID_SETUP,
+        LIFE_ORACLE_NUDGE_SETUP.setup_id: LIFE_ORACLE_NUDGE_SETUP,
+        FAITHS_FLAMEKEEPER_SETUP.setup_id: FAITHS_FLAMEKEEPER_SETUP,
+        BOMBER_ALCHEMIST_SETUP.setup_id: BOMBER_ALCHEMIST_SETUP,
     }
 )
 
-# Closed-room diagnostics, the next-encounter continuation, and the incomplete
-# Investigator first-play slice remain directly retrievable but staged.
+# Closed-room diagnostics and the next-encounter continuation remain directly
+# retrievable but staged.
 _STAGED_CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType({
     SOOTHE_TEST_CASTER.definition_id: SOOTHE_TEST_CASTER,
     WEAPON_IDENTITY_THIEF.definition_id: WEAPON_IDENTITY_THIEF,
-    **INVESTIGATOR_DEFINITIONS,
-    **SWASHBUCKLER_DEFINITIONS,
+    MAESTRO_BARD_STAGED.definition_id: MAESTRO_BARD_STAGED,
+    MONK.definition_id: MONK,
+    BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS.definition_id: BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS,
+    BATTLE_MAGIC_WIZARD_RUNIC_BODY.definition_id: BATTLE_MAGIC_WIZARD_RUNIC_BODY,
+    BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE.definition_id: BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE,
+    STORM_DRUID.definition_id: STORM_DRUID,
+    VOID_HEALING_ORACLE.definition_id: VOID_HEALING_ORACLE,
+    FAITHS_FLAMEKEEPER_WITCH.definition_id: FAITHS_FLAMEKEEPER_WITCH,
+    FLAMEKEEPER_FOX.definition_id: FLAMEKEEPER_FOX,
+    COMMAND_TARGET.definition_id: COMMAND_TARGET,
 })
 _STAGED_SETUPS: Mapping[str, EncounterSetup] = MappingProxyType({
     DIM_TARGETING_SETUP.setup_id: DIM_TARGETING_SETUP,
@@ -1210,8 +1269,23 @@ _STAGED_SETUPS: Mapping[str, EncounterSetup] = MappingProxyType({
     SOOTHE_TEST_SETUP.setup_id: SOOTHE_TEST_SETUP,
     WEAPON_IDENTITY_SETUP.setup_id: WEAPON_IDENTITY_SETUP,
     WEAPON_IDENTITY_SHORTSWORD_SETUP.setup_id: WEAPON_IDENTITY_SHORTSWORD_SETUP,
-    **INVESTIGATOR_SETUPS,
-    **SWASHBUCKLER_SETUPS,
+    MAESTRO_BARD_ANTHEM_SETUP.setup_id: MAESTRO_BARD_ANTHEM_SETUP,
+    MAESTRO_BARD_FEAR_SETUP.setup_id: MAESTRO_BARD_FEAR_SETUP,
+    MONK_KAMA_FLURRY_SETUP.setup_id: MONK_KAMA_FLURRY_SETUP,
+    BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP.setup_id: BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP,
+    BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP.setup_id: BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP,
+    BATTLE_MAGIC_WIZARD_NEXT_SETUP.setup_id: BATTLE_MAGIC_WIZARD_NEXT_SETUP,
+    BATTLE_MAGIC_WIZARD_REACTION_SETUP.setup_id: BATTLE_MAGIC_WIZARD_REACTION_SETUP,
+    BATTLE_MAGIC_WIZARD_RUNIC_BODY_SETUP.setup_id: BATTLE_MAGIC_WIZARD_RUNIC_BODY_SETUP,
+    BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE_SETUP.setup_id: BATTLE_MAGIC_WIZARD_TELEKINETIC_PROJECTILE_SETUP,
+    STORM_DRUID_NEXT_SETUP.setup_id: STORM_DRUID_NEXT_SETUP,
+    STORM_DRUID_SAVE_SETUP.setup_id: STORM_DRUID_SAVE_SETUP,
+    STORM_DRUID_WEATHER_SETUP.setup_id: STORM_DRUID_WEATHER_SETUP,
+    STORM_DRUID_SOCIAL_SETUP.setup_id: STORM_DRUID_SOCIAL_SETUP,
+    LIFE_ORACLE_LASH_SETUP.setup_id: LIFE_ORACLE_LASH_SETUP,
+    LIFE_ORACLE_NEXT_SETUP.setup_id: LIFE_ORACLE_NEXT_SETUP,
+    BOMBER_ALCHEMIST_NEXT_SETUP.setup_id: BOMBER_ALCHEMIST_NEXT_SETUP,
+    FAITHS_FLAMEKEEPER_NEXT_SETUP.setup_id: FAITHS_FLAMEKEEPER_NEXT_SETUP,
 })
 
 

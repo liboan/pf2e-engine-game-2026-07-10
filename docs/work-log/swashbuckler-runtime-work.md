@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-Astra checked the selected level-1 build, relevant remaster sources and current interfaces. This is a design packet with proposed encounters, not implemented class coverage. Implement after the preceding selected classes and their shared prerequisites. Keep ownership in [ACTIVE](ACTIVE.md).
+The selected level-1 Braggart/Flying Blade build is accepted and public after source-checked independent play, saved continuation, healthy terminal victory and the 836-test integration checkpoint. The source contract and originally proposed examples below are retained; actual evidence is linked in the accepted-delivery section. Current ownership and scope stay in [ACTIVE](ACTIVE.md).
 
 Use one Braggart with Flying Blade and a few separately tracked daggers. No other styles or exhaustive feat list. Level 2 follows the level-1 roster acceptance; the suggestions below are not already granted.
 
@@ -22,7 +22,7 @@ Demoralize costs one action against an aware target within 30 feet, Intimidation
 
 Tumble Through is one Stride-based action. Check Acrobatics against Reflex DC when entering an enemy's space; its squares cost double movement. Insufficient movement gives failure's movement result. Failure stops movement and triggers departure reactions; success also preserves ordinary movement reactions. A ranged throw provokes Reactive Strike; ordinary Demoralize does not. [Tumble Through](https://2e.aonprd.com/Actions.aspx?ID=2370), [Reactive Strike](https://2e.aonprd.com/Feats.aspx?ID=5832).
 
-Current limitations identified by the researcher: Demoralize rejects temporary immunity outright; movement rejects occupied enemy spaces; thrown attacks retain the weapon. These require actual integration, not new content labels.
+The original source review identified immune-target Demoralize, enemy-space movement and retained thrown weapons as integration gaps. Those selected-build gaps are now resolved by the accepted panache, Tumble and Flying Blade deliveries. Larger/multi-enemy Tumble and alternate movement remain outside the supported slice.
 
 ## Fixed level-1 build
 
@@ -59,4 +59,16 @@ The source packet identified no P0. For thrown-item recovery, use the user's del
 
 Level-2 proposal: Antagonize and Assurance (Acrobatics), HP30 and proficiency-derived statistics +1. Source-check the selected delta before admission. [Antagonize](https://2e.aonprd.com/Feats.aspx?ID=6136).
 
-Research launched only synchronous read/search commands, all exited; no implementation, tests or engine play occurred.
+The initial research launched only synchronous read/search commands. Later executed delivery evidence follows.
+
+## Accepted Flying Blade and public admission
+
+Terra/high retained ownership of `swashbuckler-flying-blade-2026-09-16` through implementation, source-citation repair and public admission. [Owner tests](../../tests/test_swashbuckler_flying_blade.py) exercise real near/far throws, first-increment precision/finisher legality, Strength damage, identified dagger departure/landing/recovery, saved thrown-finisher choice and a healthy terminal victory. The declared GM placement convention remains target-cell landing on hit or miss.
+
+[Independent Sol tests](../../tests/test_swashbuckler_flying_blade_review.py) verify selected level-1 grants/proficiencies, saved Reactive Strike and throw identity/recovery, Dexterity attack versus Strength/precision damage, and failed thrown-finisher half precision. No gameplay bug was found. The owner corrected the Dagger source to Weapons ID358; one reviewer attack-roll input was corrected separately. Nine owner/review checks and 48 Swashbuckler checks passed.
+
+`swashbuckler_braggart_level_1` is now in normal CREATURES; the save-compatible setup ID `staged_braggart_swashbuckler_vs_guard_dog` is now in normal SETUPS and selectable through the ordinary terminal. Public selection and existing healthy victory are exercised. Two formerly staged-only assertions were repaired after admission. Final canonical evidence: **836 passed**, measured **4.177 seconds**, peak **72,007,680 bytes**, compile/diff0; **52/37 admitted**, **10/3 staged**, save17. Focused admission/terminal checks:38passed/0.26s. Narrow approved post-run inventory found no retained task-owned test/checkpoint process.
+
+No other styles, Flying Blade weapon menus, level2, scatter, projectile paths or returning weapons were added. The complete selected level-1 build is accepted; this is not exhaustive class-content coverage.
+
+Closed implementation usage:9,763,812input /9,453,824cached /37,812output,63requests,0compactions. Closed review usage:2,394,625input /2,299,648cached /11,446output,24requests,0compactions. Same owner/reviewer throughout; 21m8s assignment-to-accounting closure includes waits, with finer timing unavailable. Cached input is a subset; dollar cost unavailable.

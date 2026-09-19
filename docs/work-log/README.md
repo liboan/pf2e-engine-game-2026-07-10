@@ -2,7 +2,7 @@
 
 ## Start here
 
-Work is paused at the user’s request. The checkpoint below records accepted results and exact resume points; no further implementation or tests are running.
+The selected level-1 Braggart Swashbuckler is accepted and public after the first Terra/high implementation delivery. Use ACTIVE for latest evidence, model routing and next assignments; completed records below are reference material.
 
 [Current work and recovery table](ACTIVE.md) is the single source for current ownership, blockers, executable checkpoint and next action. It is the normal entry point after interruption or compaction.
 
@@ -23,9 +23,9 @@ The [integrated plan](../plan/06-class-and-content-expansion.md) explains the se
 
 [Warpriest preparation](warpriest-utility-work.md) substitutes shared Light for optional unimplemented Read Aura and specifies a legal Sure Strike alternate. The superseded identification research is archived, outside S3i acceptance.
 
-[Selected Investigator](investigator-runtime-work.md) defines the fixed build. Delivery records cover its [first attack sequence](investigator-first-play-work.md), [Forensic healing](investigator-forensic-healing-work.md), [knowledge checks](investigator-knowledge-work.md), and [accepted examination and remaining grants](investigator-remaining-grants-work.md), and [active leads/Clue In](investigator-leads-work.md). See ACTIVE for acceptance and ownership; partial capabilities do not imply a complete class.
+[Selected Investigator](investigator-runtime-work.md) defines the fixed build. Delivery records cover its [first attack sequence](investigator-first-play-work.md), [Forensic healing](investigator-forensic-healing-work.md), [knowledge checks](investigator-knowledge-work.md), and [accepted examination and remaining grants](investigator-remaining-grants-work.md), and [accepted leads/Clue In](investigator-leads-work.md). See ACTIVE for acceptance and ownership; partial capabilities do not imply a complete class.
 
-[Selected Swashbuckler](swashbuckler-runtime-work.md) has the Braggart/Flying Blade rules and legal build. Its [first attack/panache sequence](swashbuckler-first-play-work.md) records executed evidence and the terminal-probe resource repair; [melee Confident Finisher](swashbuckler-finisher-work.md) is accepted; [Tumble Through](swashbuckler-tumble-work.md) is the next bounded delivery packet.
+[Selected Swashbuckler](swashbuckler-runtime-work.md) records the accepted public Braggart/Flying Blade build, rules, legal grants and final integration evidence. Its [first attack/panache sequence](swashbuckler-first-play-work.md) records executed evidence and the terminal-probe resource repair; [melee Confident Finisher](swashbuckler-finisher-work.md) is accepted; [Tumble Through](swashbuckler-tumble-work.md) is accepted with saved movement/reactions and independent complete play.
 
 [Shared Soothe](soothe-shared-spell-work.md) records the bounded healing/mental-save spell outcome needed by the selected Bard and Oracle. It does not claim either class is complete.
 

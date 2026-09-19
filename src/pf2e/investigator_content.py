@@ -35,6 +35,7 @@ from .model import (
 from .items import ItemInstance
 from .investigator import (
     DEVISE_ABILITY,
+    ON_THE_CASE_ABILITY,
     FORENSIC_ACUMEN_ABILITY,
     BATTLE_MEDICINE_ABILITY,
     FORENSIC_MEDICINE_ABILITY,
@@ -145,6 +146,100 @@ KnowledgeContent = RecallKnowledgeContent
 
 
 @dataclass(frozen=True)
+class InvestigationClueContent:
+    """One literal detail an Investigator can examine as a lead."""
+
+    clue_key: str
+    label: str
+    confirmed: bool
+    result: str
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value for value in (
+            self.clue_key, self.label, self.result,
+        )):
+            raise ValueError("Investigation clues need non-empty keys, labels, and results")
+        if type(self.confirmed) is not bool:
+            raise ValueError("Investigation clue confirmation must be boolean")
+
+
+@dataclass(frozen=True)
+class InvestigationCheckContent:
+    """An authored skill or Perception check that advances one case."""
+
+    check_key: str
+    question: str
+    statistic: str
+    dc: int
+    result: str
+    target_actor_id: str | None = None
+    helper_actor_ids: tuple[str, ...] = ()
+    traits: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value for value in (
+            self.check_key, self.question, self.statistic, self.result,
+        )):
+            raise ValueError("Investigation checks need non-empty authored text and statistic")
+        if type(self.dc) is not int or self.dc < 0:
+            raise ValueError("Investigation check DC must be non-negative")
+        if self.target_actor_id is not None and (
+            not isinstance(self.target_actor_id, str) or not self.target_actor_id
+        ):
+            raise ValueError("Investigation check target actor id must be non-empty text")
+        for values, label in ((self.helper_actor_ids, "helper actor ids"), (self.traits, "traits")):
+            if (
+                not isinstance(values, tuple)
+                or any(not isinstance(value, str) or not value for value in values)
+                or len(set(values)) != len(values)
+            ):
+                raise ValueError(f"Investigation check {label} must contain unique non-empty text")
+
+
+@dataclass(frozen=True)
+class InvestigationContent:
+    """Finite GM-authored case facts for Pursue a Lead and Clue In."""
+
+    case_id: str
+    name: str
+    question: str
+    larger_mystery_fact: str
+    clues: tuple[InvestigationClueContent, ...]
+    relevant_checks: tuple[InvestigationCheckContent, ...]
+    known_helper_actor_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value for value in (
+            self.case_id, self.name, self.question, self.larger_mystery_fact,
+        )):
+            raise ValueError("Investigations need non-empty authored case facts")
+        if (
+            not isinstance(self.clues, tuple)
+            or not self.clues
+            or any(not isinstance(clue, InvestigationClueContent) for clue in self.clues)
+            or len({clue.clue_key for clue in self.clues}) != len(self.clues)
+        ):
+            raise ValueError("Investigations need unique authored clues")
+        if (
+            not isinstance(self.relevant_checks, tuple)
+            or not self.relevant_checks
+            or any(not isinstance(check, InvestigationCheckContent) for check in self.relevant_checks)
+            or len({check.check_key for check in self.relevant_checks}) != len(self.relevant_checks)
+        ):
+            raise ValueError("Investigations need unique authored relevant checks")
+        if (
+            not isinstance(self.known_helper_actor_ids, tuple)
+            or any(not isinstance(actor_id, str) or not actor_id for actor_id in self.known_helper_actor_ids)
+            or len(set(self.known_helper_actor_ids)) != len(self.known_helper_actor_ids)
+        ):
+            raise ValueError("Investigation helper actor ids must be unique non-empty text")
+
+
+LeadClueContent = InvestigationClueContent
+InvestigationCaseContent = InvestigationContent
+
+
+@dataclass(frozen=True)
 class ForensicExaminationContent:
     """One authored outside-combat Forensic Acumen examination.
 
@@ -235,6 +330,76 @@ class ForensicExaminationContent:
 ExaminationContent = ForensicExaminationContent
 
 
+@dataclass(frozen=True)
+class StreetwiseContent:
+    """One finite settlement question for the selected Streetwise feat.
+
+    The printed feat supplies Society substitution and instant familiar-settlement
+    Recall. The settlement, questions, DCs, outcomes, and repeat limits remain
+    explicit GM-authored facts for this narrow play slice.
+    """
+
+    settlement_key: str
+    question_key: str
+    settlement_label: str
+    question: str
+    familiar_actor_ids: tuple[str, ...]
+    recall_dc: int
+    gather_dc: int
+    gather_duration_seconds: int
+    recall_success_answer: str
+    gather_success_answer: str
+    gather_failure_answer: str
+    gather_critical_failure_answer: str
+    investigation_case_id: str | None = None
+    recall_attempt_limit: int = 1
+    gather_attempt_limit: int = 1
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(value, str) or not value for value in (
+            self.settlement_key, self.question_key, self.settlement_label, self.question,
+            self.recall_success_answer, self.gather_success_answer, self.gather_failure_answer,
+            self.gather_critical_failure_answer,
+        )):
+            raise ValueError("Streetwise content needs non-empty authored text")
+        if (not isinstance(self.familiar_actor_ids, tuple)
+            or not self.familiar_actor_ids
+            or any(not isinstance(value, str) or not value for value in self.familiar_actor_ids)
+            or len(set(self.familiar_actor_ids)) != len(self.familiar_actor_ids)):
+            raise ValueError("Streetwise familiarity needs unique non-empty actor ids")
+        if any(type(value) is not int or value < 0 for value in (self.recall_dc, self.gather_dc)):
+            raise ValueError("Streetwise DCs must be non-negative integers")
+        if self.recall_dc <= self.gather_dc:
+            raise ValueError("Streetwise instant Recall DC must be higher than Gather DC")
+        if type(self.gather_duration_seconds) is not int or self.gather_duration_seconds != 2 * 60 * 60:
+            raise ValueError("selected Streetwise Gather Information takes exactly two hours")
+        if any(type(value) is not int or value < 1 for value in (
+            self.recall_attempt_limit, self.gather_attempt_limit,
+        )):
+            raise ValueError("Streetwise attempt limits must be positive integers")
+        if self.investigation_case_id is not None and (
+            not isinstance(self.investigation_case_id, str) or not self.investigation_case_id
+        ):
+            raise ValueError("Streetwise investigation relevance must be a non-empty case id")
+
+
+OUTPOST_HANDLER_STREETWISE = StreetwiseContent(
+    settlement_key="outpost",
+    question_key="outpost_handler",
+    settlement_label="Outpost",
+    question="Who is directing the guard dogs around this outpost?",
+    familiar_actor_ids=("forensic_investigator",),
+    recall_dc=20,
+    gather_dc=15,
+    gather_duration_seconds=2 * 60 * 60,
+    recall_success_answer="The outpost quartermaster coordinates the handler's supply route.",
+    gather_success_answer="The outpost quartermaster has been paying a handler to direct the guard dogs.",
+    gather_failure_answer="No reliable local account identifies the guard-dog handler.",
+    gather_critical_failure_answer="A convincing but false rumor blames the outpost's stablehand for directing the guard dogs.",
+    investigation_case_id="guard_dog_case",
+)
+
+
 # This is a deliberately small GM-authored fact packet.  It supplies a
 # concrete question for the staged guard-dog scenes while the engine remains
 # agnostic about creature knowledge in general.
@@ -302,6 +467,51 @@ FORENSIC_EXAMINATION = FORENSIC_GUARD_DOG_EXAMINATION
 BODY_EXAMINATION = FORENSIC_GUARD_DOG_EXAMINATION
 
 
+INVESTIGATOR_CLUE_ROOM = InvestigationContent(
+    case_id="guard_dog_case",
+    name="The Bloodied Collar",
+    question="Who is directing the guard dogs that attacked the outpost?",
+    larger_mystery_fact="The injured dogs and their marked collar belong to a larger handler network.",
+    clues=(
+        InvestigationClueContent(
+            clue_key="bloodied_collar",
+            label="the bloodied collar",
+            confirmed=True,
+            result="The collar's marks point to a handler directing the dogs from nearby.",
+        ),
+        InvestigationClueContent(
+            clue_key="loose_thread",
+            label="the loose thread",
+            confirmed=False,
+            result="The thread is ordinary cloth and reveals nothing further.",
+        ),
+    ),
+    relevant_checks=(
+        InvestigationCheckContent(
+            check_key="guard_dog_handler_tracks",
+            question="What do the tracks around the collar reveal about the handler?",
+            statistic="perception",
+            dc=15,
+            result="The handler approached from the east and used a practiced signal.",
+            target_actor_id="investigator_guard_dog_a",
+            helper_actor_ids=("investigator_guard_dog_a",),
+            traits=("concentrate", "skill"),
+        ),
+        InvestigationCheckContent(
+            check_key="guard_dog_handler_marks",
+            question="What do the collar marks reveal about the handler network?",
+            statistic="society",
+            dc=16,
+            result="The collar mark matches a courier ring used by the outpost's attacker.",
+            target_actor_id="investigator_guard_dog_a",
+            helper_actor_ids=("investigator_guard_dog_a",),
+            traits=("concentrate", "skill"),
+        ),
+    ),
+    known_helper_actor_ids=("investigator_guard_dog_a",),
+)
+
+
 FORENSIC_INVESTIGATOR = CreatureDefinition(
     definition_id="investigator_forensic_level_1",
     name="Level 1 Forensic Investigator",
@@ -327,6 +537,7 @@ FORENSIC_INVESTIGATOR = CreatureDefinition(
     kind="pc",
     health_mode=HealthMode.PC,
     abilities=(
+        ON_THE_CASE_ABILITY,
         DEVISE_ABILITY,
         FORENSIC_MEDICINE_ABILITY,
         FORENSIC_ACUMEN_ABILITY,
@@ -401,9 +612,10 @@ FORENSIC_INVESTIGATOR = CreatureDefinition(
         "Forensic Medicine grants Battle Medicine. Known Weaknesses embeds the authored Recall Knowledge question in Devise for these scenes.",
         "Forensic Medicine adds the investigator's level to Battle Medicine healing on a success and changes that target's Battle Medicine immunity to 1 hour.",
         "Forensic Acumen halves this authored body examination to 5 minutes and offers relevant immediate Recall Knowledge follow-up.",
-        "Devise's attack stratagem is the only Investigator family action admitted by the first-play slice; the skill stratagem and lead-aware free use reject explicitly until their procedures exist.",
+        "Pursue a Lead, Clue In, lead-aware free Devise, and Skill Stratagem are admitted for the authored cases; after Devise's stored d20, Skill Stratagem blocks target Strikes until the start of the investigator's next turn and benefits its next relevant mental skill or Perception check.",
+        "Streetwise uses Society for the authored Outpost Gather Information question (two hours); the familiar-settlement Society Recall option has its separately authored higher DC and a failure still permits that Gather attempt.",
         "A shortsword is agile and finesse, so an attack stratagem may substitute Intelligence for Strength or Dexterity and then add Strategic Strike 1d6 precision.",
-        "Sources: https://2e.aonprd.com/Classes.aspx?ID=59; https://2e.aonprd.com/Methodologies.aspx?ID=7; https://2e.aonprd.com/Feats.aspx?ID=5936",
+        "Sources: https://2e.aonprd.com/Classes.aspx?ID=59; https://2e.aonprd.com/Actions.aspx?ID=2813; https://2e.aonprd.com/Methodologies.aspx?ID=7; https://2e.aonprd.com/Feats.aspx?ID=5936; https://2e.aonprd.com/Feats.aspx?ID=5218; https://2e.aonprd.com/Actions.aspx?ID=2391",
     ),
 )
 
@@ -438,6 +650,8 @@ FORENSIC_INVESTIGATOR_VS_TWO_DOGS = EncounterSetup(
     ),
     knowledge=(GUARD_DOG_KNOWLEDGE,),
     examinations=(FORENSIC_GUARD_DOG_EXAMINATION,),
+    investigations=(INVESTIGATOR_CLUE_ROOM,),
+    streetwise=(OUTPOST_HANDLER_STREETWISE,),
 )
 
 
@@ -471,6 +685,8 @@ FORENSIC_INVESTIGATOR_HEALING_SETUP = EncounterSetup(
     ),
     knowledge=(GUARD_DOG_KNOWLEDGE,),
     examinations=(FORENSIC_HEALING_DOG_EXAMINATION,),
+    investigations=(INVESTIGATOR_CLUE_ROOM,),
+    streetwise=(OUTPOST_HANDLER_STREETWISE,),
 )
 
 

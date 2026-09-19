@@ -14,6 +14,7 @@ Archives of Nethys and the current Paizo FAQ (including 2026 errata):
 * Maneuver weapon traits: https://2e.aonprd.com/Traits.aspx?ID=619
 * Intimidating Glare: https://2e.aonprd.com/Feats.aspx?ID=5162
 * Feint: https://2e.aonprd.com/Actions.aspx?ID=2390
+* Tumble Through: https://2e.aonprd.com/Actions.aspx?ID=2370
 * Current official errata: https://paizo.com/pathfinder/faq
 """
 
@@ -101,6 +102,29 @@ FEINT = SkillActionContent(
     frozenset({"mental"}),
     "https://2e.aonprd.com/Actions.aspx?ID=2390",
     effect_kinds=("off_guard",),
+)
+
+TUMBLE_THROUGH = SkillActionContent(
+    "tumble_through",
+    "Tumble Through",
+    1,
+    "acrobatics",
+    "reflex",
+    frozenset({"bravado", "move"}),
+    "https://2e.aonprd.com/Actions.aspx?ID=2370",
+)
+
+# Quick Jump modifies the ordinary two-action Long Jump.  The bounded engine
+# represents its horizontal result only; elevated surfaces and High Jump are
+# deliberately outside its flat encounter maps.
+QUICK_JUMP = SkillActionContent(
+    "quick_jump",
+    "Quick Jump",
+    1,
+    "athletics",
+    "long_jump_dc_15",
+    frozenset({"move"}),
+    "https://2e.aonprd.com/Feats.aspx?ID=5196",
 )
 
 

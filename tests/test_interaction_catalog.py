@@ -6,7 +6,15 @@ from pf2e.content import (
     BARBARIAN_PC_PAIR_SETUP,
     CREATURES,
     ANGELIC_FIRST_CAST_SETUP,
+    BRAGGART_SWASHBUCKLER_SETUP,
+    BATTLE_MAGIC_WIZARD_SETUP,
+    STORM_DRUID_SETUP,
+    LIFE_ORACLE_NUDGE_SETUP,
+    FAITHS_FLAMEKEEPER_SETUP,
+    BOMBER_ALCHEMIST_SETUP,
     JUSTICE_CHAMPION_SETUP,
+    FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
+    FORENSIC_INVESTIGATOR_HEALING_SETUP,
     S1_SETUP,
     FEINT_FIGHTER_DUEL_SETUP,
     S2_INTERACTION_SETUPS,
@@ -24,6 +32,7 @@ from pf2e.content import (
     RUNE_ARMOR_SPELL_SAVE_TEST_SETUP,
     RUNE_HANDWRAP_TEST_SETUP,
     RUNE_HANDWRAP_UNINVESTED_TEST_SETUP,
+    RANGER_PRECISION_BOW_SETUP,
     SURE_STRIKE_WARPRIEST_SETUP,
     STEEL_SHIELD_TEST_SETUP,
     SETUPS,
@@ -36,6 +45,7 @@ from pf2e.barbarian_content import (
 )
 from pf2e.typed_defense_content import TYPED_DEFENSE_SETUPS
 from pf2e.encounter import Encounter
+from pf2e.ranger_monk_content import RANGER_PRECISION
 import pf2e.terminal as terminal
 
 
@@ -61,6 +71,15 @@ _BASE_SETUP_IDS = {
     SURE_STRIKE_WARPRIEST_SETUP.setup_id,
     ANGELIC_FIRST_CAST_SETUP.setup_id,
     JUSTICE_CHAMPION_SETUP.setup_id,
+    BRAGGART_SWASHBUCKLER_SETUP.setup_id,
+    FORENSIC_INVESTIGATOR_VS_TWO_DOGS.setup_id,
+    FORENSIC_INVESTIGATOR_HEALING_SETUP.setup_id,
+    RANGER_PRECISION_BOW_SETUP.setup_id,
+    BATTLE_MAGIC_WIZARD_SETUP.setup_id,
+    STORM_DRUID_SETUP.setup_id,
+    LIFE_ORACLE_NUDGE_SETUP.setup_id,
+    FAITHS_FLAMEKEEPER_SETUP.setup_id,
+    BOMBER_ALCHEMIST_SETUP.setup_id,
 }
 
 
@@ -91,6 +110,20 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert "fighter_fleet_shortsword_level_1" in CREATURES
     assert "elite_guard_dog_mc2924" in CREATURES
     assert "fighter_rapier_level_1" in CREATURES
+    assert RANGER_PRECISION.definition_id in CREATURES
+
+
+def test_catalogued_precision_ranger_combat_setup_starts_and_round_trips(tmp_path) -> None:
+    setup = get_setup(RANGER_PRECISION_BOW_SETUP.setup_id)
+    assert setup == RANGER_PRECISION_BOW_SETUP
+    assert all(placement.definition_id in CREATURES for placement in setup.placements)
+
+    game = Encounter.start(setup, seed=13)
+    save_path = tmp_path / "precision-ranger-combat.json"
+    game.save(save_path)
+    restored = Encounter.load(save_path)
+
+    assert restored.inspect().map_width == setup.width
 
 
 @pytest.mark.parametrize("setup_id", ("s3_long_lane_crossfire", "s3_emanation_edge"))
@@ -120,7 +153,13 @@ def test_modified_catalogued_setup_is_still_rejected() -> None:
 
 
 @pytest.mark.parametrize(
-    "setup_id", ("s2_fleet_diagonal_assault", "s3_long_lane_crossfire")
+    "setup_id",
+    (
+        "s2_fleet_diagonal_assault",
+        "s3_long_lane_crossfire",
+        "staged_ranger_precision_bow",
+        "staged_life_oracle_nudge",
+    ),
 )
 def test_terminal_accepts_catalogued_interaction_setup_by_name(monkeypatch, setup_id: str) -> None:
     seen = {}
