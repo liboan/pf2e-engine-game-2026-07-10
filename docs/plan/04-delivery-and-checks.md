@@ -99,7 +99,7 @@ Record a fresh dispatch once its session identity is known. Capture a reused wor
 
 For the next two completed playable slices, also use existing logs to report time to first executable check and explicit dependency-wait time. Record owner changes and review repairs with total elapsed delivery time and accepted behavior. This is a small comparison in the existing packet/work log, not a new metrics workflow; label any unavailable timing honestly.
 
-The collector entry point is `python3 tools/log_agent_usage.py`. Its normal calls are:
+The collector entry point is `python3 tools/log_agent_usage.py`. Its ledger path below is local and Git-ignored; a fresh clone does not include historical per-run records. Preserve accepted milestone totals in the tracked recovery log and do not infer missing historical usage from an absent local ledger. Its normal calls are:
 
 ```sh
 # After spawning; use --reused before a genuinely new assignment to an existing worker.

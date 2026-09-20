@@ -6,6 +6,7 @@ __pycache__/
 build/
 dist/
 docs/archive/
+/docs/work-log/agent-runs.json
 
 # Ephemeral local validation captures and raw agent-session exports.
 /validation-results/
