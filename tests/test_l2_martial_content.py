@@ -64,8 +64,10 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
     barbarian = definitions["barbarian_animal_bear_level_2_no_escape"]
     barbarian_sudden_charge = definitions["barbarian_animal_bear_level_2_sudden_charge"]
     fighter_intimidating = definitions["fighter_m_level_2_intimidating_strike"]
+    fighter_dueling_parry = definitions["fighter_m_level_2_dueling_parry"]
     barbarian_intimidating = definitions["barbarian_animal_bear_level_2_intimidating_strike"]
     monk = definitions["monk_monastic_weaponry_level_2_stunning_blows"]
+    crane_monk = definitions["monk_crane_stance_level_1"]
 
     assert (fighter.level, fighter.hp, fighter.ac, fighter.perception, fighter.class_dc) == (2, 34, 19, 7, 18)
     assert (barbarian.level, barbarian.hp, barbarian.ac, barbarian.perception, barbarian.class_dc) == (2, 38, 19, 7, 18)
@@ -74,19 +76,24 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
     assert {"No Escape", "Quick Jump"} <= set(barbarian.feats)
     assert {"Sudden Charge", "Quick Jump"} <= set(barbarian_sudden_charge.feats)
     assert {"Intimidating Strike", "Quick Jump"} <= set(fighter_intimidating.feats)
+    assert {"Dueling Parry", "Quick Jump"} <= set(fighter_dueling_parry.feats)
     assert {"Intimidating Strike", "Quick Jump"} <= set(barbarian_intimidating.feats)
     assert {"Stunning Blows", "Assurance (Athletics)"} <= set(monk.feats)
-    assert {"sudden_charge", "no_escape", "stunning_blows", "intimidating_strike"} <= {
+    assert {"Crane Stance"} <= set(crane_monk.feats)
+    assert {"sudden_charge", "no_escape", "stunning_blows", "intimidating_strike", "dueling_parry", "crane_stance"} <= {
         *fighter.abilities, *fighter_intimidating.abilities, *barbarian.abilities,
-        *barbarian_sudden_charge.abilities, *barbarian_intimidating.abilities, *monk.abilities,
+        *fighter_dueling_parry.abilities, *barbarian_sudden_charge.abilities,
+        *barbarian_intimidating.abilities, *monk.abilities, *crane_monk.abilities,
     }
     assert set(setups) == {
         "staged_fighter_level_2_sudden_charge",
         "staged_fighter_level_2_intimidating_strike",
+        "staged_fighter_level_2_dueling_parry",
         "staged_barbarian_level_2_no_escape",
         "staged_barbarian_level_2_sudden_charge",
         "staged_barbarian_level_2_intimidating_strike",
         "staged_monk_level_2_stunning_blows",
+        "staged_monk_crane_stance",
     }
 
 

@@ -30,6 +30,7 @@ from .model import (
     PairedStrikeSelection,
     PendingChoice,
     DamageResolution,
+    MartialStanceState,
     RaisedShieldState,
     ShieldBlockRecord,
     Position,
@@ -572,6 +573,11 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
             actor_id: [raised.instance_id, raised.expires_at_owner_start]
             for actor_id, raised in sorted((state.raised_shields or {}).items())
         },
+        "martial_stances": {
+            actor_id: [stance.stance_id, stance.entered_round]
+            for actor_id, stance in sorted((state.martial_stances or {}).items())
+        },
+        "martial_stance_used_rounds": dict(sorted(state.martial_stance_used_rounds.items())),
         "initiative_tie_groups": [list(group) for group in (state.initiative_tie_groups or ())],
         "initiative_tie_orders": {
             str(index): list(actors) for index, actors in (state.initiative_tie_orders or {}).items()
@@ -2027,6 +2033,7 @@ def _state_from_data(data: Any) -> EncounterState:
     protection_pairs: set[tuple[str, str]] = set()
     fleeing_pairs: set[tuple[str, str]] = set()
     life_link_sources: set[str] = set()
+    dueling_parry_sources: set[str] = set()
     for raw_row in effects_raw:
         # v17 saves before sustained-spell clocks stored the original seven
         # fields.  The appended Link round marker preserves all prior rows.
@@ -2053,14 +2060,14 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(row[9]) is not int or row[9] < 0
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
                 and row[6] is not None
             )
             or (
@@ -2094,6 +2101,19 @@ def _state_from_data(data: Any) -> EncounterState:
                 and not _valid_alchemy_venom_coating(
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
+                )
+            )
+            or (
+                row[1] == "dueling_parry"
+                and (
+                    row[4] != 2
+                    or row[2] != row[3]
+                    or row[5] != starts_raw[row[2]] + 1
+                    or row[6] is not None
+                    or "dueling_parry" not in get_definition(
+                        creatures[row[2]].definition_id
+                    ).abilities
+                    or row[2] in dueling_parry_sources
                 )
             )
             or (
@@ -2410,6 +2430,8 @@ def _state_from_data(data: Any) -> EncounterState:
         ):
             raise ValueError("save has invalid Sigil effect")
         active_effect_ids.add(row[0])
+        if row[1] == "dueling_parry":
+            dueling_parry_sources.add(row[2])
         if row[1] == "blood_magic":
             blood_magic_sources.add(row[2])
         if row[1] == "angelic_halo":
@@ -2773,6 +2795,37 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save has a raised shield that is absent, broken, or expired")
         raised_shields[actor_id] = RaisedShieldState(row[0], row[1])
 
+    martial_stances_raw = data.get("martial_stances", {})
+    if not isinstance(martial_stances_raw, dict) or not set(martial_stances_raw).issubset(expected_ids):
+        raise ValueError("save has invalid martial stances")
+    martial_stances: dict[str, MartialStanceState] = {}
+    for actor_id, row in martial_stances_raw.items():
+        actor = creatures[actor_id]
+        definition = get_definition(actor.definition_id)
+        if (
+            not isinstance(row, list) or len(row) != 2
+            or row[0] != "crane_stance" or type(row[1]) is not int
+            or not 1 <= row[1] <= round_number
+            or not in_progress or actor.unconscious or actor.dead
+            or "crane_stance" not in definition.abilities
+            or definition.armor_category not in {None, "unarmored"}
+            or bool(actor.worn_items)
+        ):
+            raise ValueError("save has invalid Crane Stance state")
+        martial_stances[actor_id] = MartialStanceState(row[0], row[1])
+    stance_rounds_raw = data.get("martial_stance_used_rounds", {})
+    if (
+        not isinstance(stance_rounds_raw, dict)
+        or not set(stance_rounds_raw).issubset(expected_ids)
+        or any(type(value) is not int or not 1 <= value <= round_number for value in stance_rounds_raw.values())
+        or any(
+            "crane_stance" not in get_definition(creatures[actor_id].definition_id).abilities
+            for actor_id in stance_rounds_raw
+        )
+        or any(stance_rounds_raw.get(actor_id) != stance.entered_round for actor_id, stance in martial_stances.items())
+    ):
+        raise ValueError("save has invalid martial stance action history")
+
     light_orbs_raw = data.get("light_orbs")
     if not isinstance(light_orbs_raw, list):
         raise ValueError("save has invalid Light orbs")
@@ -2855,6 +2908,8 @@ def _state_from_data(data: Any) -> EncounterState:
         ground_items=ground_items,
         item_instances=item_instances,
         raised_shields=raised_shields,
+        martial_stances=martial_stances,
+        martial_stance_used_rounds=dict(stance_rounds_raw),
         initiative_tie_groups=tie_groups,
         initiative_tie_orders=tie_orders,
         initiative_tie_group_index=tie_group_index,

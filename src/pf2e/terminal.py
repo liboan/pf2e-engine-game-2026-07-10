@@ -53,6 +53,9 @@ _ACTION_LABELS = {
     "vicious_swing": "Vicious Swing",
     "intimidating_strike": "Intimidating Strike",
     "sudden_charge": "Sudden Charge",
+    "dueling_parry": "Dueling Parry",
+    "crane_stance": "Crane Stance",
+    "dismiss_crane_stance": "Dismiss Crane Stance",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
     "hunted_shot": "Hunted Shot",
@@ -1949,6 +1952,7 @@ def run_terminal(
     from pf2e.swashbuckler import ConfidentFinisher
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
     from pf2e.fighter import IntimidatingStrike, SuddenCharge
+    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry
 
     if input_fn is None:
         input_fn = input
@@ -2632,11 +2636,37 @@ def run_terminal(
                         ),
                         output_fn,
                     )
+            elif action_id == "dueling_parry":
+                from pf2e.content import get_definition
+
+                acting_actor = game._state.creatures.get(engine_options.actor_id or "")
+                definition = get_definition(acting_actor.definition_id) if acting_actor is not None else None
+                choices = tuple(
+                    option for option in engine_options.strikes
+                    if definition is not None and any(
+                        attack.attack_id == option.attack_id
+                        and attack.item_id is not None
+                        and attack.hands_required == 1
+                        and "melee" in attack.traits
+                        for attack in definition.attacks
+                    )
+                )
+                index = _choose_index(
+                    "Dueling weapon:",
+                    tuple(f"{option.name} ({option.attack_id})" for option in choices),
+                    input_fn, output_fn,
+                )
+                if index is not None:
+                    _run_command(game, DuelingParry(choices[index].attack_id), output_fn)
+            elif action_id == "crane_stance":
+                _run_command(game, CraneStance(), output_fn)
+            elif action_id == "dismiss_crane_stance":
+                _run_command(game, DismissCraneStance(), output_fn)
             elif action_id == "flurry_of_blows":
                 strike_inputs = _choose_strike_inputs(
                     tuple(
                         option for option in engine_options.strikes
-                        if option.attack_id in {"fist", "kama"}
+                        if option.attack_id in {"fist", "kama", "crane_wing"}
                     ),
                     inspection,
                     input_fn,

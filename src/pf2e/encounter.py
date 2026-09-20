@@ -4044,6 +4044,24 @@ class Encounter:
                 state, actor, "reach_spell", frozenset({"concentrate", "spellshape"})
             )
         )
+        from .martial_defense import crane_stance_is_active, dueling_parry_requirements_met
+
+        can_dueling_parry = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "dueling_parry" in definition.abilities
+            and dueling_parry_requirements_met(state, actor, definition)
+            and self._action_permitted(state, actor, "dueling_parry", frozenset())
+        )
+        can_crane_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "crane_stance" in definition.abilities
+            and definition.armor_category in {None, "unarmored"}
+            and not actor.worn_items
+            and not crane_stance_is_active(state, actor.actor_id)
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "crane_stance", frozenset({"stance"}))
+        )
+        can_dismiss_crane_stance = crane_stance_is_active(state, actor.actor_id)
         can_arcane_bond = (
             can_act
             and "arcane_bond" in definition.abilities
@@ -4210,6 +4228,9 @@ class Encounter:
             can_hunted_shot = False
             can_hunters_aim = False
             can_reach_spell = False
+            can_dueling_parry = False
+            can_crane_stance = False
+            can_dismiss_crane_stance = False
             can_stand = False
             can_crawl = False
             can_release = False
@@ -4244,6 +4265,9 @@ class Encounter:
                 ("vicious_swing", can_vicious),
                 ("intimidating_strike", can_intimidating_strike),
                 ("sudden_charge", can_sudden_charge),
+                ("dueling_parry", can_dueling_parry),
+                ("crane_stance", can_crane_stance),
+                ("dismiss_crane_stance", can_dismiss_crane_stance),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
                 ("hunted_shot", can_hunted_shot),
@@ -7423,6 +7447,10 @@ class Encounter:
         return tuple(reachable)
 
     def _attack_usable(self, state, actor, attack) -> bool:
+        from .martial_defense import crane_stance_attack_permitted
+
+        if not crane_stance_attack_permitted(state, actor.actor_id, attack.attack_id):
+            return False
         barbarian_state = actor.barbarian_state
         if barbarian_state is not None:
             from .barbarian import animal_attack_ids, attack_allowed_during_rage
@@ -13420,6 +13448,7 @@ class Encounter:
             creature.must_leave_occupied = False
             state.taking_cover.discard(creature.actor_id)
             state.raised_shields.pop(creature.actor_id, None)
+            state.martial_stances.pop(creature.actor_id, None)
             state.active_effects[:] = [
                 effect for effect in state.active_effects
                 if not (effect.kind == "life_link" and effect.source_actor_id == creature.actor_id)
@@ -13472,6 +13501,8 @@ class Encounter:
                 creature.actions_remaining = 0
                 creature.reaction_available = False
                 self._refresh_barbarian_state(state, creature, encounter_ended=True)
+            state.martial_stances.clear()
+            state.martial_stance_used_rounds.clear()
 
     def _effective_ac(
         self,
@@ -13499,6 +13530,9 @@ class Encounter:
         if nimble_dodge:
             modifiers.append(Modifier(2, "circumstance", "Nimble Dodge"))
         if state is not None:
+            from .martial_defense import ac_modifiers as martial_defense_ac_modifiers
+
+            modifiers.extend(martial_defense_ac_modifiers(state, creature, definition))
             shield = self._raised_shield_instance(state, creature)
             if shield is not None:
                 profile = self._shield_profile(shield)

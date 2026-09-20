@@ -1101,6 +1101,14 @@ class RaisedShieldState:
 
 
 @dataclass(frozen=True)
+class MartialStanceState:
+    """One finite martial stance currently held by an actor."""
+
+    stance_id: str
+    entered_round: int
+
+
+@dataclass(frozen=True)
 class SavedCheckContext:
     """Authoritative facts for a check that may pause and later resume."""
 
@@ -1380,6 +1388,11 @@ class EncounterState:
     ground_items: dict[Position, list[str]] = field(default_factory=dict)
     item_instances: dict[str, ItemInstance] = field(default_factory=dict)
     raised_shields: dict[str, RaisedShieldState] = field(default_factory=dict)
+    # Stances retain their own lifecycle rather than being flattened into a
+    # shield, spell, or generic condition effect.  The companion round map
+    # enforces the printed one-stance-action-per-round limit after dismissal.
+    martial_stances: dict[str, MartialStanceState] = field(default_factory=dict)
+    martial_stance_used_rounds: dict[str, int] = field(default_factory=dict)
     initiative_tie_groups: list[tuple[str, ...]] = field(default_factory=list)
     initiative_tie_orders: dict[int, list[str]] = field(default_factory=dict)
     initiative_tie_group_index: int = 0
