@@ -71,6 +71,7 @@ from pf2e.l2_ranger_content import (
 )
 from pf2e.l2_prepared_content import L2_PREPARED_SETUPS
 from pf2e.l2_reach_content import L2_REACH_DEFINITIONS, L2_REACH_SETUPS
+from pf2e.w3_caster_content import W3_CASTER_SETUPS
 import pf2e.terminal as terminal
 
 
@@ -121,6 +122,7 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     l2_horizontal_ids = set(L2_HORIZONTAL_SETUPS)
     l2_ranger_ids = {RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id}
     l2_reach_ids = {setup.setup_id for setup in L2_REACH_SETUPS}
+    w3_caster_ids = {setup.setup_id for setup in W3_CASTER_SETUPS}
     l2_expanded_ids = set(L2_MARTIAL_SETUPS) | {setup.setup_id for setup in L2_PREPARED_SETUPS}
     content_w1_spell_ids = {
         BATTLE_MAGIC_WIZARD_DAZE_SETUP.setup_id,
@@ -154,7 +156,7 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert (
         s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids
             | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
-            | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
+            | w3_caster_ids | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
         ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):

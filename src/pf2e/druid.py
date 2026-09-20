@@ -8,6 +8,8 @@ _CANTRIPS = frozenset({"electric_arc", "guidance", "stabilize", "tangle_vine", "
 _RANK_ONE = frozenset({"heal", "runic_weapon"})
 _CANTRIP_CHOICES = ("electric_arc", "guidance", "stabilize", "tangle_vine", "light")
 _RANK_ONE_CHOICES = ("heal", "runic_weapon")
+_WIDEN_RANK_ONE = frozenset({*_RANK_ONE, "breathe_fire"})
+_WIDEN_RANK_ONE_CHOICES = (*_RANK_ONE_CHOICES, "breathe_fire")
 
 
 @dataclass(frozen=True)
@@ -32,7 +34,11 @@ def preparation_choices(definition, slot) -> tuple[str, ...]:
     if slot.cantrip:
         return _CANTRIP_CHOICES
     if slot.rank == 1:
-        return _RANK_ONE_CHOICES
+        return (
+            _WIDEN_RANK_ONE_CHOICES
+            if "storm_druid_widen_preparation" in definition.abilities
+            else _RANK_ONE_CHOICES
+        )
     return ()
 
 
@@ -42,7 +48,11 @@ def prepared_slot_rejection(actor, definition, slot, spell_id: str) -> str | Non
         return None
     if not isinstance(spell_id, str) or not spell_id:
         return "Prepared spell selection requires a spell id."
-    allowed = _CANTRIPS if slot.cantrip else _RANK_ONE if slot.rank == 1 else frozenset()
+    allowed = (
+        _CANTRIPS if slot.cantrip else
+        _WIDEN_RANK_ONE if slot.rank == 1 and "storm_druid_widen_preparation" in definition.abilities else
+        _RANK_ONE if slot.rank == 1 else frozenset()
+    )
     if spell_id in allowed:
         return None
     return "The spell is outside this Storm Druid's finite primal preparation choices."

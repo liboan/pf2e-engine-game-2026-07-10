@@ -371,9 +371,9 @@ def _infused_item_to_data(value: object) -> dict[str, Any]:
 
 
 def _load_alchemy_records(data: Any, setup) -> tuple[dict[str, AlchemyState], dict[str, InfusedAlchemyItem], set[str]]:
-    from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS, BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+    from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS, BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS, BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
     from .alchemy import FAR_LOBBER
-    from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS, BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT
+    from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS, BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT
 
     raw_states = data.get("alchemy_states", {})
     raw_items = data.get("infused_alchemy_items", {})
@@ -395,10 +395,13 @@ def _load_alchemy_records(data: Any, setup) -> tuple[dict[str, AlchemyState], di
         level_two = definition_id in {
             BOMBER_ALCHEMIST_LEVEL_2.definition_id,
             BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id,
+            BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id,
         }
         expected_level = 2 if level_two else 1
         expected_formulas = (
-            BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+            BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS
+            if definition_id == BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id
+            else BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
             if definition_id == BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id
             else BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
             if level_two
@@ -488,6 +491,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "composition_cast_turn_start": creature.composition_cast_turn_start,
                 "lingering_composition_pending": creature.lingering_composition_pending,
                 "reach_spell_pending": creature.reach_spell_pending,
+                "widen_spell_pending": creature.widen_spell_pending,
                 "must_leave_occupied": creature.must_leave_occupied,
                 "temporary_hp": creature.temporary_hp,
                 "temporary_hp_source_id": creature.temporary_hp_source_id,
@@ -625,7 +629,8 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
              effect.target_actor_id, effect.value, effect.expires_at_source_start,
              effect.expires_at_world_time, effect.sustain_limit_source_start,
              effect.sustain_limit_world_time, effect.sustain_expires_at_source_end,
-             effect.selected_enemy_actor_id, effect.life_link_used_round]
+             effect.selected_enemy_actor_id, effect.life_link_used_round,
+             effect.glue_removal_actions]
             for effect in state.active_effects
         ],
         "persistent_effects": [
@@ -729,6 +734,74 @@ def _valid_alchemy_elixir_effect(
         return False
     maximum = 600 if item.creation_kind == "quick_alchemy" else facts.duration_seconds
     return row[6] <= world_time_seconds + maximum
+
+
+def _valid_alchemy_bomb_rider_effect(
+    row: list[Any], creatures: dict[str, CreatureState], starts: dict[str, int],
+    world_time_seconds: int, infused_items: dict[str, Any], consumed_item_ids: set[str],
+) -> bool:
+    """Validate Glue Bomb's sourced minute-long rider and consumed origin."""
+    from .alchemy_content import BombFacts, FORMULAS_BY_ID
+
+    facts = FORMULAS_BY_ID["glue_bomb_lesser"].facts
+    if not isinstance(facts, BombFacts):
+        return False
+    item_id = row[0].removeprefix("glue_bomb:")
+    item = infused_items.get(item_id)
+    source = creatures[row[2]]
+    return (
+        row[0].startswith("glue_bomb:")
+        and row[1] == "alchemy_glue_bomb_lesser"
+        and row[4] == facts.on_hit_effect_value == 10
+        and row[12] in {0, 1, 2}
+        and row[5] == starts[row[2]] + 1
+        and type(row[6]) is int
+        and world_time_seconds < row[6] <= world_time_seconds + (facts.on_hit_effect_duration_seconds or 0)
+        and item_id in consumed_item_ids
+        and item is not None
+        and item.formula_id == "glue_bomb_lesser"
+        and item.creator_actor_id == row[2]
+        and "bomber_alchemist" in get_definition(source.definition_id).abilities
+        and not creatures[row[3]].dead
+    )
+
+
+def _valid_bomber_bomb_condition_effect(
+    effect: ActiveConditionEffect,
+    creatures: dict[str, CreatureState],
+    starts: dict[str, int],
+    ends: dict[str, int],
+    active_effects: list[ActiveSpellEffect],
+) -> bool:
+    """Validate the condition half of Dread/Glue's sourced rider state."""
+    source = creatures.get(effect.source_actor_id)
+    target = creatures.get(effect.target_actor_id)
+    if source is None or target is None or "bomber_alchemist" not in get_definition(source.definition_id).abilities:
+        return False
+    if effect.kind == "frightened" and effect.effect_id.startswith("dread_ampoule:"):
+        return (
+            effect.value in {1, 2}
+            and effect.expiration.anchor_actor_id == effect.target_actor_id
+            and effect.expiration.boundary == "end"
+            and effect.expiration.occurrence == ends[effect.target_actor_id] + effect.value
+        )
+    if effect.kind == "immobilized" and effect.effect_id.startswith("glue_bomb:"):
+        glue_id = effect.effect_id.removesuffix(":immobilized")
+        return (
+            effect.value == 1
+            and effect.dc == 17
+            and effect.expiration.anchor_actor_id == effect.source_actor_id
+            and effect.expiration.boundary == "start"
+            and effect.expiration.occurrence == starts[effect.source_actor_id] + 1
+            and any(
+                current.effect_id == glue_id
+                and current.kind == "alchemy_glue_bomb_lesser"
+                and current.source_actor_id == effect.source_actor_id
+                and current.target_actor_id == effect.target_actor_id
+                for current in active_effects
+            )
+        )
+    return True
 
 
 def _valid_alchemy_mutagen_effect(
@@ -1023,6 +1096,9 @@ def _state_from_data(data: Any) -> EncounterState:
         reach_spell_pending = raw.get("reach_spell_pending", False)
         if type(reach_spell_pending) is not bool:
             raise ValueError(f"saved actor {actor_id!r} has invalid Reach Spell state")
+        widen_spell_pending = raw.get("widen_spell_pending", False)
+        if type(widen_spell_pending) is not bool:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Widen Spell state")
         must_leave_occupied = _required_bool(raw, "must_leave_occupied")
         temporary_hp = _required_int(raw, "temporary_hp")
         temporary_hp_source_id = raw.get("temporary_hp_source_id")
@@ -1393,6 +1469,7 @@ def _state_from_data(data: Any) -> EncounterState:
             composition_cast_turn_start=composition_cast_turn_start,
             lingering_composition_pending=lingering_composition_pending,
             reach_spell_pending=reach_spell_pending,
+            widen_spell_pending=widen_spell_pending,
             must_leave_occupied=must_leave_occupied,
             temporary_hp=temporary_hp,
             temporary_hp_source_id=temporary_hp_source_id,
@@ -1906,21 +1983,36 @@ def _state_from_data(data: Any) -> EncounterState:
     ):
         raise ValueError("save has invalid Lingering Composition spellshape state")
     for creature in creatures.values():
-        if not creature.reach_spell_pending:
-            continue
-        definition = get_definition(creature.definition_id)
-        if (
-            "reach_spell" not in definition.abilities
-            or "Reach Spell" not in definition.feats
-            or not in_progress
-            or not initiative_finalized
-            or active_actor_id != creature.actor_id
-            # Reach Spell is a one-action activity. Its saved marker must
-            # prove that action has already been committed, but can remain
-            # at zero actions until the current turn ends.
-            or not 0 <= creature.actions_remaining <= 2
-        ):
-            raise ValueError("save has invalid Reach Spell spellshape state")
+        if creature.reach_spell_pending and creature.widen_spell_pending:
+            raise ValueError("save has overlapping spellshape markers")
+        if creature.reach_spell_pending:
+            definition = get_definition(creature.definition_id)
+            if (
+                "reach_spell" not in definition.abilities
+                or "Reach Spell" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                # Reach Spell is a one-action activity. Its saved marker must
+                # prove that action has already been committed, but can remain
+                # at zero actions until the current turn ends.
+                or not 0 <= creature.actions_remaining <= 2
+            ):
+                raise ValueError("save has invalid Reach Spell spellshape state")
+        if creature.widen_spell_pending:
+            definition = get_definition(creature.definition_id)
+            if (
+                "widen_spell" not in definition.abilities
+                or "Widen Spell" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                # Widen Spell is a one-action activity. Its saved marker must
+                # prove that action has already been committed, but can remain
+                # at zero actions until the current turn ends.
+                or not 0 <= creature.actions_remaining <= 2
+            ):
+                raise ValueError("save has invalid Widen Spell spellshape state")
     weakness_raw = data.get("investigator_weakness_bonuses", [])
     if not isinstance(weakness_raw, list):
         raise ValueError("save has invalid Investigator Known Weaknesses bonuses")
@@ -2086,14 +2178,16 @@ def _state_from_data(data: Any) -> EncounterState:
         if not isinstance(raw_row, list):
             raise ValueError("save has invalid active spell effect")
         if len(raw_row) == 7:
-            row = [*raw_row, 0, None, 0, None, 0]
+            row = [*raw_row, 0, None, 0, None, 0, 0]
         elif len(raw_row) == 9:
-            row = [*raw_row, 0, None, 0]
+            row = [*raw_row, 0, None, 0, 0]
         elif len(raw_row) == 10:
-            row = [*raw_row, None, 0]
+            row = [*raw_row, None, 0, 0]
         elif len(raw_row) == 11:
-            row = [*raw_row, 0]
+            row = [*raw_row, 0, 0]
         elif len(raw_row) == 12:
+            row = [*raw_row, 0]
+        elif len(raw_row) == 13:
             row = raw_row
         else:
             raise ValueError("save has invalid active spell effect")
@@ -2106,14 +2200,15 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(row[9]) is not int or row[9] < 0
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+            or type(row[12]) is not int or row[12] < 0
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
                 and row[6] is not None
             )
             or (
@@ -2148,6 +2243,21 @@ def _state_from_data(data: Any) -> EncounterState:
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
                 )
+            )
+            or (
+                row[1] == "alchemy_glue_bomb_lesser"
+                and not _valid_alchemy_bomb_rider_effect(
+                    row, creatures, starts_raw, world_time_seconds,
+                    infused_alchemy_items, consumed_infused_item_ids,
+                )
+            )
+            or (
+                row[1] != "alchemy_glue_bomb_lesser"
+                and row[12] != 0
+            )
+            or (
+                row[1] == "alchemy_glue_bomb_lesser"
+                and row[12] > 2
             )
             or (
                 row[1] == "dueling_parry"
@@ -2714,6 +2824,10 @@ def _state_from_data(data: Any) -> EncounterState:
         elif (effect.value not in {1, 3} or effect.command_mode not in {"approach", "flee", "release", "prone", "stand"}
               or effect.expiration.anchor_actor_id != effect.target_actor_id or effect.expiration.boundary != "end"):
             raise ValueError("save has invalid Command effect")
+        if effect.effect_id.startswith(("dread_ampoule:", "glue_bomb:")) and not _valid_bomber_bomb_condition_effect(
+            effect, creatures, starts_raw, ends_raw, effects,
+        ):
+            raise ValueError("save has invalid Bomber bomb condition provenance")
         completed_count = starts_raw[expiration.anchor_actor_id] if expiration.boundary == "start" else ends_raw[expiration.anchor_actor_id]
         if expiration.occurrence <= completed_count:
             raise ValueError("save retains an expired condition effect")
@@ -4088,6 +4202,7 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "spell_area_direction": None if continuation.spell_area_direction is None else [
             continuation.spell_area_direction.x, continuation.spell_area_direction.y
         ],
+        "widen_spell_area_length_ft": continuation.widen_spell_area_length_ft,
         "spell_mode": continuation.spell_mode,
         "hunter_aim_intent": (
             None if continuation.hunter_aim_intent is None else [
@@ -4234,6 +4349,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
     include_self = data.get("include_self")
     spell_save_degree = data.get("spell_save_degree")
     reach_spell_effective_range_ft = data.get("reach_spell_effective_range_ft")
+    widen_spell_area_length_ft = data.get("widen_spell_area_length_ft")
     if include_self is not None and type(include_self) is not bool:
         raise ValueError("save has invalid interrupted spell self-inclusion")
     if spell_save_degree is not None and (type(spell_save_degree) is not int or not 0 <= spell_save_degree <= 3):
@@ -4244,6 +4360,14 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has invalid committed Reach Spell range")
     if reach_spell_effective_range_ft is not None and kind != "cast":
         raise ValueError("save has Reach Spell range on a non-cast continuation")
+    if widen_spell_area_length_ft is not None and (
+        type(widen_spell_area_length_ft) is not int or widen_spell_area_length_ft <= 0
+    ):
+        raise ValueError("save has invalid committed Widen Spell area")
+    if widen_spell_area_length_ft is not None and (
+        kind != "cast" or optional_strings["spell_id"] != "breathe_fire"
+    ):
+        raise ValueError("save has Widen Spell area on an invalid continuation")
     if (
         integers["next_step"] < 0
         or integers["damage_bonus_dice"] < 0
@@ -4463,6 +4587,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         spell_save_degree=spell_save_degree,
         target_ids=tuple(target_ids),
         spell_area_direction=spell_area_direction,
+        widen_spell_area_length_ft=widen_spell_area_length_ft,
         spell_mode=optional_strings["spell_mode"],
         hunter_aim_intent=hunter_aim_intent,
         reach_spell_effective_range_ft=reach_spell_effective_range_ft,
@@ -4834,6 +4959,7 @@ def _damage_resolution_to_data(resolution: DamageResolution | None) -> dict[str,
         "damage_type": resolution.damage_type,
         "check": _check_to_data(resolution.check),
         "attack_id": resolution.attack_id,
+        "item_id": resolution.item_id,
         "spell_id": resolution.spell_id,
         "nonlethal": resolution.nonlethal,
         "attacker_critical": resolution.attacker_critical,
@@ -4893,8 +5019,9 @@ def _damage_resolution_from_data(data: Any) -> DamageResolution | None:
     source = _required_str(data, "source")
     damage_type = _required_str(data, "damage_type")
     attack_id = data.get("attack_id")
+    item_id = data.get("item_id")
     spell_id = data.get("spell_id")
-    for name, value in (("attack_id", attack_id), ("spell_id", spell_id)):
+    for name, value in (("attack_id", attack_id), ("item_id", item_id), ("spell_id", spell_id)):
         if value is not None and (not isinstance(value, str) or not value):
             raise ValueError(f"save has invalid damage resolution {name}")
     if source_kind == "strike" and not attack_id:
@@ -5032,6 +5159,7 @@ def _damage_resolution_from_data(data: Any) -> DamageResolution | None:
         damage_type=damage_type,
         check=_check_from_data(data.get("check")),
         attack_id=attack_id,
+        item_id=item_id,
         spell_id=spell_id,
         nonlethal=_required_bool(data, "nonlethal"),
         attacker_critical=_required_bool(data, "attacker_critical"),

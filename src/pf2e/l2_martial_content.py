@@ -163,6 +163,62 @@ def build_l2_martial_content(
             "Source: https://2e.aonprd.com/Feats.aspx?ID=4781."
         ),
     )
+    fighter_snagging_strike_l1 = replace(
+        fighter,
+        definition_id="fighter_m_level_1_snagging_strike",
+        name="Level 1 Melee Fighter M (Snagging Strike)",
+        abilities=tuple(ability for ability in fighter.abilities if ability != "vicious_swing") + ("snagging_strike",),
+        feats=tuple(feat for feat in fighter.feats if feat != "Vicious Swing") + ("Snagging Strike",),
+        sheet_notes=(*fighter.sheet_notes, (
+            "Alternate level-1 Fighter class-feat choice: Snagging Strike is a one-action melee Strike while one hand remains free and the target is within that hand's reach. On a hit, the target is off-guard until the start of the Fighter's next turn or it leaves that reach. Source: https://2e.aonprd.com/Feats.aspx?ID=4773."
+        )),
+    )
+    fighter_combat_grab_l2 = _level_two(
+        fighter,
+        definition_id="fighter_m_level_2_combat_grab",
+        name="Level 2 Melee Fighter M (Combat Grab)",
+        hp=34,
+        class_feat="Combat Grab",
+        skill_feat="Quick Jump",
+        ability_id="combat_grab",
+        note=(
+            "Alternate level-2 Fighter class-feat choice: Combat Grab is a one-action Press melee Strike with a free hand. On a hit, the target is grabbed until the end of the Fighter's next turn or it Escapes. Source: https://2e.aonprd.com/Feats.aspx?ID=4780."
+        ),
+    )
+    fighter_brutish_shove_l2 = _level_two(
+        replace(
+            fighter,
+            attacks=(*(
+                attack for attack in fighter.attacks if attack.attack_id != "longsword"
+            ), AttackDefinition(
+                "greatsword", "Greatsword", 9, 5,
+                frozenset({"attack", "melee", "versatile-p"}), "slashing", (12,), 4,
+                item_id="greatsword", hands_required=2,
+            )),
+            held_items=("greatsword",),
+            carried_item_bulk=(
+                *(row for row in fighter.carried_item_bulk if row[0] != "longsword"),
+                ("greatsword", 2),
+            ),
+            sheet_notes=tuple(
+                note for note in fighter.sheet_notes
+                if not note.startswith("Longsword is versatile P")
+                and not note.startswith("Starting money remaining after the listed gear:")
+            ) + (
+                "Greatsword is versatile P; choose slashing or piercing for each Strike. It costs 2 gp and has Bulk 2.",
+                "Starting money remaining after the listed gear: 5 gp.",
+            ),
+        ),
+        definition_id="fighter_m_level_2_brutish_shove",
+        name="Level 2 Melee Fighter M (Brutish Shove)",
+        hp=34,
+        class_feat="Brutish Shove",
+        skill_feat="Quick Jump",
+        ability_id="brutish_shove",
+        note=(
+            "Alternate level-2 Fighter class-feat choice: Brutish Shove is a one-action Press Greatsword Strike; Greatsword is a held two-handed martial weapon (1d12 slashing; versatile piercing). On a hit against a target the Fighter's size or smaller, it makes an automatic Shove; on a failure (or the selected failure effect), it leaves the target off-guard until the end of the Fighter's turn. Sources: https://2e.aonprd.com/Feats.aspx?ID=4779; https://2e.aonprd.com/Weapons.aspx?ID=379."
+        ),
+    )
     barbarian_intimidating_strike_l2 = _level_two(
         barbarian,
         definition_id="barbarian_animal_bear_level_2_intimidating_strike",
@@ -232,6 +288,9 @@ def build_l2_martial_content(
         fighter_l2.definition_id: fighter_l2,
         fighter_intimidating_strike_l2.definition_id: fighter_intimidating_strike_l2,
         fighter_dueling_parry_l2.definition_id: fighter_dueling_parry_l2,
+        fighter_snagging_strike_l1.definition_id: fighter_snagging_strike_l1,
+        fighter_combat_grab_l2.definition_id: fighter_combat_grab_l2,
+        fighter_brutish_shove_l2.definition_id: fighter_brutish_shove_l2,
         barbarian_l2.definition_id: barbarian_l2,
         barbarian_sudden_charge_l2.definition_id: barbarian_sudden_charge_l2,
         barbarian_intimidating_strike_l2.definition_id: barbarian_intimidating_strike_l2,
@@ -268,6 +327,18 @@ def build_l2_martial_content(
                 CreaturePlacement("fighter", fighter_dueling_parry_l2.definition_id, "Level 2 Fighter", "blue", Position(1, 1)),
                 CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
             ),
+        ),
+        "staged_fighter_level_1_snagging_strike": EncounterSetup(
+            "staged_fighter_level_1_snagging_strike", "Staged Level 1 Fighter Snagging Strike", 5, 3,
+            (CreaturePlacement("fighter", fighter_snagging_strike_l1.definition_id, "Level 1 Fighter", "blue", Position(1, 1)), CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1))),
+        ),
+        "staged_fighter_level_2_combat_grab": EncounterSetup(
+            "staged_fighter_level_2_combat_grab", "Staged Level 2 Fighter Combat Grab", 5, 3,
+            (CreaturePlacement("fighter", fighter_combat_grab_l2.definition_id, "Level 2 Fighter", "blue", Position(1, 1)), CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1))),
+        ),
+        "staged_fighter_level_2_brutish_shove": EncounterSetup(
+            "staged_fighter_level_2_brutish_shove", "Staged Level 2 Fighter Brutish Shove", 6, 3,
+            (CreaturePlacement("fighter", fighter_brutish_shove_l2.definition_id, "Level 2 Fighter", "blue", Position(1, 1)), CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1))),
         ),
         "staged_barbarian_level_2_no_escape": EncounterSetup(
             "staged_barbarian_level_2_no_escape",

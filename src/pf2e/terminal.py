@@ -52,6 +52,9 @@ _ACTION_LABELS = {
     "known_weaknesses": "Known Weaknesses + Devise",
     "vicious_swing": "Vicious Swing",
     "intimidating_strike": "Intimidating Strike",
+    "snagging_strike": "Snagging Strike",
+    "combat_grab": "Combat Grab",
+    "brutish_shove": "Brutish Shove",
     "sudden_charge": "Sudden Charge",
     "dueling_parry": "Dueling Parry",
     "crane_stance": "Crane Stance",
@@ -94,6 +97,7 @@ _ACTION_LABELS = {
     "cast": "Cast",
     "lingering_composition": "Lingering Composition",
     "reach_spell": "Reach Spell",
+    "widen_spell": "Widen Spell",
     "sustain_light": "Sustain Light",
     "dismiss_light": "Dismiss Light",
     "dismiss_life_link": "Dismiss Life Link",
@@ -1951,7 +1955,7 @@ def run_terminal(
     from pf2e.investigator import BattleMedicine, DeviseStratagem, PersonOfInterest, RecallKnowledge
     from pf2e.swashbuckler import ConfidentFinisher
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
-    from pf2e.fighter import IntimidatingStrike, SuddenCharge
+    from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
     from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry
 
     if input_fn is None:
@@ -2646,6 +2650,62 @@ def run_terminal(
                         ),
                         output_fn,
                     )
+            elif action_id in {"snagging_strike", "combat_grab"}:
+                from pf2e.content import get_definition
+
+                acting_actor = game._state.creatures.get(engine_options.actor_id or "")
+                melee_attack_ids = {
+                    attack.attack_id for attack in get_definition(acting_actor.definition_id).attacks
+                    if "melee" in attack.traits
+                } if acting_actor is not None else set()
+                strike_inputs = _choose_strike_inputs(
+                    tuple(option for option in engine_options.strikes if option.attack_id in melee_attack_ids),
+                    inspection, input_fn, output_fn,
+                )
+                if strike_inputs is not None:
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    command_type = SnaggingStrike if action_id == "snagging_strike" else CombatGrab
+                    _run_command(game, command_type(target_id, attack_id, damage_type, nonlethal), output_fn)
+            elif action_id == "brutish_shove":
+                from pf2e.content import get_definition
+
+                acting_actor = game._state.creatures.get(engine_options.actor_id or "")
+                two_handed = {
+                    attack.attack_id for attack in get_definition(acting_actor.definition_id).attacks
+                    if "melee" in attack.traits and attack.hands_required >= 2
+                } if acting_actor is not None else set()
+                strike_inputs = _choose_strike_inputs(
+                    tuple(option for option in engine_options.strikes if option.attack_id in two_handed),
+                    inspection, input_fn, output_fn,
+                )
+                if strike_inputs is not None:
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    target = game._state.creatures.get(target_id)
+                    actor = game._state.creatures.get(engine_options.actor_id or "")
+                    if target is None or actor is None:
+                        continue
+                    failure_effect = _choose_index("On a hit, use failure effect?", ("Automatic Shove", "Failure effect: off-guard"), input_fn, output_fn)
+                    if failure_effect is None:
+                        continue
+                    destination = None
+                    follow = False
+                    if failure_effect == 0:
+                        dx = (target.position.x > actor.position.x) - (target.position.x < actor.position.x)
+                        dy = (target.position.y > actor.position.y) - (target.position.y < actor.position.y)
+                        candidate = Position(target.position.x + dx, target.position.y + dy)
+                        if (
+                            0 <= candidate.x < game._state.map_width
+                            and 0 <= candidate.y < game._state.map_height
+                            and not any(other.actor_id != target_id and other.position == candidate and not other.defeated for other in game._state.creatures.values())
+                        ):
+                            destination = candidate
+                        else:
+                            output_fn("No open away destination is available; the Strike remains legal but cannot Shove.")
+                        follow_choice = _choose_index("Follow the target?", ("Do not follow", "Follow without reactions"), input_fn, output_fn)
+                        if follow_choice is None:
+                            continue
+                        follow = follow_choice == 1 and destination is not None
+                    _run_command(game, BrutishShove(target_id, attack_id, destination, follow, failure_effect == 1, damage_type, nonlethal), output_fn)
             elif action_id == "dueling_parry":
                 from pf2e.content import get_definition
 
@@ -3088,6 +3148,10 @@ def run_terminal(
                 from pf2e.reach_spell_terminal import command as reach_spell_command
 
                 _run_command(game, reach_spell_command(), output_fn)
+            elif action_id == "widen_spell":
+                from pf2e.widen_spell_terminal import command as widen_spell_command
+
+                _run_command(game, widen_spell_command(), output_fn)
             elif action_id == "end_turn":
                 _run_command(game, EndTurn(), output_fn)
             elif action_id == "refocus":

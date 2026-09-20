@@ -30,6 +30,7 @@ from .content import get_definition
 from .model import (
     ActionContinuation,
     ActiveConditionEffect,
+    ActiveSpellEffect,
     ChoiceOption,
     Choose,
     EffectExpiration,
@@ -653,8 +654,14 @@ def _skill_dc(context: FamilyProcedureContext, actor, statistic: str, attribute:
     return context.skill_dc(actor.actor_id, statistic)
 
 
-def _active_effect(context: FamilyProcedureContext, effect_id: str) -> ActiveConditionEffect | None:
-    return next((effect for effect in context.state.condition_effects if effect.effect_id == effect_id), None)
+def _active_effect(context: FamilyProcedureContext, effect_id: str) -> ActiveConditionEffect | ActiveSpellEffect | None:
+    return next(
+        (
+            effect for effect in (*context.state.condition_effects, *context.state.active_effects)
+            if effect.effect_id == effect_id
+        ),
+        None,
+    )
 
 
 def _source_held_effects(context: FamilyProcedureContext, source_id: str, target_id: str) -> tuple[ActiveConditionEffect, ...]:
@@ -1730,7 +1737,7 @@ def _escape(context: FamilyProcedureContext, command: Escape) -> FamilyProcedure
         return FamilyProcedureResult(rejection="A critical failure bars Escape until the start of your next turn.")
     effect = _active_effect(context, command.impediment_id)
     if effect is None or effect.target_actor_id != context.actor.actor_id or (
-        effect.kind not in {"grabbed", "immobilized", "restrained"}
+        effect.kind not in {"grabbed", "immobilized", "restrained", "alchemy_glue_bomb_lesser"}
         and not (effect.kind == "speed_penalty" and effect.effect_id.startswith("tangle_vine:"))
     ):
         return FamilyProcedureResult(rejection="Escape must select a current grabbed, immobilized, restrained, or Tangle Vine effect on the acting creature.")
@@ -1739,8 +1746,11 @@ def _escape(context: FamilyProcedureContext, command: Escape) -> FamilyProcedure
     source = context.state.creatures[effect.source_actor_id]
     if command.check_method not in {"athletics", "acrobatics", "unarmed_attack"}:
         return FamilyProcedureResult(rejection="Escape check_method must be athletics, acrobatics, or unarmed_attack.")
-    if effect.dc is not None:
-        dc = effect.dc
+    effect_dc = getattr(effect, "dc", None)
+    if effect_dc is not None:
+        dc = effect_dc
+    elif effect.kind == "alchemy_glue_bomb_lesser" and effect.effect_id.startswith("glue_bomb:"):
+        dc = 17
     elif effect.kind in {"grabbed", "restrained"} and effect.effect_id.startswith("grapple:"):
         try:
             dc = _skill_dc(context, source, "athletics", "strength")
@@ -1775,6 +1785,11 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
     events = [_event_check("escape", context.actor, source, outcome.check)]
     if outcome.free_of_selected_impediment:
         linked_vine = effect.effect_id.startswith("tangle_vine:")
+        linked_glue = effect.effect_id.startswith("glue_bomb:")
+        glue_base_id = (
+            effect.effect_id.removesuffix(":immobilized")
+            if linked_glue else None
+        )
         removed_effects = tuple(
             current for current in context.state.condition_effects
             if (
@@ -1783,10 +1798,19 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
                     linked_vine
                     and current.effect_id.rsplit(":", 1)[0] == effect.effect_id.rsplit(":", 1)[0]
                 )
+                or (
+                    linked_glue
+                    and current.effect_id == f"{glue_base_id}:immobilized"
+                )
             )
         )
         removed_ids = {current.effect_id for current in removed_effects}
         context.state.condition_effects = [current for current in context.state.condition_effects if current.effect_id not in removed_ids]
+        if linked_glue:
+            context.state.active_effects = [
+                current for current in context.state.active_effects
+                if current.effect_id != glue_base_id
+            ]
         events.append(Event("condition_removed", context.actor.actor_id, source.actor_id, f"{context.actor.label} escapes the selected effect imposed by {source.label}.", check=outcome.check))
     if outcome.retry_blocked_until_next_turn:
         # Core persists this action-only lockout separately from conditions so

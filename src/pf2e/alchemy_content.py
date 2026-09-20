@@ -38,6 +38,11 @@ class BombFacts:
     range_increment_ft: int = 20
     strength_damage: bool = False
     critical_splash_mode: Literal["unchanged"] = "unchanged"
+    on_hit_effect_value: int | None = None
+    on_hit_effect_duration_seconds: int | None = None
+    on_hit_effect_dc: int | None = None
+    on_critical_hit_effect: str | None = None
+    on_critical_hit_value: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,8 +290,36 @@ ALCHEMIST_FORMULAS: tuple[AlchemyFormula, ...] = (
     ),
 )
 
+BOMBER_W3_FORMULAS: tuple[AlchemyFormula, ...] = (
+    AlchemyFormula(
+        formula_id="dread_ampoule_lesser",
+        name="Dread Ampoule (lesser)", level=1, price_gp=3, category="bomb",
+        facts=BombFacts(
+            "mental", initial_damage_dice=(6,), splash_damage=1,
+            on_hit_effect="frightened", on_hit_effect_value=1,
+            on_critical_hit_value=2,
+        ),
+        traits=frozenset({"alchemical", "consumable", "bomb", "emotion", "fear", "mental", "poison", "splash", "thrown"}), bulk="L", hands_required=1,
+        activation_actions=1, activation_kind="strike", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3292",
+    ),
+    AlchemyFormula(
+        formula_id="glue_bomb_lesser",
+        name="Glue Bomb (lesser)", level=1, price_gp=3, category="bomb",
+        facts=BombFacts(
+            "bludgeoning", on_hit_effect="glue_speed_penalty", on_hit_effect_value=10,
+            on_hit_effect_duration_seconds=60, on_hit_effect_dc=17,
+            on_critical_hit_effect="glue_immobilized", on_critical_hit_value=1,
+        ),
+        traits=frozenset({"alchemical", "consumable", "bomb", "thrown"}), bulk="L", hands_required=1,
+        activation_actions=1, activation_kind="strike", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3295",
+    ),
+)
+
 ALCHEMIST_FORMULAS_BY_ID = MappingProxyType({formula.formula_id: formula for formula in ALCHEMIST_FORMULAS})
-FORMULAS_BY_ID = ALCHEMIST_FORMULAS_BY_ID
+FORMULAS_BY_ID = MappingProxyType({
+    **ALCHEMIST_FORMULAS_BY_ID,
+    **{formula.formula_id: formula for formula in BOMBER_W3_FORMULAS},
+})
 
 ALCHEMIST_LEVEL_1_FEAT_MENU: tuple[str, ...] = tuple(sorted(ALCHEMIST_LEVEL_1_FEATS))
 ALCHEMIST_LEVEL_1_FEATS_BY_ID = MappingProxyType(
