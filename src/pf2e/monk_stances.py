@@ -135,6 +135,7 @@ def validate_pending(context: FamilyProcedureContext) -> None:
         ),
         None,
     )
+    resolution = pending.damage_resolution
     if (
         pending.kind != "family_action"
         or pending.family_id != "martial"
@@ -156,12 +157,24 @@ def validate_pending(context: FamilyProcedureContext) -> None:
         or "Tiger Stance" not in context.definition.feats
         or existing is None
         or (bool(existing.dice) and existing.dice == (4,))
+        or (
+            resolution is not None
+            and (
+                resolution.source_kind != "strike"
+                or resolution.actor_id != context.actor.actor_id
+                or resolution.target_id != pending.target_id
+                or resolution.attack_id != "tiger_claws"
+                or not resolution.attacker_critical
+                or resolution.continuation != continuation.parent_continuation
+            )
+        )
     ):
         raise ValueError("save has an invalid Tiger bleed choice")
 
 
 def post_mitigation_tiger_bleed(
-    state, *, attacker, target, attack, damage, check, continuation=None
+    state, *, attacker, target, attack, damage, check, continuation=None,
+    damage_resolution=None,
 ):
     """Install Tiger's exactly-one-d4 critical bleed after defenses."""
     if (
@@ -206,6 +219,7 @@ def post_mitigation_tiger_bleed(
             target_id=target.actor_id,
             attack_id=attack.attack_id,
             continuation=continuation,
+            damage_resolution=damage_resolution,
             family_id="martial",
             procedure_id="monk_stances:tiger_bleed",
         )
@@ -255,6 +269,15 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult | No
     if continuation is None:
         raise ValueError("Tiger bleed choice has no continuation")
     parent = continuation.parent_continuation
+    resolution = pending.damage_resolution
+    if resolution is not None:
+        retaliation_events, retaliation_started = context.encounter._justice_retaliation(
+            context.state, context.dice, resolution
+        )
+        events.extend(retaliation_events)
+        if retaliation_started:
+            return FamilyProcedureResult(events=tuple(events))
+        parent = resolution.continuation
     if parent is None:
         events.extend(
             context.encounter._complete_action(

@@ -8009,6 +8009,7 @@ class Encounter:
                 damage=damage,
                 check=resolution.check,
                 continuation=resolution.continuation,
+                damage_resolution=resolution,
             )
             if hook_event is not None:
                 events.append(hook_event)

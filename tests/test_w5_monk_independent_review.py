@@ -18,6 +18,7 @@ import pytest
 from pf2e import EndTurn
 from pf2e.damage import DamageDefense
 from pf2e.encounter import Encounter
+from pf2e.justice_content import JUSTICE_CHAMPION
 from pf2e.model import (
     ActiveConditionEffect, CreaturePlacement, EffectExpiration, EncounterSetup,
     PairedStrikeSelection, PersistentDamageEffect, Position, ResultStatus, Step, Strike,
@@ -196,6 +197,11 @@ def test_tiger_bleed_choice_keeps_saved_flurry_continuation(monkeypatch, tmp_pat
     forged_path.write_text(json.dumps(forged))
     with pytest.raises(ValueError):
         Encounter.load(forged_path)
+    dropped_parent = json.loads(path.read_text())
+    dropped_parent["state"]["pending_choice"]["continuation"]["parent_continuation"] = None
+    forged_path.write_text(json.dumps(dropped_parent))
+    with pytest.raises(ValueError):
+        Encounter.load(forged_path)
     game = Encounter.load(path)
     choice = game.inspect().choice
     assert choice is not None
@@ -223,6 +229,53 @@ def test_tiger_bleed_choice_keeps_saved_flurry_continuation(monkeypatch, tmp_pat
     game.save(path)
     loaded = Encounter.load(path)
     assert loaded._state.creatures["dog"].hp == before_hp - 2
+
+
+def test_tiger_saved_bleed_choice_preserves_justice_retaliation(monkeypatch, tmp_path: Path) -> None:
+    dog = replace(content.GUARD_DOG, definition_id="w5_review_justice_dog", hp=30)
+    monkeypatch.setattr(content, "_STAGED_CREATURES", MappingProxyType({
+        **content._STAGED_CREATURES,
+        dog.definition_id: dog,
+        JUSTICE_CHAMPION.definition_id: JUSTICE_CHAMPION,
+    }))
+    setup = EncounterSetup(
+        "w5_review_tiger_justice_bleed", "Tiger bleed through Justice", 5, 4,
+        (
+            CreaturePlacement("monk", "monk_tiger_stance_level_1", "Monk", "red", Position(1, 1)),
+            CreaturePlacement("wizard", "wizard_battle_magic_level_1_staged", "Wizard", "red", Position(0, 0)),
+            CreaturePlacement("dog", dog.definition_id, "Dog", "blue", Position(2, 1)),
+            CreaturePlacement("champion", JUSTICE_CHAMPION.definition_id, "Champion", "blue", Position(2, 2)),
+        ),
+    )
+    monkeypatch.setattr(content, "_STAGED_SETUPS", MappingProxyType({
+        **content._STAGED_SETUPS, setup.setup_id: setup,
+    }))
+    game = Encounter.start(setup, rolls=(20, 1, 1, 1, 20, 4, 15, 1) + (15,) * 30)
+    game, _ = _settle(game)
+    assert game.inspect().turn_actor_id == "monk"
+    game._state.creatures["monk"].hero_points = 0
+    game._state.creatures["champion"].hero_points = 0
+    assert game.execute(TigerStance()).status is ResultStatus.COMPLETED
+    game._state.persistent_effects.append(PersistentDamageEffect(
+        "existing-bleed", "wizard", "dog", "gouging_claw", "bleed", (), 2, 60,
+    ))
+    assert game.execute(Strike("dog", "tiger_claws")).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "reaction"
+    protected = game.choose(choice.choice_id, "accept", choice.owner_actor_id)
+    assert protected.status is ResultStatus.PAUSED
+    assert any(e.kind == "retributive_strike_protection" for e in protected.events)
+    choice = game.inspect().choice
+    assert choice is not None and {o.option_id for o in choice.options} == {"existing", "incoming"}
+    saved = tmp_path / "tiger-justice-bleed.json"
+    game.save(saved)
+    game = Encounter.load(saved)
+    choice = game.inspect().choice
+    assert choice is not None
+    resolved = game.choose(choice.choice_id, "incoming", choice.owner_actor_id)
+    game, extra = _settle(game)
+    assert any(e.kind == "retributive_strike" for e in resolved.events + tuple(extra))
+    assert any(e.kind == "strike" and e.actor_id == "champion" for e in resolved.events + tuple(extra))
 
 
 def test_tiger_critical_needs_post_mitigation_damage_and_bleedable_target(monkeypatch) -> None:
@@ -340,4 +393,3 @@ def test_tiger_option_generation_is_bounded() -> None:
     for _ in range(100):
         assert game.options().step_destinations
     assert perf_counter() - start < 2
-
