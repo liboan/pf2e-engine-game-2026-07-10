@@ -36,7 +36,9 @@ def committed_first_weapon_attempt(state, *, actor, attack):
     if attack.item_id is None:
         return None
     if actor.gravity_weapon_used_round == state.round_number:
+        actor.gravity_weapon_bonus_attack_id = None
         return None
+    actor.gravity_weapon_bonus_attack_id = None
     actor.gravity_weapon_used_round = state.round_number
     if not any(
         effect.kind == "gravity_weapon"

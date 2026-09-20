@@ -1938,6 +1938,23 @@ class Encounter:
             raise ValueError("save has a pending Strike for an unavailable item identity")
         if pending.damage_type not in self._attack_damage_types(attack):
             raise ValueError("save has an illegal pending Strike damage type")
+        gravity_effect_active = any(
+            effect.kind == "gravity_weapon"
+            and effect.source_actor_id == actor.actor_id
+            and effect.target_actor_id == actor.actor_id
+            and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
+            for effect in state.active_effects
+        )
+        expected_gravity_bonus = (
+            attack.item_id is not None
+            and gravity_effect_active
+            and actor.gravity_weapon_used_round == state.round_number
+            and actor.gravity_weapon_bonus_attack_id == attack.attack_id
+        )
+        if pending.gravity_weapon_bonus != expected_gravity_bonus:
+            raise ValueError("save has forged or inconsistent Gravity Weapon Strike provenance")
+        if pending.continuation is not None and pending.continuation.gravity_weapon_bonus != pending.gravity_weapon_bonus:
+            raise ValueError("save has inconsistent Gravity Weapon continuation provenance")
         if pending.nonlethal not in (True, False):
             raise ValueError("save has an invalid pending Strike intent")
         if pending.attack_actions_cost not in (0, 1, 2) or pending.attack_count_cost not in (0, 1, 2):
@@ -3780,6 +3797,7 @@ class Encounter:
                 actor.must_leave_occupied = False
                 actor.precision_used_round = 0
                 actor.gravity_weapon_used_round = 0
+                actor.gravity_weapon_bonus_attack_id = None
                 actor.panache = False
                 actor.panache_expires_at_end = None
                 actor.escape_lockout_until_start = 0
@@ -6241,7 +6259,6 @@ class Encounter:
 
             committed_first_weapon_attempt(state, actor=actor, attack=attack)
         gravity_weapon_bonus = actor.gravity_weapon_bonus_attack_id == attack.attack_id
-        actor.gravity_weapon_bonus_attack_id = None
         if vicious_swing:
             actor.flourish_used_round = state.round_number
         selected_item_id = self._held_attack_item_id(state, actor, attack, item_id=item_id)
@@ -8508,8 +8525,6 @@ class Encounter:
         )
 
     def _damage_modifier(self, state, actor, attack, *, extra_status_modifiers=()):
-        if attack.damage_attribute is None:
-            return attack.damage_modifier + combine_modifiers(extra_status_modifiers)
         modifiers = condition_modifiers(
             self._conditions_for_actor(state, actor),
             CheckContext("damage", attack.damage_attribute, attack.traits),
@@ -13387,6 +13402,8 @@ class Encounter:
         )
 
     def _complete_action(self, state, actor, events, *, dice=None):
+        if state.pending_choice is None:
+            actor.gravity_weapon_bonus_attack_id = None
         if (
             state.in_progress
             and actor.actions_remaining == 0
@@ -13835,6 +13852,17 @@ class Encounter:
         starts = state.actor_start_counts
         assert starts is not None
         starts[actor.actor_id] = starts.get(actor.actor_id, 0) + 1
+        for recipient in state.creatures.values():
+            if (
+                recipient.temporary_hp_source_id is not None
+                and recipient.temporary_hp_source_id.startswith("hymn_of_healing:")
+                and recipient.temporary_hp_expires_at_source_start
+                and recipient.temporary_hp_expires_at_source_start <= starts[actor.actor_id]
+            ):
+                recipient.temporary_hp = 0
+                recipient.temporary_hp_source_id = None
+                recipient.temporary_hp_expires_at_seconds = None
+                recipient.temporary_hp_expires_at_source_start = 0
         for hymn in tuple(state.active_effects):
             if (
                 hymn.kind == "hymn_of_healing"
@@ -16833,6 +16861,8 @@ class Encounter:
                 item_id=pending.item_id,
                 bomber_only_primary_splash=pending.damage_context == "bomber_only_primary",
             ))
+            if state.pending_choice is None:
+                actor.gravity_weapon_bonus_attack_id = None
             from .skill_actions import consume_overextending_feint_on_attack
 
             state.overextending_feint_effects = list(consume_overextending_feint_on_attack(

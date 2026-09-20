@@ -488,6 +488,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "focus_points": creature.focus_points,
                 "focus_capacity": creature.focus_capacity,
                 "gravity_weapon_used_round": creature.gravity_weapon_used_round,
+                "gravity_weapon_bonus_attack_id": creature.gravity_weapon_bonus_attack_id,
                 "flourish_used_round": creature.flourish_used_round,
                 "composition_cast_at_start": creature.composition_cast_at_start,
                 "composition_cast_turn_actor_id": creature.composition_cast_turn_actor_id,
@@ -1101,6 +1102,15 @@ def _state_from_data(data: Any) -> EncounterState:
         gravity_weapon_used_round = raw.get("gravity_weapon_used_round", 0)
         if type(gravity_weapon_used_round) is not int or gravity_weapon_used_round < 0:
             raise ValueError(f"saved actor {actor_id!r} has invalid Gravity Weapon marker")
+        gravity_weapon_bonus_attack_id = raw.get("gravity_weapon_bonus_attack_id")
+        if gravity_weapon_bonus_attack_id is not None and (
+            not isinstance(gravity_weapon_bonus_attack_id, str) or not gravity_weapon_bonus_attack_id
+        ):
+            raise ValueError(f"saved actor {actor_id!r} has invalid Gravity Weapon committed attack")
+        if gravity_weapon_bonus_attack_id is not None and gravity_weapon_bonus_attack_id not in {
+            attack.attack_id for attack in definition.attacks
+        }:
+            raise ValueError(f"saved actor {actor_id!r} has an unavailable Gravity Weapon committed attack")
         flourish_used_round = _required_int(raw, "flourish_used_round")
         composition_cast_at_start = _required_int(raw, "composition_cast_at_start")
         composition_cast_turn_actor_id = raw.get("composition_cast_turn_actor_id")
@@ -1487,6 +1497,7 @@ def _state_from_data(data: Any) -> EncounterState:
             focus_points=focus_points,
             focus_capacity=focus_capacity,
             gravity_weapon_used_round=gravity_weapon_used_round,
+            gravity_weapon_bonus_attack_id=gravity_weapon_bonus_attack_id,
             flourish_used_round=flourish_used_round,
             composition_cast_at_start=composition_cast_at_start,
             composition_cast_turn_actor_id=composition_cast_turn_actor_id,
@@ -1732,6 +1743,12 @@ def _state_from_data(data: Any) -> EncounterState:
         raise ValueError("save has invalid per-round flourish use")
     if any(creature.gravity_weapon_used_round > round_number for creature in creatures.values()):
         raise ValueError("save has invalid Gravity Weapon round marker")
+    if any(
+        creature.gravity_weapon_bonus_attack_id is not None
+        and creature.gravity_weapon_used_round != round_number
+        for creature in creatures.values()
+    ):
+        raise ValueError("save has stale Gravity Weapon committed attack")
     for creature in creatures.values():
         if creature.precision_used_round > round_number:
             raise ValueError(f"saved actor {creature.actor_id!r} has invalid precision round")
@@ -2445,8 +2462,11 @@ def _state_from_data(data: Any) -> EncounterState:
                 and (
                     row[4] != 1
                     or row[2] != row[3]
-                    or row[5] != starts_raw[row[2]] + 10
-                    or row[6] != world_time_seconds + 60
+                    or not _valid_focus_duration_deadline(
+                        row[5], starts_raw[row[2]], round_number, world_time_seconds, row[6],
+                        duration_source_starts=10, duration_seconds=60,
+                        encounter_start_seconds=encounter_start_seconds,
+                    )
                     or row[7] != 0
                     or row[8] is not None
                     or row[9] != 0
@@ -2462,10 +2482,13 @@ def _state_from_data(data: Any) -> EncounterState:
                 row[1] == "hymn_of_healing"
                 and (
                     row[4] != 2
-                    or row[5] != starts_raw[row[2]] + 4
-                    or row[6] != world_time_seconds + 24
-                    or row[7] != starts_raw[row[2]] + 4
-                    or row[8] != world_time_seconds + 24
+                    or not _valid_focus_duration_deadline(
+                        row[5], starts_raw[row[2]], round_number, world_time_seconds, row[6],
+                        duration_source_starts=4, duration_seconds=24,
+                        encounter_start_seconds=encounter_start_seconds,
+                    )
+                    or row[7] != row[5]
+                    or row[8] != row[6]
                     or row[9] <= ends_raw[row[2]]
                     or row[9] > ends_raw[row[2]] + 2
                     or row[10] is not None
@@ -2764,6 +2787,22 @@ def _state_from_data(data: Any) -> EncounterState:
         if row[1] == "life_link":
             life_link_sources.add(row[2])
         effects.append(ActiveSpellEffect(*row))
+    effects_by_id = {effect.effect_id: effect for effect in effects}
+    for actor in creatures.values():
+        source_id = actor.temporary_hp_source_id
+        if source_id is None or not source_id.startswith("hymn_of_healing:"):
+            continue
+        hymn = effects_by_id.get(source_id)
+        if (
+            hymn is None
+            or hymn.kind != "hymn_of_healing"
+            or hymn.target_actor_id != actor.actor_id
+            or actor.temporary_hp <= 0
+            or actor.temporary_hp > 2
+            or actor.temporary_hp_expires_at_seconds is not None
+            or actor.temporary_hp_expires_at_source_start != starts_raw[hymn.source_actor_id] + 1
+        ):
+            raise ValueError("save has invalid Hymn of Healing temporary HP provenance")
     persistent_raw = data.get("persistent_effects", [])
     if not isinstance(persistent_raw, list):
         raise ValueError("save has invalid persistent damage effects")
@@ -3547,6 +3586,35 @@ def _valid_active_duration_deadline(
         and world_deadline == expected_deadline
         and world_time_seconds >= encounter_start_seconds + (round_number - 1) * 6
         and (not in_progress or world_time_seconds == encounter_start_seconds + (round_number - 1) * 6)
+    )
+
+
+def _valid_focus_duration_deadline(
+    source_start_deadline: int,
+    source_starts: int,
+    round_number: int,
+    world_time_seconds: int,
+    world_deadline: int | None,
+    *,
+    duration_source_starts: int,
+    duration_seconds: int,
+    encounter_start_seconds: int,
+) -> bool:
+    """Validate a focus spell's original cast-time absolute deadline.
+
+    The source-start anchor and absolute deadline are written at cast time;
+    neither is rebased when a later round or Sustain action saves the state.
+    The source may advance within the spell's source-relative duration while
+    the absolute deadline remains the original cast-time clock value.
+    """
+    cast_start = source_start_deadline - duration_source_starts
+    expected_deadline = encounter_start_seconds + (cast_start - 1) * 6 + duration_seconds
+    return bool(
+        cast_start >= 1
+        and cast_start <= source_starts < source_start_deadline
+        and cast_start <= round_number
+        and world_time_seconds >= expected_deadline - duration_seconds
+        and world_deadline == expected_deadline
     )
 
 

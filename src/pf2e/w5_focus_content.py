@@ -13,6 +13,7 @@ from types import MappingProxyType
 
 from .bard_content import MAESTRO_BARD_STAGED
 from .model import (
+    AttackDefinition,
     CreatureDefinition,
     CreaturePlacement,
     EncounterSetup,
@@ -20,6 +21,7 @@ from .model import (
     Position,
     SpontaneousSpellDefinition,
 )
+from .items import ItemInstance
 from .ranger_monk_content import RANGER_PRECISION
 
 
@@ -59,8 +61,17 @@ def build_w5_focus_content(warpriest: CreatureDefinition):
         abilities=(*warpriest.abilities, "harming_hands", "harmful_font"),
         feats=("Natural Ambition", "Assurance (Athletics)", "Harming Hands", "Deadly Simplicity"),
         skills=tuple(skill for skill in warpriest.skills if skill[0] not in {"crafting", "society"}) + (("arcana", "trained", 7),),
-        held_items=(),
-        attacks=tuple(attack for attack in warpriest.attacks if attack.attack_id == "fist"),
+        held_items=("dagger",),
+        attacks=(
+            AttackDefinition(
+                "dagger", "Dagger", 6, 5,
+                frozenset({"attack", "melee", "agile", "finesse", "thrown", "weapon"}),
+                "piercing", (4,), 3, item_id="dagger", attack_attribute="strength",
+                damage_attribute="strength", range_increment_ft=10, max_range_ft=50,
+            ),
+            *(attack for attack in warpriest.attacks if attack.attack_id == "fist"),
+        ),
+        item_instances=(ItemInstance("dagger", "dagger"),),
         prepared_spells=tuple((*warpriest.prepared_spells[:5], *_harm_slots(warpriest))),
         spell_sanctification="unholy",
         sheet_notes=(
@@ -70,7 +81,7 @@ def build_w5_focus_content(warpriest: CreatureDefinition):
             "Nethys grants harmful font and unholy sanctification; Arcana is the deity skill and Religion remains the cleric class skill.",
             "Shield Block is retained on the sheet but unavailable: this fixed loadout owns no shield.",
             "Nethys permits harmful font; this fixed mundane loadout has four Harm-font slots and two ordinary rank-1 Harm slots.",
-            "Natural Ambition selects Harming Hands. No longsword or staff is granted; Deadly Simplicity is an admitted feat grant.",
+            "Natural Ambition selects Harming Hands. A mundane dagger replaces Iomedae's longsword; no staff is granted. Deadly Simplicity is an admitted feat grant.",
             "Harming Hands changes only the admitted two-action rank-1 living-target Harm die from d8 to d10.",
             "Sources: https://2e.aonprd.com/Feats.aspx?ID=4645; https://2e.aonprd.com/Deities.aspx?ID=288; https://2e.aonprd.com/Doctrines.aspx?ID=5.",
         ),
@@ -85,7 +96,10 @@ def build_w5_focus_content(warpriest: CreatureDefinition):
         focus_points=3,
         focus_capacity=3,
         abilities=(*MAESTRO_BARD_STAGED.abilities, "hymn_of_healing"),
-        sheet_notes=(*MAESTRO_BARD_STAGED.sheet_notes,
+        sheet_notes=tuple(
+            note for note in MAESTRO_BARD_STAGED.sheet_notes
+            if "Natural Skill grants Society and Medicine" not in note
+        ) + (
             "Natural Ambition selects Hymn of Healing in place of Natural Skill, so Society and Medicine are not retained. Hymn is a third focus spell and raises the focus pool to three.",
             "Hymn of Healing is a two-action composition sustained for at most four rounds; rank 1 grants fast healing 2 at recipient turn start and 2 temporary HP on cast and first Sustain each round.",
             "Sources: https://2e.aonprd.com/Feats.aspx?ID=4574; https://2e.aonprd.com/Spells.aspx?ID=1768.",
