@@ -1,6 +1,6 @@
 # Content W5 recovery
 
-Status: **W4 fully accepted and published; W5 plan adopted; Arms implementation is active, while six remaining task creations are blocked by an app config/read error.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
+Status: **W4 fully accepted and published; W5 plan adopted; Arms has a runnable unreviewed delivery; all six remaining task creations remain blocked by an app config/read error.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
 
 Read [working model](../plan/04-delivery-and-checks.md) and [accepted-W4 handoff](../plan/08-content-w5-handoff.md). W4 accepted code/tests `1f4d09315a86f6fc9d71e51eef607e83eb68967c`, evidence child `ed8e86fe4d02b4e4e3bace40918d3fc3f9b86c8d`. Accepted W2 `a58424b0f9e0e515e302c149500624580c925780` and W3 `832d44b6816cd42d2c9cc9d3cfc2753d906774d1` verified ancestors. Coordinator merge preserves exact accepted src/tests/tools.
 
@@ -18,13 +18,15 @@ Dispatch three fresh Luna/high owners A Monk stances, B Arms and parry/integrati
 
 | Exact title / role | Task ID | Model / effort | Fresh checkout / baseline | Next action |
 |---|---|---|---|---|
-| PF2e Content W5 — Arms integration | `01a0beff-6744-78c1-8f9a-25863d30b3b0` | Luna high (`gpt-5.6-luna`) | `/Users/andrewlee/.codex/worktrees/d6c4/pf2e-engine-game-2026-07-10`; initial HEAD verified `5cc757833ddac041992f78e5bb518c85df936196` | Implement B family and shared Strike contract; preserve ready work until fresh reviewer exists. |
+| PF2e Content W5 — Arms integration | `01a0beff-6744-78c1-8f9a-25863d30b3b0` | Luna high (`gpt-5.6-luna`) | `/Users/andrewlee/.codex/worktrees/d6c4/pf2e-engine-game-2026-07-10`; initial HEAD verified `5cc757833ddac041992f78e5bb518c85df936196` | Runnable unreviewed delivery `2eb2d80ff9896f428d1e6a10c0227b5334392fd9` on `codex/pf2e-content-w5-arms`; retain until independent Arms reviewer can be created. |
 
 Requested/observed model/effort match. Initial compact cursor `1aea962b-a6c3-4cf4-b215-19b279a90e37:1`; observed active. Arms owner received the concrete missing-peer dependency once and can continue independent implementation. It must not self-accept.
 
 Pending fresh full tasks (none created): Luna/high **PF2e Content W5 — Monk stances**, **PF2e Content W5 — Focus and font**; Sol/high **PF2e Content W5 — Monk review**, **PF2e Content W5 — Arms review**, **PF2e Content W5 — Focus review**, **PF2e Content W5 — Assembly review**. Preserve these roles/models/title prefix, baseline and plan; do not replace the existing Arms task or reuse W4 conversations.
 
 Creation blocker: app tool returns `failed to resolve feature override precedence: No such file or directory (os error 2)`. One isolated retry after verifying metadata failed identically. App log confirms `config/read` failure before task creation; no missing path is identified. Official troubleshooting supplied no specific repair for this error. No app settings, session metadata or feature flags were altered. Recover task-creation capability before dispatching remaining peers; avoid repeated identical retries/status pings. Once creation succeeds, record exact IDs/checkouts, send each task one concrete peer-map assignment and continue normal routing. Existing heartbeat remains the sole fallback; no new schedule.
+
+Runnable B handoff received: owner reports43 focused tests passing, compile/diff/terminal notice/save-version smoke clean; no independent/public-completion acceptance claimed. New helper contracts: `strike_hooks.final_check_outcome` actual Parry adopter, `committed_first_weapon_attempt` reserved Gravity marker hook, `post_mitigation_damaging_critical` reserved Tiger rider hook; save18 retained. Detailed delivery remains with owner; coordinator verified commit metadata only. This materially new review dependency justified one Arms-review creation attempt, which again failed at the same config/read error before creation. No task created or replaced. Remaining dispatch needs app recovery; repeated retries are not useful until that changes. Existing Arms work and identities are preserved.
 
 B owns the shared Strike notification contract and single save-version decision, integrates accepted B→A→C families, and runs final canonical gate after separate assembled acceptance. A owns stance/Step/Trip/persistent helpers; C owns composition/sustain/typed-status helpers. Narrow shared call sites only; B integrates semantic overlap. Planner note supplies exact verified symbols, analogous tests, source decisions and review cases. Every assignment reads it plus the accepted-W4 handoff. No replacement tasks through ordinary repairs.
 
