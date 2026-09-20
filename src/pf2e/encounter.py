@@ -5578,15 +5578,17 @@ class Encounter:
             if attack.hands_required < 2:
                 return FamilyProcedureResult(rejection="Brutish Shove requires a two-handed melee weapon.")
             sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
-            if sizes.get(get_definition(target.definition_id).size, 99) > sizes.get(context.definition.size, -1):
-                return FamilyProcedureResult(rejection="Brutish Shove only affects a target your size or smaller.")
-            destination = command.shove_destination
-            if (
-                not in_bounds(destination, context.state.map_width, context.state.map_height)
-                or grid_distance_feet(target.position, destination) != 5
-                or self._occupant_at(context.state, destination, except_actor=target.actor_id) is not None
-            ):
-                return FamilyProcedureResult(rejection="Brutish Shove needs an open adjacent horizontal destination.")
+            if sizes.get(get_definition(target.definition_id).size, 99) <= sizes.get(context.definition.size, -1):
+                destination = command.shove_destination
+                away_x = (target.position.x > context.actor.position.x) - (target.position.x < context.actor.position.x)
+                away_y = (target.position.y > context.actor.position.y) - (target.position.y < context.actor.position.y)
+                if (
+                    not in_bounds(destination, context.state.map_width, context.state.map_height)
+                    or grid_distance_feet(target.position, destination) != 5
+                    or destination != Position(target.position.x + away_x, target.position.y + away_y)
+                    or self._occupant_at(context.state, destination, except_actor=target.actor_id) is not None
+                ):
+                    return FamilyProcedureResult(rejection="Brutish Shove needs an open adjacent destination directly away from the Fighter.")
         parent = ActionContinuation(
             kind=kind,
             actor_id=context.actor.actor_id,
@@ -5628,6 +5630,13 @@ class Encounter:
             return []
         if parent.kind == "brutish_shove" and not hit and critical:
             return []
+        if parent.kind == "brutish_shove" and hit:
+            sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
+            if sizes.get(get_definition(target.definition_id).size, 99) > sizes.get(get_definition(actor.definition_id).size, -1):
+                return [Event(
+                    "brutish_shove_size", actor.actor_id, target.actor_id,
+                    f"{target.label} is larger than {actor.label}, so Brutish Shove has no hit rider.",
+                )]
         context = FamilyProcedureContext(
             self, state, dice, actor, get_definition(actor.definition_id), "martial"
         )
@@ -5640,14 +5649,20 @@ class Encounter:
         if not parent.path:
             raise _Rejected("Brutish Shove lost its committed destination.")
         origin, destination = target.position, parent.path[0]
-        if grid_distance_feet(origin, destination) != 5 or self._occupant_at(
+        away_x = (origin.x > actor.position.x) - (origin.x < actor.position.x)
+        away_y = (origin.y > actor.position.y) - (origin.y < actor.position.y)
+        if (
+            grid_distance_feet(origin, destination) != 5
+            or destination != Position(origin.x + away_x, origin.y + away_y)
+            or self._occupant_at(
             state, destination, except_actor=target.actor_id
-        ) is not None:
+            ) is not None
+        ):
             events.append(Event("brutish_shove_blocked", actor.actor_id, target.actor_id, "Brutish Shove's chosen destination is no longer open."))
             return events
+        dx, dy = destination.x - origin.x, destination.y - origin.y
         target.position = destination
         if critical:
-            dx, dy = destination.x - origin.x, destination.y - origin.y
             second = Position(destination.x + dx, destination.y + dy)
             if in_bounds(second, state.map_width, state.map_height) and self._occupant_at(
                 state, second, except_actor=target.actor_id
@@ -5658,9 +5673,12 @@ class Encounter:
             f"{actor.label}'s Brutish Shove moves {target.label} from {_coord(origin)} to {_coord(target.position)} without triggering reactions.",
             position=target.position,
         ))
-        if parent.mode == "follow" and self._occupant_at(state, origin, except_actor=actor.actor_id) is None:
-            actor.position = origin
-            events.append(Event("brutish_shove_follow", actor.actor_id, target.actor_id, f"{actor.label} follows the Shoved target without triggering reactions.", position=origin))
+        if parent.mode == "follow":
+            follow_steps = 2 if target.position != destination else 1
+            follow = Position(actor.position.x + dx * follow_steps, actor.position.y + dy * follow_steps)
+            if self._occupant_at(state, follow, except_actor=actor.actor_id) is None:
+                actor.position = follow
+                events.append(Event("brutish_shove_follow", actor.actor_id, target.actor_id, f"{actor.label} follows the Shoved target without triggering reactions.", position=follow))
         return events
 
     def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
@@ -6287,7 +6305,7 @@ class Encounter:
             if continuation is not None:
                 events.extend(self._apply_committed_strike_rider(
                     state, dice, actor, target, continuation, damage=0,
-                    critical=False, hit=False,
+                    critical=check.degree is DegreeOfSuccess.CRITICAL_FAILURE, hit=False,
                 ))
                 if not is_reaction:
                     self._record_paired_outcome(

@@ -186,10 +186,17 @@ def build_l2_martial_content(
         ),
     )
     fighter_brutish_shove_l2 = _level_two(
-        replace(fighter, attacks=tuple(
-            replace(attack, hands_required=2) if attack.attack_id == "longsword" else attack
-            for attack in fighter.attacks
-        )),
+        replace(
+            fighter,
+            attacks=(*(
+                attack for attack in fighter.attacks if attack.attack_id != "longsword"
+            ), AttackDefinition(
+                "greatsword", "Greatsword", 9, 5,
+                frozenset({"attack", "melee", "versatile-p"}), "slashing", (12,), 4,
+                item_id="greatsword", hands_required=2,
+            )),
+            held_items=("greatsword",),
+        ),
         definition_id="fighter_m_level_2_brutish_shove",
         name="Level 2 Melee Fighter M (Brutish Shove)",
         hp=34,
@@ -197,7 +204,7 @@ def build_l2_martial_content(
         skill_feat="Quick Jump",
         ability_id="brutish_shove",
         note=(
-            "Alternate level-2 Fighter class-feat choice: Brutish Shove is a one-action Press two-handed melee Strike. On a hit against a target the Fighter's size or smaller, it makes an automatic Shove; on a failure (or the selected failure effect), it leaves the target off-guard until the end of the Fighter's turn. Source: https://2e.aonprd.com/Feats.aspx?ID=4779."
+            "Alternate level-2 Fighter class-feat choice: Brutish Shove is a one-action Press Greatsword Strike; Greatsword is a held two-handed martial weapon (1d12 slashing; versatile piercing). On a hit against a target the Fighter's size or smaller, it makes an automatic Shove; on a failure (or the selected failure effect), it leaves the target off-guard until the end of the Fighter's turn. Sources: https://2e.aonprd.com/Feats.aspx?ID=4779; https://2e.aonprd.com/Weapons.aspx?ID=379."
         ),
     )
     barbarian_intimidating_strike_l2 = _level_two(

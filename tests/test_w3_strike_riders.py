@@ -3,7 +3,9 @@
 Sources checked 2026-09-20: Snagging Strike (Player Core p. 141,
 https://2e.aonprd.com/Feats.aspx?ID=4773), Combat Grab (Player Core p. 141,
 https://2e.aonprd.com/Feats.aspx?ID=4780), and Brutish Shove (Player Core
-p. 141, https://2e.aonprd.com/Feats.aspx?ID=4779).
+p. 141, https://2e.aonprd.com/Feats.aspx?ID=4779).  The Brutish Shove sheet
+uses the Player Core p. 278 Greatsword (https://2e.aonprd.com/Weapons.aspx?ID=379);
+its automatic Shove uses Player Core p. 235 (https://2e.aonprd.com/Actions.aspx?ID=2380).
 """
 
 from __future__ import annotations
@@ -66,13 +68,13 @@ def test_combat_grab_is_press_and_persists_its_escape_condition(tmp_path: Path) 
 
 
 def test_brutish_shove_keeps_press_failure_and_critical_shove_results_distinct() -> None:
-    game = Encounter.start(get_setup("staged_fighter_level_2_brutish_shove"), rolls=(20, 1, 12, 1, 1))
+    game = Encounter.start(get_setup("staged_fighter_level_2_brutish_shove"), rolls=(20, 1, 12, 1, 2))
     _settle(game)
-    assert game.execute(Strike("dog", "longsword")).status is ResultStatus.PAUSED
+    assert game.execute(Strike("dog", "greatsword")).status is ResultStatus.PAUSED
     _settle(game)
     # A failure applies Brutish Shove's limited failure effect, without moving
     # the target. The chosen destination survives only for a successful Shove.
-    result = game.execute(BrutishShove("dog", "longsword", Position(3, 1)))
+    result = game.execute(BrutishShove("dog", "greatsword", Position(3, 1)))
     assert result.status is ResultStatus.PAUSED
     _settle(game)
     dog = game._state.creatures["dog"]
@@ -83,9 +85,30 @@ def test_brutish_shove_keeps_press_failure_and_critical_shove_results_distinct()
         get_setup("staged_fighter_level_2_brutish_shove"), rolls=(20, 1, 12, 1, 20, 1),
     )
     _settle(critical)
-    assert critical.execute(Strike("dog", "longsword")).status is ResultStatus.PAUSED
+    assert critical.execute(Strike("dog", "greatsword")).status is ResultStatus.PAUSED
     _settle(critical)
-    assert critical.execute(BrutishShove("dog", "longsword", Position(3, 1), follow=True)).status is ResultStatus.PAUSED
+    assert critical.execute(BrutishShove("dog", "greatsword", Position(3, 1), follow=True)).status is ResultStatus.PAUSED
     _settle(critical)
     assert critical._state.creatures["dog"].position == Position(4, 1)
-    assert critical._state.creatures["fighter"].position == Position(2, 1)
+    assert critical._state.creatures["fighter"].position == Position(3, 1)
+
+
+def test_brutish_shove_rejects_sideways_and_critical_failure_has_no_failure_effect() -> None:
+    sideways = Encounter.start(
+        get_setup("staged_fighter_level_2_brutish_shove"), rolls=(20, 1, 12, 1),
+    )
+    _settle(sideways)
+    assert sideways.execute(Strike("dog", "greatsword")).status is ResultStatus.PAUSED
+    _settle(sideways)
+    rejected = sideways.execute(BrutishShove("dog", "greatsword", Position(2, 2)))
+    assert rejected.status is ResultStatus.REJECTED
+
+    critical_failure = Encounter.start(
+        get_setup("staged_fighter_level_2_brutish_shove"), rolls=(20, 1, 12, 1, 1),
+    )
+    _settle(critical_failure)
+    assert critical_failure.execute(Strike("dog", "greatsword")).status is ResultStatus.PAUSED
+    _settle(critical_failure)
+    assert critical_failure.execute(BrutishShove("dog", "greatsword", Position(3, 1))).status is ResultStatus.PAUSED
+    _settle(critical_failure)
+    assert not any(effect.effect_id.startswith("brutish_shove:") for effect in critical_failure._state.condition_effects)
