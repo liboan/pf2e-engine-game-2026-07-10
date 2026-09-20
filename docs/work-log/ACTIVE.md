@@ -1,6 +1,6 @@
 # Content W5 closure
 
-Status: **W5 fully accepted; authorized publication in progress on `codex/pf2e-content-w5-delivery`.** Existing heartbeat `pf2e-content-w1-execution` is PAUSED. No W6 or further milestone is authorized. Older coordinators/heartbeats remain paused; retained tasks and checkouts are preserved.
+Status: **W5 fully accepted, published and closed on `codex/pf2e-content-w5-delivery`.** Existing heartbeat `pf2e-content-w1-execution` is PAUSED. No W6 or further milestone is authorized. Older coordinators/heartbeats remain paused; retained tasks and checkouts are preserved.
 
 Accepted integration: `f6639978cbc5fe09bd927de2a793256773fd2f7a`. Separate Sol assembled review accepted parent `a0fde8af40fea403432395e29668ca71bf51d531`; reviewer tests `4b4fdc67146118219fcb30b1cdb2a461383824df` match the integrated test file exactly. Coordinator merge preserves exact accepted `src`, `tests` and `tools` trees. Final canonical: **1,533 passed**, compile/test/diff exits 0; accepted setups 125/creatures 102, staged 24/12, save 18. [Acceptance evidence](archive/content-w5-accepted.md).
 
@@ -13,3 +13,5 @@ Verified accepted ancestry: W2 `a58424b0f9e0e515e302c149500624580c925780`, W3 `8
 The task-creation error is resolved: a model-catalog path referred to an automatically deleted disposable worktree. Durable saved-project catalog reference repaired at `3b1ef500ebb4fa08583f71db7feb1aa26d741927`; fresh config reads and all six previously blocked task creations succeeded. See [RCA and verified recovery](w5-task-creation-rca.md). Automatic worktree cleanup remains disabled to preserve retained checkouts; no model substitution or catalog-content change. The saved-project one-line environment repair remains separate from its main branch history.
 
 Cost monitoring remains solely with audit `01a0a8e5-7dec-7030-8679-120b66f70e44`; no new metrics or schedules.
+
+Publication receipt: accepted code/tests/guidance pushed and exact local/origin heads verified at `212a0483e575cced499fa607fba82eefaa731512`, with clean checkout and accepted W2/W3/W4/W5 ancestry. This receipt is a guidance-only child of that verified delivery; the closure turn pushes and verifies its final branch HEAD as well. Exact accepted src/tests/tools remain unchanged. No main merge, force-push or PR creation.
