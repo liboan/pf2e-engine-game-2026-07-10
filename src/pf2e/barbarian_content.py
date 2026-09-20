@@ -378,12 +378,25 @@ def _build_raging_thrower() -> BarbarianCharacter:
             ItemInstance("dagger_3", "dagger"),
         ),
         carried_item_bulk=(("dagger_1", 0), ("dagger_2", 0), ("dagger_3", 0), ("breastplate", 2)),
-        sheet_notes=base.definition.sheet_notes + (
+        sheet_notes=tuple(
+            note for note in base.definition.sheet_notes
+            if not note.startswith("Starting money remaining after breastplate and weapon:")
+        ) + (
             "Raging Thrower applies Rage damage to authorized thrown weapon Strikes; the three daggers retain stable instance identities.",
             "Moment of Clarity remains the distinct Fury bonus feat.",
+            "Starting gear is a breastplate and three tracked mundane daggers; the coarse gp loadout ledger records 7 gp remaining after the breastplate.",
         ),
     )
-    return BarbarianCharacter(definition, base.barbarian_state, base.loadout)
+    loadout = replace(
+        base.loadout,
+        items=(
+            LoadoutItem("breastplate", bulk=2, market_price_gp=8, paid_price_gp=8),
+            LoadoutItem("dagger_1", bulk=0, market_price_gp=0, paid_price_gp=0),
+            LoadoutItem("dagger_2", bulk=0, market_price_gp=0, paid_price_gp=0),
+            LoadoutItem("dagger_3", bulk=0, market_price_gp=0, paid_price_gp=0),
+        ),
+    )
+    return BarbarianCharacter(definition, base.barbarian_state, loadout)
 
 
 DRAGON_BARBARIAN_CHARACTERS: Mapping[str, BarbarianCharacter] = MappingProxyType(

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pf2e import EndTurn, Encounter, ExtravagantParry, Release, Strike
 from pf2e.content import get_definition, get_setup
+from pf2e.barbarian_content import BARBARIAN_LOADOUTS
 from pf2e.model import ResultStatus
 
 
@@ -44,6 +45,11 @@ def test_raging_thrower_applies_agile_rage_damage_and_lands_selected_dagger(tmp_
     thrown = next(attack for attack in definition.attacks if attack.attack_id == "dagger_thrown")
     assert (dagger.modifier, dagger.damage_modifier, dagger.attack_attribute) == (7, 4, "strength")
     assert (thrown.modifier, thrown.damage_modifier, thrown.attack_attribute) == (4, 4, "dexterity")
+    loadout = BARBARIAN_LOADOUTS[actor.definition_id]
+    assert tuple(item.item_id for item in loadout.items) == (
+        "breastplate", "dagger_1", "dagger_2", "dagger_3"
+    )
+    assert loadout.remaining_money_gp == 7
     assert "dagger_thrown" in {strike.attack_id for strike in game.options().strikes}
 
     pending = game.execute(
