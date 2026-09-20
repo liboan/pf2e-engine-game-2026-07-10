@@ -36,6 +36,12 @@ Prioritize substantially broader new playable class feats, especially level1, gr
 
 Current assignments and scope are in [ACTIVE](../work-log/ACTIVE.md), [working model](04-delivery-and-checks.md) and [startup handoff](07-content-w4-handoff.md). Strongly minimize traffic and coordinator activations. Publish accepted W4 through the established non-force codex/ workflow, preserve accepted history and leave a compact next-team checkpoint. All remaining supported boundaries below still apply.
 
+## Content W5: authorized after W4 closure
+
+The user authorizes W5 after W4 full independent assembled acceptance, final validation and publication. Retain W4 owners through ordinary repairs. W5 uses the same Astra/high coordinator but entirely new full Luna/high implementers and Sol/high reviewers in new isolated worktrees based on accepted W4; do not carry or fork W4 conversations. Prefix new tasks `PF2e Content W5 — `.
+
+Astra sets priorities/family boundaries, then fresh Sol reviewers briefly inspect relevant sources/code to recommend concrete named batches, reusable mechanics/symbols, necessary extensions and acceptance cases. Fresh Luna owners implement those rosters without another routine approval round and flag material discoveries. Sol planning assumptions must be independently checked during review. Widen genuinely playable content again, especially L1 class feats and coherent related adopters; useful cheap spell/item reuse is allowed. Preserve source accuracy, supported boundaries, proportional simplification, strict low-message routing and separate final assembled review/publication. Continue the existing heartbeat through W4-to-W5, pausing at W5 closure/user pause. [Working model](04-delivery-and-checks.md) and [ACTIVE](../work-log/ACTIVE.md) govern the transition and fresh-team handoff.
+
 ## Goal and approved scope
 
 The authorized content goal is to advance the accepted representative builds for all sixteen Player Core 1/2 classes through legal level-2 progression **and** offer meaningful additional class-feat choices at levels 1 and 2 beyond the single feat selected for each representative. Broader feat choice must not delay a runnable remaining level-2 build merely to complete an inventory. The separately advanced generalization phase and selected level-1 roster are complete. Ranger scope remains combat-only: tracking, foraging, camping and field-search procedures do not gate its acceptance.

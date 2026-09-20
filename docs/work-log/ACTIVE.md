@@ -1,6 +1,6 @@
 # Content W4 recovery
 
-Status: **W4 dispatched: three fresh Luna/high owners and two fresh Sol/high reviewers, each with a fresh isolated checkout.** Coordinator remains `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high / d438 existing checkout, branch `codex/content-w4-coordination`.
+Status: **W4 remains active with its current three Luna/high owners and two Sol/high reviewers. W5 is authorized after W4 full acceptance and publication.** Coordinator remains `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high / d438 existing checkout, branch `codex/content-w4-coordination`.
 
 Authoritative [working model](../plan/04-delivery-and-checks.md) and [compact startup handoff](../plan/07-content-w4-handoff.md) replace old routing. Published W3 checkpoint **`33ce54fc07a82af184fff09c4c6883c8b436b04b`** contains accepted W3 **`832d44b6816cd42d2c9cc9d3cfc2753d906774d1`** and accepted W2 **`a58424b0f9e0e515e302c149500624580c925780`**. Inherited 1,457-test gate, accepted105/83, staged24/12, save18; not a W4 run. W3 publication exact local/origin33ce54f and clean checkout were verified at closure.
 
@@ -22,8 +22,15 @@ Actual roster selection follows a brief source/catalog feasibility pass per owne
 
 ## Routing and closure
 
-Owner↔reviewer ordinary delivery/repairs; reviewer→integration accepted commits/evidence; lead→coordinator unresolved decisions or full assembled acceptance. No coordinator CC/status/acknowledgement traffic or repeated review requests. End when only autonomous peer work remains. Final independent assembled review and canonical gate are mandatory before acceptance/publishing. Existing `pf2e-content-w1-execution` heartbeat is ACTIVE for W4 as the sole fallback; no redundant schedules. Older coordinators/heartbeats remain paused.
+Owner↔reviewer ordinary delivery/repairs; reviewer→integration accepted commits/evidence; lead→coordinator unresolved decisions or full assembled acceptance. No coordinator CC/status/acknowledgement traffic or repeated review requests. End when only autonomous peer work remains. Final independent assembled review and canonical gate are mandatory before acceptance/publishing. Existing `pf2e-content-w1-execution` heartbeat is ACTIVE for W4-to-W5 continuation as the sole fallback; no redundant schedules. Older coordinators/heartbeats remain paused.
 
-At W4 acceptance pause heartbeat and complete authorized publication to an appropriate codex/ origin delivery branch, preserving accepted W2/W3, checking remote/PR workflow, exact remote/local head and clean checkout. No force/main merge/unrelated overwrite; new PR optional. Leave concise delivered/deferred checkpoint for the next fresh team. Cost monitoring stays with audit `01a0a8e5-7dec-7030-8679-120b66f70e44`, no new metrics framework.
+At W4 acceptance complete authorized publication to an appropriate codex/ origin delivery branch, preserving accepted W2/W3, checking remote/PR workflow, exact remote/local head and clean checkout. No force/main merge/unrelated overwrite; new PR optional. Leave a concise accepted-W4 delivered/deferred checkpoint for the fresh W5 team, then scope and dispatch W5 without another routine approval round. Keep the same heartbeat active through transition; pause at W5 closure or explicit user pause. Cost monitoring stays with audit `01a0a8e5-7dec-7030-8679-120b66f70e44`, no new metrics framework.
 
 Supported boundaries remain finite menus, combat-only Ranger, horizontal-only Monk, labeled above-level equipment and documented GM conventions. Stable-unconscious-at-zero positive damage/vertical terrain remain unsupported; paired mixed-resistance and pre-first-turn Surprise Attack remain pending. [W3 acceptance](archive/content-w3-accepted.md) and [publication record](archive/content-w3-publication.md) are historical evidence, not worker startup reading.
+
+
+## W5 authorization queued behind W4 closure
+
+No W5 worker exists yet. W4 owners/reviewers remain through ordinary repairs, independent assembled acceptance and publication. Then create entirely new full Luna/high implementation and Sol/high reviewer tasks, each with a new isolated worktree from accepted W4 plus current guidance and prefix `PF2e Content W5 — `. Do not reuse/fork W4 conversations, regardless of whether they compacted.
+
+Astra sets priorities/family boundaries; fresh Sol reviewers first perform brief source/code feasibility and recommend concrete named batches, actual reusable symbols/helpers, extensions, legal grants and key acceptance cases. Luna implements that concrete roster and flags material discoveries. Sol planning assumptions remain subject to independent review. W5 prioritizes materially broader playable L1 feat coverage and inexpensive related spell/item reuse, not existing-name variants or infrastructure alone. Update active assignments and supply a compact accepted-W4 handoff before W5 implementation dispatch. Exact evidence and environment will come from the accepted W4 handoff; none is invented now. See the canonical working model’s W5 transition section.
