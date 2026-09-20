@@ -11,3 +11,6 @@ docs/archive/
 /validation-results/
 /raw-thread-logs/
 /raw-session-logs/
+
+# Generated model-catalog provenance, which can embed local workspace paths.
+/.codex/model-catalogs/*.provenance.json
