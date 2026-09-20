@@ -200,7 +200,9 @@ def build_l2_martial_content(
         monk,
         definition_id="monk_crane_stance_level_1",
         name="Level 1 Monk (Crane Stance)",
-        attacks=(*monk.attacks, AttackDefinition(
+        attacks=(*(
+            attack for attack in monk.attacks if attack.item_id != "kama"
+        ), AttackDefinition(
             "crane_wing", "Crane Wing", 7, 5,
             frozenset({"attack", "melee", "agile", "finesse", "nonlethal", "unarmed"}),
             "bludgeoning", (6,), 2,
@@ -208,10 +210,20 @@ def build_l2_martial_content(
         )),
         abilities=tuple(ability for ability in monk.abilities if ability != "monastic_weaponry") + ("crane_stance",),
         feats=tuple(feat for feat in monk.feats if feat != "Monastic Weaponry") + ("Crane Stance",),
-        sheet_notes=(*monk.sheet_notes, (
+        proficiencies=tuple(
+            proficiency for proficiency in monk.proficiencies
+            if proficiency[0] != "simple_and_martial_monk_weapons"
+        ),
+        held_items=(),
+        sheet_notes=(*(
+            note for note in monk.sheet_notes
+            if "Monastic Weaponry" not in note and "Feats.aspx?ID=5979" not in note
+        ), (
             "Alternate level-1 class-feat choice: Crane Stance is a one-action stance while "
             "unarmored. It grants +1 circumstance AC and limits Strikes to Crane Wing (1d6 "
-            "bludgeoning; agile, finesse, nonlethal, unarmed). The stance ends on knockout, "
+            "bludgeoning; agile, finesse, nonlethal, unarmed). It reduces horizontal Quick "
+            "Jump's Long Jump DC by 5 and increases the supported horizontal Leap distance by "
+            "5 feet; vertical High Jump terrain remains unsupported. The stance ends on knockout, "
             "dismissal, encounter end, or another stance action. Source: "
             "https://2e.aonprd.com/Feats.aspx?ID=5976."
         )),

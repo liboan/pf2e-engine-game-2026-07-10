@@ -107,6 +107,28 @@ def crane_stance_attack_permitted(state, actor_id: str, attack_id: str) -> bool:
     return not active
 
 
+def crane_stance_leap_bonus(state, actor_id: str) -> int:
+    """Return Crane Stance's printed horizontal Leap increase, if active."""
+
+    return 5 if crane_stance_is_active(state, actor_id) else 0
+
+
+def end_dueling_parries_with_broken_requirements(state) -> None:
+    """End a guard at the instant its continuous hand requirement is broken."""
+
+    from .content import get_definition
+
+    state.active_effects[:] = [
+        effect
+        for effect in state.active_effects
+        if effect.kind != "dueling_parry"
+        or (
+            (actor := state.creatures.get(effect.source_actor_id)) is not None
+            and dueling_parry_requirements_met(state, actor, get_definition(actor.definition_id))
+        )
+    ]
+
+
 def _unarmored(definition, actor) -> bool:
     """The finite Monk sheet has no worn armor or armor category."""
 

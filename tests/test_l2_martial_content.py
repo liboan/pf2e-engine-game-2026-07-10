@@ -80,6 +80,10 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
     assert {"Intimidating Strike", "Quick Jump"} <= set(barbarian_intimidating.feats)
     assert {"Stunning Blows", "Assurance (Athletics)"} <= set(monk.feats)
     assert {"Crane Stance"} <= set(crane_monk.feats)
+    assert crane_monk.held_items == ()
+    assert all(attack.item_id != "kama" for attack in crane_monk.attacks)
+    assert "Monastic Weaponry" not in crane_monk.feats
+    assert ("simple_and_martial_monk_weapons", "trained") not in crane_monk.proficiencies
     assert {"sudden_charge", "no_escape", "stunning_blows", "intimidating_strike", "dueling_parry", "crane_stance"} <= {
         *fighter.abilities, *fighter_intimidating.abilities, *barbarian.abilities,
         *fighter_dueling_parry.abilities, *barbarian_sudden_charge.abilities,

@@ -10,11 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from pf2e import EndTurn, Release, Strike
+from pf2e import EndTurn, Interact, Release, Strike
+import pf2e.content as content
 from pf2e.content import get_setup
 from pf2e.encounter import Encounter
 from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry
-from pf2e.model import ResultStatus
+from pf2e.model import CreaturePlacement, EncounterSetup, Position, ResultStatus
+from pf2e.skill_actions import QuickJump
 from pf2e.terminal import run_terminal
 from terminal_test_helpers import BoundedInput, BoundedTranscript
 
@@ -55,6 +57,19 @@ def test_dueling_parry_has_live_hand_requirements_save_recovery_and_turn_expiry(
     fighter = game._state.creatures["fighter"]
     assert fighter.actions_remaining == 2
     assert game._effective_ac(fighter, state=game._state) == 19
+    assert not any(effect.kind == "dueling_parry" for effect in game._state.active_effects)
+
+    # Meeting the hand requirement again does not revive the ended use. This
+    # remains true across a save/load boundary.
+    assert game.execute(Interact("retrieve", "longsword")).status is ResultStatus.COMPLETED
+    fighter = game._state.creatures["fighter"]
+    assert game._effective_ac(fighter, state=game._state) == 19
+    assert not any(effect.kind == "dueling_parry" for effect in game._state.active_effects)
+    game.save(save_path)
+    game = Encounter.load(save_path)
+    fighter = game._state.creatures["fighter"]
+    assert game._effective_ac(fighter, state=game._state) == 19
+    assert not any(effect.kind == "dueling_parry" for effect in game._state.active_effects)
 
     expired = Encounter.start(get_setup("staged_fighter_level_2_dueling_parry"), rolls=(20, 1))
     _settle_initiative(expired)
@@ -100,6 +115,40 @@ def test_crane_stance_restricts_strikes_serializes_and_is_limited_to_one_stance_
     assert game._effective_ac(monk, state=game._state) == 19
     assert game.execute(CraneStance()).status is ResultStatus.REJECTED
     assert monk.actions_remaining == 1
+
+
+def test_crane_stance_changes_horizontal_quick_jump_and_saved_reaction_resume(monkeypatch, tmp_path: Path) -> None:
+    """AoN 5976: −5 Long Jump DC and +5 feet to each supported horizontal Leap."""
+
+    setup = EncounterSetup(
+        "w2_crane_quick_jump_resume",
+        "Crane Stance Quick Jump through Reactive Strike",
+        4,
+        6,
+        (
+            CreaturePlacement("monk", "monk_crane_stance_level_1", "Crane Monk", "blue", Position(1, 1)),
+            CreaturePlacement("fighter", "fighter_m_level_1", "Fighter", "red", Position(2, 1)),
+        ),
+    )
+    monkeypatch.setattr(content, "_STAGED_SETUPS", content._STAGED_SETUPS | {setup.setup_id: setup})
+    game = Encounter.start(setup, rolls=(20, 1, 5))
+    _settle_initiative(game)
+    assert game.execute(CraneStance()).status is ResultStatus.COMPLETED
+    assert game.execute(QuickJump((Position(1, 2), Position(1, 3), Position(1, 4)))).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "family_action"
+    assert game.choose(choice.choice_id, "keep", choice.owner_actor_id).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "reaction"
+
+    save_path = tmp_path / "crane-quick-jump-reaction.json"
+    game.save(save_path)
+    game = Encounter.load(save_path)
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "reaction"
+    assert game.choose(choice.choice_id, "decline", choice.owner_actor_id).status is ResultStatus.COMPLETED
+    monk = game._state.creatures["monk"]
+    assert monk.position == Position(1, 4)
 
 
 def test_terminal_exposes_dueling_parry_and_its_concrete_held_weapon() -> None:

@@ -374,9 +374,12 @@ class Encounter:
         if "Quick Jump" not in definition.feats or actor.prone:
             raise ValueError("save has an unavailable Quick Jump continuation")
         from .skill_content import QUICK_JUMP
+        from .martial_defense import crane_stance_leap_bonus
 
         expected = self._prepare_skill_check(
-            state, actor, "athletics", 15, traits=QUICK_JUMP.traits,
+            state, actor, "athletics",
+            15 - crane_stance_leap_bonus(state, actor.actor_id),
+            traits=QUICK_JUMP.traits,
         )
         result = saved.result
         if (
@@ -395,9 +398,10 @@ class Encounter:
         speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
         if speed < 15:
             raise ValueError("save has Quick Jump below its required Speed")
-        normal_leap = 15 if speed >= 30 else 10
+        leap_bonus = crane_stance_leap_bonus(state, actor.actor_id)
+        normal_leap = (15 if speed >= 30 else 10) + leap_bonus
         maximum = (
-            min((result.total // 5) * 5, speed)
+            min((result.total // 5) * 5 + leap_bonus, speed)
             if result.degree >= DegreeOfSuccess.SUCCESS
             else normal_leap
         )
@@ -4573,6 +4577,14 @@ class Encounter:
             return self._result(ResultStatus.REJECTED, str(error))
         except UnsupportedHealthRuleError as error:
             return self._result(ResultStatus.UNSUPPORTED, str(error))
+
+        # Dueling Parry has a continuous one-weapon/empty-other-hands
+        # requirement. Resolve every completed command first, then discard a
+        # guard whose equipment facts no longer qualify; a later retrieve or
+        # draw cannot reactivate that same use of the feat.
+        from .martial_defense import end_dueling_parries_with_broken_requirements
+
+        end_dueling_parries_with_broken_requirements(draft)
 
         self._state = draft
         self._dice = dice
