@@ -1,4 +1,4 @@
-"""Typed Player Core 2 Alchemist level 1 rules facts and local procedures.
+"""Typed Player Core 2 Alchemist levels 1–2 rules facts and procedures.
 
 This module is deliberately independent of Encounter and CreatureState. Core
 supplies declared hand/tool/turn/time facts, then commits returned immutable
@@ -19,6 +19,10 @@ from typing import Literal
 
 
 ALCHEMIST_LEVEL = 1
+ALCHEMIST_LEVEL_2 = 2
+SUPPORTED_ALCHEMIST_LEVELS = frozenset({ALCHEMIST_LEVEL, ALCHEMIST_LEVEL_2})
+STARTING_FORMULA_COUNT = 8
+FORMULAS_PER_LEVEL = 2
 ADVANCED_ALCHEMY_BASE_CAPACITY = 4
 VERSATILE_VIAL_BASE_CAPACITY = 2
 VIAL_RECOVERY_INTERVAL_SECONDS = 10 * 60
@@ -37,6 +41,10 @@ RESEARCH_FIELDS = frozenset({FIELD_BOMBER, FIELD_CHIRURGEON, FIELD_MUTAGENIST, F
 QUICK_BOMBER = "quick_bomber"
 FAR_LOBBER = "far_lobber"
 ALCHEMIST_LEVEL_1_FEATS = frozenset({QUICK_BOMBER, FAR_LOBBER})
+# The level-two class-feat slot may legally select either already-supported
+# level-one bomb feat.  The other level-two Alchemist feats require mutagen,
+# additive-poison, or Crafting-check procedures outside this Bomber slice.
+ALCHEMIST_LEVEL_2_BOMBER_FEATS = frozenset({QUICK_BOMBER, FAR_LOBBER})
 
 
 class AlchemyRuleError(ValueError):
@@ -55,11 +63,12 @@ class AlchemyBuildChoices:
     intelligence_modifier: int
     selected_level_1_feat: str | None = None
     character_level: int = ALCHEMIST_LEVEL
+    selected_level_2_feat: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class AlchemyState:
-    """Current level-1 field, formula book, and infused-vial resources."""
+    """Current levels 1–2 field, formula book, and infused-vial resources."""
 
     character_level: int
     intelligence_modifier: int
@@ -73,22 +82,26 @@ class AlchemyState:
     exploration_seconds_toward_vial_recovery: int = 0
     next_creation_sequence: int = 1
     mutagen_temp_hp_available_at_seconds: int = 0
+    selected_level_2_feat: str | None = None
 
     def __post_init__(self) -> None:
-        if type(self.character_level) is not int or self.character_level != ALCHEMIST_LEVEL:
-            raise ValueError("this alchemy slice supports character level 1 only")
+        if type(self.character_level) is not int or self.character_level not in SUPPORTED_ALCHEMIST_LEVELS:
+            raise ValueError("this alchemy slice supports character levels 1 and 2 only")
         if type(self.intelligence_modifier) is not int:
             raise TypeError("intelligence_modifier must be an integer")
         if self.research_field not in RESEARCH_FIELDS:
             raise ValueError("research_field is not a supported Player Core 2 field")
+        if self.character_level == ALCHEMIST_LEVEL_2 and self.research_field != FIELD_BOMBER:
+            raise ValueError("the level-2 alchemy slice is limited to Bomber")
         if not isinstance(self.field_formula_ids, tuple) or not isinstance(self.known_formula_ids, tuple):
             raise ValueError("formula selections must be tuples")
         if len(self.field_formula_ids) != 2 or len(set(self.field_formula_ids)) != 2:
             raise ValueError("exactly two distinct field formulas are required")
         if any(not isinstance(item, str) or not item.strip() for item in (*self.field_formula_ids, *self.known_formula_ids)):
             raise ValueError("formula IDs must be non-empty strings")
-        if len(self.known_formula_ids) != 8 or len(set(self.known_formula_ids)) != 8:
-            raise ValueError("the level-1 formula book must contain eight distinct formulas")
+        expected_formula_count = STARTING_FORMULA_COUNT + (self.character_level - ALCHEMIST_LEVEL) * FORMULAS_PER_LEVEL
+        if len(self.known_formula_ids) != expected_formula_count or len(set(self.known_formula_ids)) != expected_formula_count:
+            raise ValueError(f"the level-{self.character_level} formula book must contain {expected_formula_count} distinct formulas")
         if not set(self.field_formula_ids) <= set(self.known_formula_ids):
             raise ValueError("field formulas must also be in the formula book")
         if not isinstance(self.daily_preparation_id, str) or not self.daily_preparation_id.strip():
@@ -105,6 +118,14 @@ class AlchemyState:
             raise ValueError("next_creation_sequence must be a positive integer")
         if type(self.mutagen_temp_hp_available_at_seconds) is not int or self.mutagen_temp_hp_available_at_seconds < 0:
             raise ValueError("mutagen temp HP cooldown must be a non-negative timestamp")
+        if self.character_level == ALCHEMIST_LEVEL and self.selected_level_2_feat is not None:
+            raise ValueError("a level-1 Alchemist has no level-2 class feat")
+        if self.character_level == ALCHEMIST_LEVEL_2 and self.selected_level_2_feat is None:
+            raise ValueError("a level-2 Alchemist must select its level-2 class feat")
+        if self.selected_level_2_feat is not None and self.selected_level_2_feat not in ALCHEMIST_LEVEL_2_BOMBER_FEATS:
+            raise ValueError("selected level-2 feat is outside the admitted Bomber menu")
+        if self.selected_level_2_feat is not None and self.selected_level_2_feat == self.selected_level_1_feat:
+            raise ValueError("the same Alchemist feat cannot occupy both level-1 and level-2 slots")
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,29 +257,40 @@ def _known_formula(state: AlchemyState, formula_id: str, *, action: str) -> None
 
 
 def build_alchemy_state(choices: AlchemyBuildChoices, *, daily_preparation_id: str = "initial") -> AlchemyState:
-    """Validate a legal level-1 field/formula selection and initialize its vial stock."""
-    if choices.character_level != ALCHEMIST_LEVEL:
-        raise AlchemyRuleError("unsupported_character_level", "this slice currently supports Alchemist level 1")
+    """Validate a legal selected level-1 or level-2 Alchemist state."""
+    if choices.character_level not in SUPPORTED_ALCHEMIST_LEVELS:
+        raise AlchemyRuleError("unsupported_character_level", "this slice supports Alchemist levels 1 and 2")
     if choices.research_field not in RESEARCH_FIELDS:
         raise AlchemyRuleError("unknown_research_field", f"unknown research field {choices.research_field!r}")
+    if choices.character_level == ALCHEMIST_LEVEL_2 and choices.research_field != FIELD_BOMBER:
+        raise AlchemyRuleError("unsupported_l2_research_field", "this level-2 alchemy slice is limited to Bomber")
     if type(choices.intelligence_modifier) is not int:
         raise AlchemyRuleError("invalid_intelligence", "intelligence modifier must be an integer")
     if not isinstance(choices.field_formula_ids, tuple) or not isinstance(choices.known_formula_ids, tuple):
         raise AlchemyRuleError("invalid_formula_book", "field and known formula selections must be tuples")
     if len(choices.field_formula_ids) != 2 or len(set(choices.field_formula_ids)) != 2:
         raise AlchemyRuleError("invalid_field_formulas", "choose exactly two different field formulas")
-    if len(choices.known_formula_ids) != 8 or len(set(choices.known_formula_ids)) != 8:
-        raise AlchemyRuleError("invalid_formula_book_size", "the level-1 formula book contains eight different formulas")
+    expected_formula_count = STARTING_FORMULA_COUNT + (choices.character_level - ALCHEMIST_LEVEL) * FORMULAS_PER_LEVEL
+    if len(choices.known_formula_ids) != expected_formula_count or len(set(choices.known_formula_ids)) != expected_formula_count:
+        raise AlchemyRuleError("invalid_formula_book_size", f"the level-{choices.character_level} formula book contains {expected_formula_count} different formulas")
     if not set(choices.field_formula_ids) <= set(choices.known_formula_ids):
         raise AlchemyRuleError("field_formula_not_known", "both research-field formulas must be in the formula book")
     if choices.selected_level_1_feat is not None and choices.selected_level_1_feat not in ALCHEMIST_LEVEL_1_FEATS:
         raise AlchemyRuleError("unsupported_class_feat", f"level-1 Alchemist feat {choices.selected_level_1_feat!r} is not in this catalog")
+    if choices.character_level == ALCHEMIST_LEVEL and choices.selected_level_2_feat is not None:
+        raise AlchemyRuleError("level_2_feat_too_early", "level-2 feat selection requires character level 2")
+    if choices.character_level == ALCHEMIST_LEVEL_2 and choices.selected_level_2_feat is None:
+        raise AlchemyRuleError("level_2_feat_required", "a level-2 Alchemist must select its class feat")
+    if choices.selected_level_2_feat is not None and choices.selected_level_2_feat not in ALCHEMIST_LEVEL_2_BOMBER_FEATS:
+        raise AlchemyRuleError("unsupported_class_feat", f"level-2 Alchemist feat {choices.selected_level_2_feat!r} is not in this Bomber catalog")
+    if choices.selected_level_2_feat is not None and choices.selected_level_2_feat == choices.selected_level_1_feat:
+        raise AlchemyRuleError("duplicate_class_feat", "the same Alchemist feat cannot occupy both class-feat slots")
 
     formulas = _catalog()
     for formula_id in choices.known_formula_ids:
         formula = formulas.get(formula_id)
-        if formula is None or formula.level != 1:
-            raise AlchemyRuleError("unsupported_starting_formula", f"{formula_id!r} is not an admitted common level-1 formula")
+        if formula is None or formula.level > choices.character_level:
+            raise AlchemyRuleError("unsupported_formula", f"{formula_id!r} is not an admitted common formula creatable at level {choices.character_level}")
     required_category = {
         FIELD_BOMBER: "bomb",
         FIELD_CHIRURGEON: "healing_elixir",
@@ -272,7 +304,7 @@ def build_alchemy_state(choices: AlchemyBuildChoices, *, daily_preparation_id: s
 
     capacity = max(0, VERSATILE_VIAL_BASE_CAPACITY + choices.intelligence_modifier)
     return AlchemyState(
-        character_level=ALCHEMIST_LEVEL,
+        character_level=choices.character_level,
         intelligence_modifier=choices.intelligence_modifier,
         research_field=choices.research_field,
         field_formula_ids=choices.field_formula_ids,
@@ -281,12 +313,29 @@ def build_alchemy_state(choices: AlchemyBuildChoices, *, daily_preparation_id: s
         daily_preparation_id=daily_preparation_id,
         stored_vials=capacity,
         vial_capacity=capacity,
+        selected_level_2_feat=choices.selected_level_2_feat,
     )
 
 
 def advanced_alchemy_capacity(state: AlchemyState) -> int:
     """Return the daily number of consumables producible by Advanced Alchemy."""
     return max(0, ADVANCED_ALCHEMY_BASE_CAPACITY + state.intelligence_modifier)
+
+
+def bomber_bomb_range_increment(state: AlchemyState, ordinary_range_increment_ft: int) -> int:
+    """Return a selected Bomber bomb's range increment.
+
+    Far Lobber is a class-feat choice, not a new item profile.  The encounter
+    layer supplies the individual bomb's ordinary increment and applies this
+    helper only when resolving a Bomber bomb Strike.
+    """
+    if state.research_field != FIELD_BOMBER:
+        raise AlchemyRuleError("wrong_research_field", "only a Bomber can apply a Bomber bomb range feat")
+    if type(ordinary_range_increment_ft) is not int or ordinary_range_increment_ft <= 0:
+        raise AlchemyRuleError("invalid_range_increment", "ordinary bomb range increment must be a positive integer")
+    if FAR_LOBBER in {state.selected_level_1_feat, state.selected_level_2_feat}:
+        return 30
+    return ordinary_range_increment_ft
 
 
 def daily_prepare_alchemy(
@@ -330,6 +379,7 @@ def daily_prepare_alchemy(
         exploration_seconds_toward_vial_recovery=0,
         next_creation_sequence=state.next_creation_sequence,
         mutagen_temp_hp_available_at_seconds=state.mutagen_temp_hp_available_at_seconds,
+        selected_level_2_feat=state.selected_level_2_feat,
     )
     items = tuple(
         InfusedAlchemyItem(
@@ -612,4 +662,5 @@ def _state_values(state: AlchemyState) -> dict[str, object]:
         "exploration_seconds_toward_vial_recovery": state.exploration_seconds_toward_vial_recovery,
         "next_creation_sequence": state.next_creation_sequence,
         "mutagen_temp_hp_available_at_seconds": state.mutagen_temp_hp_available_at_seconds,
+        "selected_level_2_feat": state.selected_level_2_feat,
     }

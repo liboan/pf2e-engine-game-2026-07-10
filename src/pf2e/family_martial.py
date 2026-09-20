@@ -33,6 +33,14 @@ def _owner_module(context: FamilyProcedureContext):
                 raise
             return None
         return barbarian
+    if module_name == "fighter":
+        try:
+            from . import fighter
+        except ModuleNotFoundError as error:
+            if error.name != f"{__package__}.fighter":
+                raise
+            return None
+        return fighter
     if module_name == "ranger":
         try:
             from . import ranger

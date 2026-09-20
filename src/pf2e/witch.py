@@ -17,7 +17,24 @@ _CANTRIPS = frozenset({
     "divine_lance", "void_warp", "shield", "guidance", "stabilize", "light",
     "vitality_lash", "forbidding_ward", "sigil", "detect_magic",
 })
-_RANK_ONE = frozenset({"heal", "fear", "enfeeble", "runic_weapon", "runic_body", "command"})
+_RANK_ONE = frozenset({
+    "heal", "fear", "enfeeble", "runic_weapon", "runic_body", "command",
+})
+_L2_FAMILIAR_SPELL_DEFINITIONS = frozenset({
+    "faiths_flamekeeper_witch_level_2_cantrip_expansion",
+})
+_L2_FAMILIAR_RANK_ONE = frozenset({"harm", "protection"})
+
+
+def _rank_one_choices(definition) -> frozenset[str]:
+    """Return this sheet's actual familiar-taught rank-one spells.
+
+    Harm and Protection are level-two familiar additions for the one selected
+    progression sheet, not retroactive level-one preparation choices.
+    """
+    if definition.definition_id in _L2_FAMILIAR_SPELL_DEFINITIONS:
+        return _RANK_ONE | _L2_FAMILIAR_RANK_ONE
+    return _RANK_ONE
 
 
 def preparation_choices(definition, slot) -> tuple[str, ...]:
@@ -26,14 +43,14 @@ def preparation_choices(definition, slot) -> tuple[str, ...]:
     if slot.cantrip:
         return tuple(sorted(_CANTRIPS))
     if slot.rank == 1:
-        return tuple(sorted(_RANK_ONE))
+        return tuple(sorted(_rank_one_choices(definition)))
     return ()
 
 
 def prepared_slot_rejection(actor, definition, slot, spell_id: str) -> str | None:
     if "faiths_flamekeeper" not in definition.abilities:
         return None
-    allowed = _CANTRIPS if slot.cantrip else _RANK_ONE if slot.rank == 1 else frozenset()
+    allowed = _CANTRIPS if slot.cantrip else _rank_one_choices(definition) if slot.rank == 1 else frozenset()
     if spell_id not in allowed:
         return "The spell is outside this Witch's finite divine preparation choices."
     return None

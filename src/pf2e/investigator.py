@@ -45,13 +45,17 @@ FORENSIC_MEDICINE_ABILITY = "investigator_forensic_medicine"
 FORENSIC_ACUMEN_ABILITY = "investigator_forensic_acumen"
 BATTLE_MEDICINE_ABILITY = "investigator_battle_medicine"
 KNOWN_WEAKNESSES_ABILITY = "investigator_known_weaknesses"
+PERSON_OF_INTEREST_ABILITY = "investigator_person_of_interest"
 ATTACK_STRATAGEM = "attack"
 SKILL_STRATAGEM = "skill"
 _BATTLE_MEDICINE_FEAT = "Battle Medicine"
+_PERSON_OF_INTEREST_FEAT = "Person of Interest"
 _HEALER_TOOLKIT_DEFINITION = "healers_toolkit"
 _BATTLE_MEDICINE_TRAITS = frozenset({"healing", "manipulate", "skill"})
 _BATTLE_MEDICINE_DC = 15
 _FORENSIC_IMMUNITY_SECONDS = 60 * 60
+PERSON_OF_INTEREST_DURATION_SECONDS = 60
+PERSON_OF_INTEREST_COOLDOWN_SECONDS = 10 * 60
 
 
 class _ActorWithStratagem(Protocol):
@@ -76,6 +80,69 @@ class DeviseStratagem(FamilyCommand):
     mode: str | None = None
     free_action: bool = False
     known_weaknesses: bool = False
+
+
+@dataclass(frozen=True)
+class PersonOfInterest(FamilyCommand):
+    """Select one visible, not-currently-known lead for the feat's free Devise.
+
+    The command is intentionally a small public hook.  Its grant and
+    cooldown belong to :class:`~pf2e.model.CreatureState`, because they must
+    survive a save and elapsed world time; the class-local predicates below
+    own the printed Investigator-specific eligibility.
+    """
+
+    family_id: ClassVar[str] = "martial"
+    target_id: str
+
+
+@dataclass(frozen=True)
+class PersonOfInterestState:
+    """Exact persisted grant proposed for Person of Interest integration.
+
+    ``target_id`` is the only creature that receives the free Devise
+    permission.  The exclusive bound follows the ordinary engine convention:
+    the grant is live precisely while ``now_seconds < expires_at_seconds``.
+    The independent ten-minute frequency is a separate actor deadline, not
+    inferred from this one-minute grant.
+    """
+
+    target_id: str
+    expires_at_seconds: int
+
+
+def validate_person_of_interest_state(state: PersonOfInterestState) -> None:
+    """Validate the narrow saved grant without accepting broad effect state."""
+
+    if not isinstance(state, PersonOfInterestState):
+        raise ValueError("Person of Interest state must be a PersonOfInterestState")
+    if not isinstance(state.target_id, str) or not state.target_id:
+        raise ValueError("Person of Interest target must be a non-empty actor id")
+    if type(state.expires_at_seconds) is not int or state.expires_at_seconds < 1:
+        raise ValueError("Person of Interest expiry must be a positive world-time second")
+
+
+def person_of_interest_grant_allows_free_devise(
+    state: PersonOfInterestState | None,
+    *,
+    target_id: str,
+    now_seconds: int,
+) -> bool:
+    """Whether the saved feat grant legally replaces Devise's normal cost.
+
+    This deliberately does not decide Devise's ordinary target, once-per-
+    round, or action-trait gates; its caller retains all of those rules.
+    """
+
+    if not isinstance(target_id, str) or not target_id or type(now_seconds) is not int:
+        return False
+    if state is None:
+        return False
+    try:
+        validate_person_of_interest_state(state)
+    except ValueError:
+        return False
+    return state.target_id == target_id and now_seconds < state.expires_at_seconds
 
 
 @dataclass(frozen=True)
@@ -177,6 +244,11 @@ class BattleMedicine(FamilyCommand):
     family_id: ClassVar[str] = "martial"
     target_id: str
     dc: int = _BATTLE_MEDICINE_DC
+    # Assurance is a declared alternative method, never an inferred result.
+    # Keeping it on the class-local command lets the existing terminal retain
+    # its ordinary rolled Medicine route while a supported sheet can select
+    # the printed fixed-result alternative through the public engine API.
+    use_assurance: bool = False
 
 
 @dataclass(frozen=True)
@@ -469,6 +541,46 @@ def _active_target(context: FamilyProcedureContext, target_id: str):
     if target is None or target.actor_id == context.actor.actor_id or target.defeated:
         return None
     return target
+
+
+def _person_of_interest_target(context: FamilyProcedureContext, target_id: str):
+    """Resolve Person of Interest's literal target predicate.
+
+    The engine's existing active-target projection is its bounded "can see"
+    representation.  ``investigator_awareness`` holds only creatures the
+    active authored cases identify, so it preserves the feat's "to your
+    knowledge" qualification rather than treating every creature in a scene
+    as already tied to an investigation.
+    """
+
+    target = _active_target(context, target_id)
+    if target is None:
+        return None, "Person of Interest requires a visible active creature other than the investigator."
+    if target.actor_id in context.actor.investigator_awareness:
+        return None, "Person of Interest requires a creature not known to be tied to an active investigation."
+    return target, None
+
+
+def person_of_interest_target_ids(encounter, state, actor, definition) -> tuple[str, ...]:
+    """Project source-legal Person of Interest targets before cooldown gating.
+
+    The shared owner filters this class-local projection against the proposed
+    saved frequency deadline.  Keeping that deadline out of this helper makes
+    an absent or malformed persistence field unable to silently grant the
+    action.
+    """
+
+    if (
+        PERSON_OF_INTEREST_ABILITY not in definition.abilities
+        and _PERSON_OF_INTEREST_FEAT not in definition.feats
+    ):
+        return ()
+    context = FamilyProcedureContext(encounter, state, encounter._dice.clone(), actor, definition, "martial")
+    return tuple(
+        target.actor_id
+        for target in state.creatures.values()
+        if _person_of_interest_target(context, target.actor_id)[0] is not None
+    )
 
 
 def _knowledge_records(context: FamilyProcedureContext) -> tuple[Any, ...]:
@@ -1588,12 +1700,18 @@ def _handle_devise(
         return FamilyProcedureResult(
             rejection="Devise a Stratagem mode must be 'attack', 'skill', or omitted for a choice."
         )
-    if command.free_action and (
-        not getattr(context.actor, "investigator_active_cases", set())
-        or command.target_id not in getattr(context.actor, "investigator_awareness", set())
-    ):
+    ordinary_free_devise = (
+        bool(getattr(context.actor, "investigator_active_cases", set()))
+        and command.target_id in getattr(context.actor, "investigator_awareness", set())
+    )
+    person_of_interest_free_devise = person_of_interest_grant_allows_free_devise(
+        getattr(context.actor, "investigator_person_of_interest", None),
+        target_id=command.target_id,
+        now_seconds=getattr(context.state, "world_time_seconds", 0),
+    )
+    if command.free_action and not (ordinary_free_devise or person_of_interest_free_devise):
         return FamilyProcedureResult(
-            rejection="Free Devise a Stratagem requires an active investigation and authored awareness of the target."
+            rejection="Free Devise a Stratagem requires an active investigation and authored awareness of the target, or an active Person of Interest grant."
         )
     if not command.free_action and context.actor.actions_remaining < 1:
         return FamilyProcedureResult(rejection="Devise a Stratagem requires one action.")
@@ -1658,6 +1776,70 @@ def _handle_devise(
     if not command.free_action:
         context.commit_family_action(actions=1)
     return _store_devise_stratagem(context, command, target, die, [])
+
+
+def _handle_person_of_interest(
+    context: FamilyProcedureContext,
+    command: PersonOfInterest,
+) -> FamilyProcedureResult:
+    """Apply the feat once the shared saved-state hook is present.
+
+    This body owns only the class feat's definition, target, duration and
+    frequency.  The shared integration provides the two explicit
+    ``CreatureState`` fields named in the error below, their strict JSON
+    encoding, and terminal/action-menu routing.
+    """
+
+    if (
+        PERSON_OF_INTEREST_ABILITY not in context.definition.abilities
+        and _PERSON_OF_INTEREST_FEAT not in context.definition.feats
+    ):
+        return FamilyProcedureResult(unsupported="Person of Interest is not admitted for this creature.")
+    if not (
+        hasattr(context.actor, "investigator_person_of_interest")
+        and hasattr(context.actor, "investigator_person_of_interest_cooldown_until")
+    ):
+        return FamilyProcedureResult(
+            unsupported=(
+                "Person of Interest requires persisted CreatureState fields "
+                "investigator_person_of_interest and "
+                "investigator_person_of_interest_cooldown_until."
+            )
+        )
+    target, error = _person_of_interest_target(context, command.target_id)
+    if error:
+        return FamilyProcedureResult(rejection=error)
+    cooldown_until = context.actor.investigator_person_of_interest_cooldown_until
+    if type(cooldown_until) is not int or cooldown_until < 0:
+        return FamilyProcedureResult(rejection="Person of Interest has invalid saved cooldown state.")
+    if cooldown_until > context.state.world_time_seconds:
+        return FamilyProcedureResult(rejection="Person of Interest is unavailable during its ten-minute cooldown.")
+    if context.actor.actions_remaining < 1:
+        return FamilyProcedureResult(rejection="Person of Interest requires one action.")
+    context.require_action_permitted("person_of_interest", frozenset())
+    context.commit_family_action(actions=1)
+    expires_at_seconds = context.state.world_time_seconds + PERSON_OF_INTEREST_DURATION_SECONDS
+    context.actor.investigator_person_of_interest = PersonOfInterestState(
+        target.actor_id, expires_at_seconds
+    )
+    context.actor.investigator_person_of_interest_cooldown_until = (
+        context.state.world_time_seconds + PERSON_OF_INTEREST_COOLDOWN_SECONDS
+    )
+    return FamilyProcedureResult(events=tuple(context.encounter._complete_action(
+        context.state,
+        context.actor,
+        [Event(
+            "person_of_interest",
+            context.actor.actor_id,
+            target.actor_id,
+            f"{context.actor.label} marks {target.label} as a Person of Interest; "
+            f"Devise a Stratagem is free against that target until world time {expires_at_seconds} seconds.",
+            details=(
+                f"Person of Interest available again at world time {context.actor.investigator_person_of_interest_cooldown_until} seconds",
+            ),
+        )],
+        dice=context.dice,
+    )))
 
 
 def _draw_devise_after_knowledge(
@@ -1830,6 +2012,8 @@ def _finish_battle_medicine(
     target, error = _battle_medicine_target(context, command.target_id)
     if error:
         return FamilyProcedureResult(rejection=error)
+    from .content import get_definition
+
     check = saved_check.result
     events = [_check_event(context.actor, target, check)]
     # The methodology changes the normal Battle Medicine cooldown and adds
@@ -1955,7 +2139,13 @@ def resolve_battle_medicine_continuation(encounter, state, dice, continuation):
     context = FamilyProcedureContext(
         encounter, state, dice, actor, get_definition(actor.definition_id), "martial"
     )
-    result = _resolve_battle_medicine_check(context, BattleMedicine(target.actor_id))
+    result = _resolve_battle_medicine_check(
+        context,
+        BattleMedicine(
+            target.actor_id,
+            use_assurance=continuation.mode == "battle_medicine_assurance",
+        ),
+    )
     if result.rejection:
         raise ValueError(result.rejection)
     if result.unsupported:
@@ -1966,6 +2156,35 @@ def resolve_battle_medicine_continuation(encounter, state, dice, continuation):
 def _resolve_battle_medicine_check(
     context: FamilyProcedureContext, command: BattleMedicine
 ) -> FamilyProcedureResult:
+    if command.use_assurance:
+        if "assurance_medicine" not in context.definition.abilities:
+            return FamilyProcedureResult(
+                rejection=f"{context.actor.label} has no admitted Assurance (Medicine)."
+            )
+        rank = next(
+            (rank for name, rank, _modifier in context.definition.skills if name == "medicine"),
+            None,
+        )
+        rank_bonus = {"trained": 2, "expert": 4, "master": 6, "legendary": 8}.get(rank)
+        if rank_bonus is None:
+            return FamilyProcedureResult(
+                rejection="Assurance (Medicine) requires trained Medicine."
+            )
+        proficiency_bonus = context.definition.level + rank_bonus
+        saved = SavedCheckContext(
+            check_owner_actor_id=context.actor.actor_id,
+            context=CheckContext("medicine", None, _BATTLE_MEDICINE_TRAITS),
+            dc=command.dc,
+            modifiers=(Modifier(
+                proficiency_bonus, "untyped", "Assurance proficiency bonus"
+            ),),
+            result=resolve_assurance_check(
+                proficiency_bonus,
+                command.dc,
+                traits=_BATTLE_MEDICINE_TRAITS,
+            ),
+        )
+        return _finish_battle_medicine(context, command, saved)
     try:
         saved = context.prepare_skill_check(
             "medicine", command.dc, traits=_BATTLE_MEDICINE_TRAITS
@@ -2030,6 +2249,7 @@ def _handle_battle_medicine(
         kind="family_action",
         actor_id=context.actor.actor_id,
         target_id=target.actor_id,
+        mode="battle_medicine_assurance" if command.use_assurance else None,
         movement_kind="manipulate",
         reaction_trigger="manipulate",
         must_disrupt_on_critical=True,
@@ -2082,6 +2302,8 @@ def _handle_recall_knowledge(
 def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | None:
     if isinstance(context.command, DeviseStratagem):
         return _handle_devise(context, context.command)
+    if isinstance(context.command, PersonOfInterest):
+        return _handle_person_of_interest(context, context.command)
     if isinstance(context.command, PursueLead):
         return _resolve_pursue_lead(context, context.command)
     if isinstance(context.command, InvestigationCheck):

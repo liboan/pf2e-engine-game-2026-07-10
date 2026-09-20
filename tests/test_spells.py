@@ -29,6 +29,8 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
         "read_aura",
         "heal",
         "soothe",
+        "harm",
+        "protection",
         "angelic_halo",
         "courageous_anthem",
         "lingering_composition",

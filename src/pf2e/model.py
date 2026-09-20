@@ -630,6 +630,9 @@ class ActionOptions:
     battle_medicine_targets: tuple[str, ...] = ()
     # Engine-computed target ids for authored Recall Knowledge subjects.
     recall_knowledge_targets: tuple[str, ...] = ()
+    # Source-legal targets for the selected Investigator's Person of Interest
+    # action after the shared action/cooldown gates are applied.
+    person_of_interest_targets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -764,6 +767,12 @@ class CreatureState:
     finisher_used_this_turn: bool = False
     barbarian_state: "BarbarianState | None" = None
     escape_lockout_until_start: int = 0
+    # Stunning Blows has a literal next-turn action loss rather than a broad
+    # condition framework.  The source remains persisted so restoration can
+    # reject a condition attributed to a non-admitted Monk feature.
+    stunned: int = 0
+    stunned_until_start: int = 0
+    stunned_source_actor_id: str | None = None
     # The stored preliminary d20 is an input for the Investigator's first
     # eligible Strike, rather than a CheckResult. Kept on the actor so it is
     # saved even while a reaction or other choice interrupts the action.
@@ -784,6 +793,11 @@ class CreatureState:
     investigator_awareness: set[str] = field(default_factory=set)
     investigator_lead_cooldown_until: int = 0
     investigator_clue_in_cooldown_until: int = 0
+    # Person of Interest is a small, target-specific free-Devise grant.  The
+    # class-local record is imported lazily by persistence and procedures to
+    # avoid making this shared model own Investigator rules.
+    investigator_person_of_interest: "PersonOfInterestState | None" = None
+    investigator_person_of_interest_cooldown_until: int = 0
     # Streetwise Recall Knowledge and Gather Information have deliberately
     # separate authored attempt limits. Results carry through scene changes.
     investigator_streetwise_recall_attempts: dict[str, int] = field(default_factory=dict)
@@ -955,6 +969,11 @@ class ActionContinuation:
     nimble_dodge_decided: bool = False
     nimble_dodge_used: bool = False
     guidance_checked: bool = False
+    # Divine Grace is an optional Champion reaction before a spell save.  Its
+    # two markers distinguish declining the reaction from consuming it, so a
+    # resumed cast cannot offer or apply it twice.
+    divine_grace_checked: bool = False
+    divine_grace_used: bool = False
     stage: str | None = None
     parent_continuation: ActionContinuation | None = None
     attack_count_committed: bool = False
@@ -994,6 +1013,25 @@ class ActionContinuation:
     # A paid paired activity retains this parent while each subordinate Strike
     # passes through the ordinary reaction/check/damage continuation.
     paired_strike: "PairedStrikeContinuation | None" = None
+    # Sudden Charge is one paid flourish containing two ordinary Strides and
+    # an optional ordinary melee Strike.  Keep both literal paths and the
+    # starting square through reactions/save-load; the core revalidates them
+    # rather than trusting a later UI submission.
+    sudden_charge_second_path: tuple[Position, ...] = ()
+    sudden_charge_first_path: tuple[Position, ...] = ()
+    sudden_charge_origin: Position | None = None
+    sudden_charge_origin_diagonals: int | None = None
+    # A reaction that triggers after a movement step retains that departure
+    # square so save/load can authenticate its trigger rather than guessing.
+    movement_origin: Position | None = None
+    # No Escape is one reaction-driven Stride which may continue alongside the
+    # triggering creature's remaining movement.  Its literal reactor and
+    # unspent Speed keep that forced follow-up local, finite, and saveable.
+    no_escape_reactor_id: str | None = None
+    no_escape_remaining_speed_ft: int | None = None
+    # Stunning Blows pauses after a qualifying Flurry for the Monk's optional
+    # rider decision and, for a PC target, that target's ordinary Hero reroll.
+    stunning_blows_target_id: str | None = None
     # Bomber may deliberately restrict a bomb splash to its primary target.
     # The chosen scope must survive a Hero/reaction continuation.
     bomber_only_primary_splash: bool = False
