@@ -41,7 +41,7 @@ def test_w5_sheets_have_the_published_alternate_rosters() -> None:
 def test_gravity_weapon_applies_once_to_the_first_held_weapon_strike() -> None:
     game = Encounter.start(
         get_setup("w5_gravity_weapon_vs_guard_dog"),
-        rolls=(20, 1, 20, 4, 4),
+        rolls=(20, 1, 8, 4, 4),
     )
     _finish_start_choices(game)
     assert game.execute(Cast("gravity_weapon")).status is ResultStatus.COMPLETED
@@ -53,7 +53,7 @@ def test_gravity_weapon_applies_once_to_the_first_held_weapon_strike() -> None:
     result = game.choose(choice.choice_id, "keep", choice.owner_actor_id)
     assert result.status is ResultStatus.COMPLETED
     damage = next(event.damage for event in result.events if event.kind == "damage")
-    assert damage is not None and damage.total == 12
+    assert damage is not None and damage.total == 6
     assert game._state.creatures["ranger"].gravity_weapon_bonus_attack_id is None
 
 

@@ -1730,6 +1730,8 @@ def _state_from_data(data: Any) -> EncounterState:
         raise ValueError("save has an encounter clock before its current round")
     if any(creature.flourish_used_round < 0 or creature.flourish_used_round > round_number for creature in creatures.values()):
         raise ValueError("save has invalid per-round flourish use")
+    if any(creature.gravity_weapon_used_round > round_number for creature in creatures.values()):
+        raise ValueError("save has invalid Gravity Weapon round marker")
     for creature in creatures.values():
         if creature.precision_used_round > round_number:
             raise ValueError(f"saved actor {creature.actor_id!r} has invalid precision round")
@@ -2238,6 +2240,8 @@ def _state_from_data(data: Any) -> EncounterState:
     life_link_sources: set[str] = set()
     dueling_parry_sources: set[str] = set()
     extravagant_parry_sources: set[str] = set()
+    gravity_sources: set[str] = set()
+    hymn_pairs: set[tuple[str, str]] = set()
     for raw_row in effects_raw:
         # v17 saves before sustained-spell clocks stored the original seven
         # fields.  The appended Link round marker preserves all prior rows.
@@ -2434,6 +2438,49 @@ def _state_from_data(data: Any) -> EncounterState:
                     )
                     or creatures[row[3]].team != creatures[row[2]].team
                     or (row[2], row[3]) in anthem_pairs
+                )
+            )
+            or (
+                row[1] == "gravity_weapon"
+                and (
+                    row[4] != 1
+                    or row[2] != row[3]
+                    or row[5] != starts_raw[row[2]] + 10
+                    or row[6] != world_time_seconds + 60
+                    or row[7] != 0
+                    or row[8] is not None
+                    or row[9] != 0
+                    or row[10] is not None
+                    or row[11] != 0
+                    or row[12] != 0
+                    or "gravity_weapon" not in get_definition(creatures[row[2]].definition_id).abilities
+                    or not any(spell.spell_id == "gravity_weapon" for spell in get_definition(creatures[row[2]].definition_id).focus_spells)
+                    or row[2] in gravity_sources
+                )
+            )
+            or (
+                row[1] == "hymn_of_healing"
+                and (
+                    row[4] != 2
+                    or row[5] != starts_raw[row[2]] + 4
+                    or row[6] != world_time_seconds + 24
+                    or row[7] != starts_raw[row[2]] + 4
+                    or row[8] != world_time_seconds + 24
+                    or row[9] <= ends_raw[row[2]]
+                    or row[9] > ends_raw[row[2]] + 2
+                    or row[10] is not None
+                    or row[11] < 0
+                    or row[11] > starts_raw[row[3]]
+                    or row[12] > starts_raw[row[2]]
+                    or "hymn_of_healing" not in get_definition(creatures[row[2]].definition_id).abilities
+                    or not any(spell.spell_id == "hymn_of_healing" for spell in get_definition(creatures[row[2]].definition_id).focus_spells)
+                    or creatures[row[3]].team != creatures[row[2]].team
+                    or not (
+                        creatures[row[3]].hp > 0
+                        or creatures[row[3]].unconscious
+                        or creatures[row[3]].health_mode is HealthMode.PC
+                    )
+                    or (row[2], row[3]) in hymn_pairs
                 )
             )
             or (
@@ -2676,6 +2723,10 @@ def _state_from_data(data: Any) -> EncounterState:
             dueling_parry_sources.add(row[2])
         if row[1] == "extravagant_parry":
             extravagant_parry_sources.add(row[2])
+        if row[1] == "gravity_weapon":
+            gravity_sources.add(row[2])
+        if row[1] == "hymn_of_healing":
+            hymn_pairs.add((row[2], row[3]))
         if row[1] == "blood_magic":
             blood_magic_sources.add(row[2])
         if row[1] == "angelic_halo":

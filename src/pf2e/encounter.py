@@ -3779,6 +3779,7 @@ class Encounter:
                 actor.composition_cast_turn_start = 0
                 actor.must_leave_occupied = False
                 actor.precision_used_round = 0
+                actor.gravity_weapon_used_round = 0
                 actor.panache = False
                 actor.panache_expires_at_end = None
                 actor.escape_lockout_until_start = 0
@@ -7129,11 +7130,6 @@ class Encounter:
         gravity_weapon_bonus=False,
     ):
         modifier = self._damage_modifier(state, actor, attack)
-        from .martial_defense import point_blank_stance_damage_bonus
-
-        modifier += point_blank_stance_damage_bonus(
-            state, actor, state.creatures[target_id], attack
-        )
         weapon_dice = attack.damage_dice
         rune_profile = self._weapon_rune_profile_for_attack(
             state, actor, attack, item_id=item_id
@@ -7153,6 +7149,11 @@ class Encounter:
             modifier = self._damage_modifier(
                 state, actor, attack, extra_status_modifiers=(gravity_modifier,)
             )
+        from .martial_defense import point_blank_stance_damage_bonus
+
+        modifier += point_blank_stance_damage_bonus(
+            state, actor, state.creatures[target_id], attack
+        )
         terms = [DamageTerm(
             source=attack.attack_id,
             damage_type=damage_type,
@@ -8508,7 +8509,7 @@ class Encounter:
 
     def _damage_modifier(self, state, actor, attack, *, extra_status_modifiers=()):
         if attack.damage_attribute is None:
-            return attack.damage_modifier
+            return attack.damage_modifier + combine_modifiers(extra_status_modifiers)
         modifiers = condition_modifiers(
             self._conditions_for_actor(state, actor),
             CheckContext("damage", attack.damage_attribute, attack.traits),
@@ -9296,6 +9297,8 @@ class Encounter:
         return any(
             effect.kind == "hymn_of_healing"
             and effect.source_actor_id == actor.actor_id
+            and effect.expires_at_source_start > state.actor_start_counts.get(actor.actor_id, 0)
+            and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
             and effect.sustain_limit_source_start > state.actor_start_counts.get(actor.actor_id, 0)
             for effect in state.active_effects
         ) and self._action_permitted(state, actor, "sustain_hymn_of_healing", frozenset({"concentrate"}))
@@ -9330,6 +9333,8 @@ class Encounter:
         if hymn_effect is not None:
             if command.point is not None or command.attachment_actor_id is not None:
                 raise _Rejected("Sustain Hymn of Healing takes no movement or attachment selection.")
+            if command.temporary_hp_choice not in {None, "keep_existing", "gain_new"}:
+                raise _Rejected("Hymn of Healing temporary HP choice must be keep_existing or gain_new.")
             start = state.actor_start_counts.get(actor.actor_id, 0)
             if start >= hymn_effect.sustain_limit_source_start:
                 raise _Rejected("Hymn of Healing has reached its four-round sustain limit.")
@@ -9337,8 +9342,8 @@ class Encounter:
             actor.actions_remaining -= 1
             refreshed = replace(
                 hymn_effect,
-                expires_at_source_start=min(hymn_effect.sustain_limit_source_start, start + 1),
-                expires_at_world_time=min(hymn_effect.sustain_limit_world_time or state.world_time_seconds + 6, state.world_time_seconds + 6),
+                expires_at_source_start=hymn_effect.sustain_limit_source_start,
+                expires_at_world_time=hymn_effect.sustain_limit_world_time or state.world_time_seconds + 24,
                 sustain_expires_at_source_end=state.actor_end_counts.get(actor.actor_id, 0) + 2,
             )
             hymn_index = state.active_effects.index(hymn_effect)
@@ -9348,7 +9353,12 @@ class Encounter:
                 refreshed = replace(refreshed, glue_removal_actions=start)
                 state.active_effects[hymn_index] = refreshed
                 target = state.creatures[refreshed.target_actor_id]
-                events.extend(self._grant_hymn_temp_hp(state, actor, target, refreshed))
+                if target.temporary_hp > 0 and target.temporary_hp_source_id != refreshed.effect_id and command.temporary_hp_choice is None:
+                    raise _Rejected("Hymn of Healing requires an explicit temporary HP choice before resolving.")
+                events.extend(self._grant_hymn_temp_hp(
+                    state, actor, target, refreshed,
+                    choice=command.temporary_hp_choice,
+                ))
             events.append(Event("hymn_sustained", actor.actor_id, refreshed.target_actor_id, f"{actor.label} sustains Hymn of Healing."))
             return self._complete_action(state, actor, events, dice=dice)
         hex_effect = next(
@@ -11595,7 +11605,7 @@ class Encounter:
         effect = ActiveSpellEffect(
             f"hymn_of_healing:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
             "hymn_of_healing", caster.actor_id, target.actor_id, 2,
-            source_start + 1, state.world_time_seconds + 6,
+            source_start + 4, state.world_time_seconds + 24,
             sustain_limit_source_start=source_start + 4,
             sustain_limit_world_time=state.world_time_seconds + 24,
             sustain_expires_at_source_end=state.actor_end_counts.get(caster.actor_id, 0) + 2,
@@ -11610,7 +11620,9 @@ class Encounter:
         return events + self._complete_action(state, caster, [], dice=dice)
 
     def _grant_hymn_temp_hp(self, state, caster, target, effect, *, choice=None):
-        if target.temporary_hp >= 2 and target.temporary_hp_source_id != effect.effect_id:
+        if target.temporary_hp > 0 and target.temporary_hp_source_id != effect.effect_id:
+            if choice not in {"keep_existing", "gain_new"}:
+                raise _Rejected("Hymn of Healing requires an explicit temporary HP choice before resolving.")
             if choice == "gain_new":
                 target.temporary_hp = 2
                 target.temporary_hp_source_id = effect.effect_id
@@ -13827,8 +13839,6 @@ class Encounter:
             if (
                 hymn.kind == "hymn_of_healing"
                 and hymn.target_actor_id == actor.actor_id
-                and hymn.expires_at_world_time is not None
-                and hymn.expires_at_world_time > state.world_time_seconds
                 and hymn.life_link_used_round != starts[actor.actor_id]
             ):
                 target = state.creatures.get(hymn.target_actor_id)
@@ -13910,6 +13920,9 @@ class Encounter:
                     effect = replace(effect, expires_at_source_start=starts[actor.actor_id] + 1)
                 retained.append(effect)
         state.active_effects = retained
+        from .bard_compositions import _clear_hymn_temporary_hp
+        for effect in expired:
+            _clear_hymn_temporary_hp(state, effect)
         state.active_item_effects = [
             effect for effect in state.active_item_effects
             if not (
@@ -13941,6 +13954,7 @@ class Encounter:
         """
         now = state.world_time_seconds
         retained: list[ActiveSpellEffect] = []
+        expired: list[ActiveSpellEffect] = []
         for effect in state.active_effects:
             deadline = effect.expires_at_world_time
             if deadline is None:
@@ -13953,6 +13967,7 @@ class Encounter:
             if deadline > now:
                 retained.append(replace(effect, expires_at_world_time=deadline))
                 continue
+            expired.append(effect)
             if effect.kind == "guidance":
                 immunity_deadline = deadline + 600
                 state.guidance_immunity_deadlines[effect.target_actor_id] = max(
@@ -13963,6 +13978,9 @@ class Encounter:
                 # still render the combat-round field.
                 state.guidance_immunities[effect.target_actor_id] = state.round_number + 600
         state.active_effects = retained
+        from .bard_compositions import _clear_hymn_temporary_hp
+        for effect in expired:
+            _clear_hymn_temporary_hp(state, effect)
         state.active_item_effects = [
             effect for effect in state.active_item_effects
             if effect.expires_at_world_time is None or effect.expires_at_world_time > now
@@ -14081,14 +14099,21 @@ class Encounter:
         ends[actor.actor_id] = ends.get(actor.actor_id, 0) + 1
         # A sustained effect remains through the source's next turn and ends
         # at that turn's end unless Sustain moved this owner-end boundary.
-        state.active_effects = [
-            effect for effect in state.active_effects
-            if not (
+        retained_effects = []
+        expired_effects = []
+        for effect in state.active_effects:
+            if (
                 effect.source_actor_id == actor.actor_id
                 and effect.sustain_expires_at_source_end
                 and effect.sustain_expires_at_source_end <= ends[actor.actor_id]
-            )
-        ]
+            ):
+                expired_effects.append(effect)
+            else:
+                retained_effects.append(effect)
+        state.active_effects = retained_effects
+        from .bard_compositions import _clear_hymn_temporary_hp
+        for effect in expired_effects:
+            _clear_hymn_temporary_hp(state, effect)
         actor.finisher_used_this_turn = False
         clear_pending_spellshape(actor)
         if (

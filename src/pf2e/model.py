@@ -334,6 +334,7 @@ class Sustain:
     orb_id: str
     point: Position | None = None
     attachment_actor_id: str | None = None
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)

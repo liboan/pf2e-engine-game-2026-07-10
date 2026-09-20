@@ -1665,7 +1665,7 @@ def _choose_cast_inputs(
             return None
         spell_mode = ("visible", "invisible")[mode_index]
 
-    if spell.spell_id in {"shield", "sure_strike", "angelic_halo", "courageous_anthem", "detect_magic"}:
+    if spell.spell_id in {"shield", "sure_strike", "angelic_halo", "courageous_anthem", "detect_magic", "gravity_weapon"}:
         return spell.spell_id, None, target_mode.actions, slot_id, None
 
     target_id: str | None = None
@@ -1777,22 +1777,46 @@ def _choose_light_sustain_inputs(
     """Collect one orb and optional Sustain point/carrier intent."""
     light_choices = _light_orb_choices(inspection, getattr(inspection, "turn_actor_id", None))
     choices = list(light_choices)
+    hymn_target_id = None
     for actor in getattr(inspection, "actors", ()):
-        if getattr(actor, "actor_id", None) != getattr(inspection, "turn_actor_id", None):
-            continue
         for effect in getattr(actor, "effects", ()):
-            if getattr(effect, "kind", None) == "hymn_of_healing" and getattr(effect, "effect_id", None):
+            if (
+                getattr(effect, "kind", None) == "hymn_of_healing"
+                and getattr(effect, "source_actor_id", None) == getattr(inspection, "turn_actor_id", None)
+                and getattr(effect, "effect_id", None)
+            ):
                 choices.append((effect.effect_id, f"{effect.effect_id} (Hymn of Healing)"))
+                hymn_target_id = effect.target_actor_id
     if not choices:
         output_fn("The engine did not provide an active Light orb or Hymn of Healing owned by this actor.")
         return None
-    prompt = "Light orb to Sustain:" if len(choices) == len(light_choices) else "Light or composition to Sustain:"
-    index = _choose_index(prompt, [label for _id, label in choices], input_fn, output_fn)
+    sustain_prompt = (
+        "Light or composition to Sustain:"
+        if any("Hymn of Healing" in label for _id, label in choices)
+        else "Light orb to Sustain:"
+    )
+    index = _choose_index(sustain_prompt, [label for _id, label in choices], input_fn, output_fn)
     if index is None:
         return None
     orb_id = choices[index][0]
     if any(item_id == orb_id for item_id, _label in choices if item_id == orb_id and "Hymn of Healing" in _label):
-        return orb_id, None, None
+        target = next((actor for actor in getattr(inspection, "actors", ()) if actor.actor_id == hymn_target_id), None)
+        choice = None
+        if (
+            target is not None
+            and getattr(target, "temporary_hp", 0) > 0
+            and getattr(target, "temporary_hp_source_id", None) != orb_id
+        ):
+            choice_index = _choose_index(
+                "Hymn temporary HP:",
+                ("Keep existing temporary HP", "Gain 2 temporary HP"),
+                input_fn,
+                output_fn,
+            )
+            if choice_index is None:
+                return None
+            choice = ("keep_existing", "gain_new")[choice_index]
+        return orb_id, None, None, choice
     raw_point = _read_line(
         "Sustain point (press Enter to keep current point or detach carrier):",
         input_fn,
@@ -1831,7 +1855,7 @@ def _choose_light_sustain_inputs(
                 return None
             if carrier_index > 0:
                 attachment_actor_id = carriers[carrier_index - 1].actor_id
-    return orb_id, point, attachment_actor_id
+    return orb_id, point, attachment_actor_id, None
 
 
 def _choose_light_inputs(
@@ -3138,13 +3162,14 @@ def run_terminal(
                     output_fn,
                 )
                 if sustain_inputs is not None:
-                    orb_id, point, attachment_actor_id = sustain_inputs
+                    orb_id, point, attachment_actor_id, temporary_hp_choice = sustain_inputs
                     _run_command(
                         game,
                         Sustain(
                             orb_id=orb_id,
                             point=point,
                             attachment_actor_id=attachment_actor_id,
+                            temporary_hp_choice=temporary_hp_choice,
                         ),
                         output_fn,
                     )

@@ -107,6 +107,14 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             return FamilyProcedureResult(rejection="Hymn of Healing requires its two-action targeted form.")
         if hymn_of_healing and command.temporary_hp_choice not in {None, "keep_existing", "gain_new"}:
             return FamilyProcedureResult(rejection="Hymn of Healing temporary HP choice must be keep_existing or gain_new.")
+        if hymn_of_healing and command.target_id is not None:
+            target = context.state.creatures.get(command.target_id)
+            if (
+                target is not None
+                and target.temporary_hp > 0
+                and command.temporary_hp_choice is None
+            ):
+                return FamilyProcedureResult(rejection="Hymn of Healing requires an explicit temporary HP choice before resolving.")
     elif command.temporary_hp_choice is not None:
         return FamilyProcedureResult(rejection="Only Hymn of Healing accepts a temporary HP choice.")
     if spell.spell_id == "ignition":
