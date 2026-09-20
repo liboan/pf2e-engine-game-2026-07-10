@@ -155,9 +155,10 @@ def test_keep_existing_cannot_keep_a_counteracted_juggernaut_pool() -> None:
     result = game.execute(ActivateAlchemy(item_id, "alchemist", "keep_existing"))
     assert result.status is ResultStatus.COMPLETED
     actor = game._state.creatures["alchemist"]
-    assert actor.temporary_hp == 0
-    assert actor.temporary_hp_source_id is None
+    assert actor.temporary_hp == 5
+    assert actor.temporary_hp_source_id == f"alchemy:{item_id}"
     assert [effect.kind for effect in game._state.active_effects] == ["alchemy_juggernaut_mutagen_lesser"]
+    assert "grants 5 temporary HP" in result.events[-1].text
 
 
 def test_w2_item_effects_carry_across_a_finished_scene_and_save_load(tmp_path) -> None:

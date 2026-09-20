@@ -5280,6 +5280,7 @@ class Encounter:
                 "alchemy_juggernaut_mutagen_lesser",
             }
             prior = next((effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind in mutagen_kinds), None)
+            cleared_counteracted_juggernaut_temp_hp = False
             if prior is not None:
                 check = resolve_check(dice.draw(20), 5, 15)
                 events.append(Event("alchemy_counteract", actor.actor_id, actor.actor_id, f"{actor.label} attempts to counteract the prior mutagen: d20 {check.die} + 5 = {check.total} vs DC 15.", check=check))
@@ -5296,6 +5297,7 @@ class Encounter:
                     actor.temporary_hp_source_id = None
                     actor.temporary_hp_expires_at_seconds = None
                     actor.temporary_hp_expires_at_source_start = 0
+                    cleared_counteracted_juggernaut_temp_hp = True
             effect_id = f"alchemy:{command.item_id}"
             effect_value = formula.facts.save_bonuses[0].bonus if formula.facts.save_bonuses else 1
             state.active_effects.append(ActiveSpellEffect(effect_id, f"alchemy_{formula.formula_id}", actor.actor_id, actor.actor_id, effect_value, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
@@ -5303,7 +5305,13 @@ class Encounter:
                 formula.facts.temporary_hp > 0
                 and (
                     command.temporary_hp_choice == "gain_new"
-                    or (actor.temporary_hp == 0 and command.temporary_hp_choice is None)
+                    or (
+                        actor.temporary_hp == 0
+                        and (
+                            command.temporary_hp_choice is None
+                            or cleared_counteracted_juggernaut_temp_hp
+                        )
+                    )
                 )
             )
             if gaining_temporary_hp:
