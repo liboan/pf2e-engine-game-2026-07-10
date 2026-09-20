@@ -65,6 +65,10 @@ _ACTION_LABELS = {
     "crane_stance": "Crane Stance",
     "dismiss_crane_stance": "Dismiss Crane Stance",
     "point_blank_stance": "Point Blank Stance",
+    "tiger_stance": "Tiger Stance",
+    "wolf_stance": "Wolf Stance",
+    "dismiss_tiger_stance": "Dismiss Tiger Stance",
+    "dismiss_wolf_stance": "Dismiss Wolf Stance",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
     "hunted_shot": "Hunted Shot",
@@ -1980,6 +1984,7 @@ def run_terminal(
     from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
     from pf2e.w4_offensive import DoubleSlice, ExactingStrike, TwinFeint, TwinTakedown
     from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, ExtravagantParry, PointBlankStance
+    from pf2e.monk_stances import TigerStance, WolfStance, DismissTigerStance, DismissWolfStance
 
     if input_fn is None:
         input_fn = input
@@ -2225,17 +2230,38 @@ def run_terminal(
                 if destinations:
                     output_fn(f"Step destinations from engine: {destinations}")
                 try:
-                    raw_destination = _read_line(
-                        "Step destination:",
-                        input_fn,
-                        output_fn,
-                    )
-                    x, y = parse_coordinate(
-                        raw_destination,
-                        width=inspection.map_width,
-                        height=inspection.map_height,
-                    )
-                    _run_command(game, Step(destination=Position(x=x, y=y)), output_fn)
+                    from pf2e.monk_stances import tiger_stance_is_active
+                    actor = game._state.creatures.get(engine_options.actor_id or "")
+                    if actor is not None and tiger_stance_is_active(game._state, actor.actor_id):
+                        raw_path = _read_line(
+                            "Tiger Step path (one or two squares, for example B2 C2):",
+                            input_fn,
+                            output_fn,
+                        )
+                        points = parse_path(
+                            raw_path,
+                            width=inspection.map_width,
+                            height=inspection.map_height,
+                        )
+                        if not points:
+                            raise ValueError("Tiger Step needs at least one destination square.")
+                        _run_command(
+                            game,
+                            Step(destination=Position(*points[-1]), path=tuple(Position(*point) for point in points)),
+                            output_fn,
+                        )
+                    else:
+                        raw_destination = _read_line(
+                            "Step destination:",
+                            input_fn,
+                            output_fn,
+                        )
+                        x, y = parse_coordinate(
+                            raw_destination,
+                            width=inspection.map_width,
+                            height=inspection.map_height,
+                        )
+                        _run_command(game, Step(destination=Position(x=x, y=y)), output_fn)
                 except ValueError as exc:
                     output_fn(str(exc))
             elif action_id == "strike":
@@ -2793,6 +2819,14 @@ def run_terminal(
                 _run_command(game, DismissCraneStance(), output_fn)
             elif action_id == "point_blank_stance":
                 _run_command(game, PointBlankStance(), output_fn)
+            elif action_id == "tiger_stance":
+                _run_command(game, TigerStance(), output_fn)
+            elif action_id == "wolf_stance":
+                _run_command(game, WolfStance(), output_fn)
+            elif action_id == "dismiss_tiger_stance":
+                _run_command(game, DismissTigerStance(), output_fn)
+            elif action_id == "dismiss_wolf_stance":
+                _run_command(game, DismissWolfStance(), output_fn)
             elif action_id == "flurry_of_blows":
                 strike_inputs = _choose_strike_inputs(
                     tuple(

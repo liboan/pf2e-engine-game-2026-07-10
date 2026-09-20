@@ -191,12 +191,11 @@ def crane_stance_is_active(state, actor_id: str) -> bool:
 
 
 def crane_stance_attack_permitted(state, actor_id: str, attack_id: str) -> bool:
-    """Keep Crane Wing unavailable outside the stance and exclusive inside it."""
+    """Backward-compatible entry point for the finite stance policy."""
 
-    active = crane_stance_is_active(state, actor_id)
-    if attack_id == "crane_wing":
-        return active
-    return not active
+    from .monk_stances import stance_attack_permitted
+
+    return stance_attack_permitted(state, actor_id, attack_id)
 
 
 def crane_stance_leap_bonus(state, actor_id: str) -> int:

@@ -56,6 +56,7 @@ from .ranger_monk_content import (
     RANGER_PRECISION,
     RANGER_PRECISION_BOW_SETUP,
 )
+from .w5_stance_content import build_w5_stance_content
 from .wizard_content import (
     BATTLE_MAGIC_WIZARD,
     BATTLE_MAGIC_WIZARD_DAZE,
@@ -908,6 +909,10 @@ W4_DEFENSIVE_DEFINITIONS, W4_DEFENSIVE_SETUPS = build_w4_defensive_content(
     rogue=ROGUE_THIEF_PLAYABLE,
     enemy_id=GUARD_DOG.definition_id,
 )
+W5_STANCE_DEFINITIONS, W5_STANCE_SETUPS = build_w5_stance_content(
+    monk=MONK,
+    enemy_definition_id=GUARD_DOG.definition_id,
+)
 
 # The finite L2 Bomber keeps the admitted field pair and Quick Bomber from
 # the level-one sheet, adds exactly the two source-selected common formulas,
@@ -1118,6 +1123,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
             if definition.definition_id in _ADMITTED_L2_PREPARED_DEFINITION_IDS
         },
         **W5_ARMS_DEFINITIONS,
+        **W5_STANCE_DEFINITIONS,
     }
 )
 
@@ -1531,6 +1537,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
             if setup.setup_id in _ADMITTED_L2_PREPARED_DEFINITION_IDS
         },
         **W5_ARMS_SETUPS,
+        **W5_STANCE_SETUPS,
     }
 )
 

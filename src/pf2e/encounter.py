@@ -4387,6 +4387,25 @@ class Encounter:
             and any("ranged" in attack.traits and attack.item_id in actor.held_items for attack in definition.attacks)
             and self._action_permitted(state, actor, "point_blank_stance", frozenset({"stance"}))
         )
+        from .monk_stances import tiger_stance_is_active, wolf_stance_is_active
+        can_tiger_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "tiger_stance" in definition.abilities
+            and not actor.worn_items
+            and state.martial_stances.get(actor.actor_id) is None
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "tiger_stance", frozenset({"stance"}))
+        )
+        can_wolf_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "wolf_stance" in definition.abilities
+            and not actor.worn_items
+            and state.martial_stances.get(actor.actor_id) is None
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "wolf_stance", frozenset({"stance"}))
+        )
+        can_dismiss_tiger_stance = tiger_stance_is_active(state, actor.actor_id)
+        can_dismiss_wolf_stance = wolf_stance_is_active(state, actor.actor_id)
         can_arcane_bond = (
             can_act
             and "arcane_bond" in definition.abilities
@@ -4568,6 +4587,10 @@ class Encounter:
             can_crane_stance = False
             can_dismiss_crane_stance = False
             can_point_blank_stance = False
+            can_tiger_stance = False
+            can_wolf_stance = False
+            can_dismiss_tiger_stance = False
+            can_dismiss_wolf_stance = False
             can_stand = False
             can_crawl = False
             can_release = False
@@ -4614,6 +4637,10 @@ class Encounter:
                 ("crane_stance", can_crane_stance),
                 ("dismiss_crane_stance", can_dismiss_crane_stance),
                 ("point_blank_stance", can_point_blank_stance),
+                ("tiger_stance", can_tiger_stance),
+                ("wolf_stance", can_wolf_stance),
+                ("dismiss_tiger_stance", can_dismiss_tiger_stance),
+                ("dismiss_wolf_stance", can_dismiss_wolf_stance),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
                 ("hunted_shot", can_hunted_shot),
@@ -5233,9 +5260,31 @@ class Encounter:
 
     def _step(self, state: EncounterState, dice: DiceSource, actor: CreatureState, command: Step) -> list[Event]:
         definition = get_definition(actor.definition_id)
-        if effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor)) < 10:
+        speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
+        from .monk_stances import tiger_step_enabled
+
+        tiger = tiger_step_enabled(state, actor.actor_id, speed)
+        if speed < 10:
             raise _Rejected("Step requires a land Speed of at least 10 feet.")
-        return self._begin_move(state, dice, actor, (command.destination,), "step", reactions=False, max_distance=5)
+        path = command.path or (command.destination,)
+        if path[-1] != command.destination:
+            raise _Rejected("Step destination must be the final square in its path.")
+        if command.path is not None and not tiger:
+            raise _Rejected("A multi-square Step requires active Tiger Stance and Speed 20 or higher.")
+        if tiger and len(path) > 2:
+            raise _Rejected("Tiger Stance supports at most two Step squares.")
+        if len(path) == 2 and not tiger:
+            raise _Rejected("An ordinary Step moves only one square.")
+        if tiger and len(path) == 2:
+            if any(
+                self._occupant_at(state, point, except_actor=actor.actor_id) is not None
+                for point in path
+            ):
+                raise _Rejected("Tiger Stance cannot Step through an occupied intermediate square.")
+        return self._begin_move(
+            state, dice, actor, path, "step", reactions=False,
+            max_distance=10 if tiger else 5,
+        )
 
     def _crawl(self, state: EncounterState, dice: DiceSource, actor: CreatureState, command: Crawl) -> list[Event]:
         if not actor.prone:
@@ -7191,6 +7240,11 @@ class Encounter:
                 # A finalized hit consumes Precision even when its precision
                 # component is later prevented by an immunity or resistance.
                 actor.precision_used_round = state.round_number
+        if attack.attack_id == "wolf_jaws" and target_is_off_guard:
+            terms.append(DamageTerm(
+                source="wolf_stance_precision", damage_type=damage_type,
+                dice=(), modifier=1, tags=frozenset({"precision"}),
+            ))
         result = roll_damage_terms(
             tuple(terms), dice.draw, critical=critical
         )
@@ -13291,6 +13345,73 @@ class Encounter:
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 if dx == 0 and dy == 0:
+                    continue
+                point = Position(actor.position.x + dx, actor.position.y + dy)
+                if not in_bounds(point, state.map_width, state.map_height):
+                    continue
+                cost, _ = step_cost(actor.position, point, actor.diagonals_this_turn)
+                if cost > 5:
+                    continue
+                occupant = self._occupant_at(state, point, except_actor=actor.actor_id)
+                if occupant is not None:
+                    if occupant.team == actor.team and not occupant.defeated and not occupant.unconscious and not occupant.dead:
+                        if actor.actions_remaining < 2 or actor.must_leave_occupied:
+                            continue
+                    elif not self._can_share_with_body(actor, occupant):
+                        continue
+                candidates.append(point)
+        from .monk_stances import tiger_step_enabled
+
+        if tiger_step_enabled(
+            state, actor.actor_id,
+            effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor)),
+        ):
+            # Advertise the final squares of legal two-square paths as well;
+            # callers that need the exact path can use _step_paths below.
+            for path in self._step_paths(actor, state):
+                if len(path) == 2:
+                    candidates.append(path[-1])
+        return tuple(sorted(candidates))
+
+    def _step_paths(self, actor: CreatureState, state: EncounterState) -> tuple[tuple[Position, ...], ...]:
+        """Return bounded legal one- and two-square Tiger Step paths."""
+        one = tuple(
+            (point,) for point in self._step_destinations_without_tiger(actor, state)
+        )
+        paths = list(one)
+        if actor.prone:
+            return tuple(paths)
+        definition = get_definition(actor.definition_id)
+        speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
+        from .monk_stances import tiger_step_enabled
+
+        if not tiger_step_enabled(state, actor.actor_id, speed):
+            return tuple(paths)
+        for first in self._step_destinations_without_tiger(actor, state):
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if not dx and not dy:
+                        continue
+                    final = Position(first.x + dx, first.y + dy)
+                    if not in_bounds(final, state.map_width, state.map_height):
+                        continue
+                    if final == actor.position:
+                        continue
+                    try:
+                        cost, _ = step_cost(first, final, actor.diagonals_this_turn)
+                    except ValueError:
+                        continue
+                    if cost > 5 or self._occupant_at(state, final, except_actor=actor.actor_id) is not None:
+                        continue
+                    paths.append((first, final))
+        return tuple(paths)
+
+    def _step_destinations_without_tiger(self, actor: CreatureState, state: EncounterState) -> tuple[Position, ...]:
+        """One-square destination projection used to seed Tiger paths."""
+        candidates: list[Position] = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if not dx and not dy:
                     continue
                 point = Position(actor.position.x + dx, actor.position.y + dy)
                 if not in_bounds(point, state.map_width, state.map_height):

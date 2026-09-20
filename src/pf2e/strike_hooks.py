@@ -37,5 +37,10 @@ def committed_first_weapon_attempt(state, *, actor, attack):
 
 
 def post_mitigation_damaging_critical(state, *, attacker, target, attack, damage, check):
-    """Reserved adopter hook for critical riders after defenses are applied."""
-    return None
+    """Notify the narrow critical-rider adopters after final mitigation."""
+    from .monk_stances import post_mitigation_tiger_bleed
+
+    return post_mitigation_tiger_bleed(
+        state, attacker=attacker, target=target, attack=attack,
+        damage=damage, check=check,
+    )

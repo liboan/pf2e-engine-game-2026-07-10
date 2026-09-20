@@ -219,6 +219,10 @@ class Stride:
 @dataclass(frozen=True)
 class Step:
     destination: Position
+    # Tiger Stance may spend the Step's two-square horizontal allowance.  The
+    # legacy destination-only constructor remains the ordinary one-square
+    # Step, while a supplied path makes every traversed square explicit.
+    path: tuple[Position, ...] | None = None
 
 
 @dataclass(frozen=True)

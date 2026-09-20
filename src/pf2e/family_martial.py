@@ -83,6 +83,14 @@ def _owner_module(context: FamilyProcedureContext):
                 raise
             return None
         return martial_defense
+    if module_name == "monk_stances":
+        try:
+            from . import monk_stances
+        except ModuleNotFoundError as error:
+            if error.name != f"{__package__}.monk_stances":
+                raise
+            return None
+        return monk_stances
     if module_name == "skill_actions":
         try:
             from . import skill_actions

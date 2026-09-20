@@ -2736,6 +2736,7 @@ def _state_from_data(data: Any) -> EncounterState:
                 ("alchemists_fire_lesser", "fire", (), 2),
                 ("acid_flask_lesser", "acid", (6,), 0),
                 ("acid_flask_lesser", "acid", (6, 6), 0),
+                ("tiger_stance", "bleed", (4,), 0),
             }
             or (not row[5] and row[6] < 1)
             or row[0] in persistent_ids or (row[2], row[4]) in persistent_keys
@@ -2743,7 +2744,13 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save has invalid persistent damage effect")
         source = creatures[row[1]]
         source_definition = get_definition(source.definition_id)
-        if row[3] in {"alchemists_fire_lesser", "acid_flask_lesser"}:
+        if row[3] == "tiger_stance":
+            from .w5_stance_persistence import tiger_bleed_save_allowed
+            if not tiger_bleed_save_allowed(
+                source_definition, source_id=row[3], damage_type=row[4], dice=row[5], flat=row[6]
+            ):
+                raise ValueError("save has a persistent Tiger bleed without feat provenance")
+        elif row[3] in {"alchemists_fire_lesser", "acid_flask_lesser"}:
             alchemy_state = alchemy_states.get(row[1])
             if (
                 alchemy_state is None
@@ -3066,7 +3073,7 @@ def _state_from_data(data: Any) -> EncounterState:
         definition = get_definition(actor.definition_id)
         if (
             not isinstance(row, list) or len(row) != 2
-            or row[0] not in {"crane_stance", "point_blank_stance"} or type(row[1]) is not int
+            or row[0] not in {"crane_stance", "point_blank_stance", "tiger_stance", "wolf_stance"} or type(row[1]) is not int
             or not 1 <= row[1] <= round_number
             or not in_progress or actor.unconscious or actor.dead
             or (
@@ -3084,6 +3091,14 @@ def _state_from_data(data: Any) -> EncounterState:
                     or not any("ranged" in attack.traits and attack.item_id in actor.held_items for attack in definition.attacks)
                 )
             )
+            or (
+                row[0] in {"tiger_stance", "wolf_stance"}
+                and (
+                    ("Tiger Stance" if row[0] == "tiger_stance" else "Wolf Stance") not in definition.feats
+                    or definition.armor_category not in {None, "unarmored"}
+                    or bool(actor.worn_items)
+                )
+            )
         ):
             raise ValueError("save has invalid Crane Stance state")
         martial_stances[actor_id] = MartialStanceState(row[0], row[1])
@@ -3092,11 +3107,13 @@ def _state_from_data(data: Any) -> EncounterState:
         not isinstance(stance_rounds_raw, dict)
         or not set(stance_rounds_raw).issubset(expected_ids)
         or any(type(value) is not int or not 1 <= value <= round_number for value in stance_rounds_raw.values())
-        or any(
-            not (
-                "crane_stance" in get_definition(creatures[actor_id].definition_id).abilities
-                or "point_blank_stance" in get_definition(creatures[actor_id].definition_id).abilities
-            )
+            or any(
+                not (
+                    "crane_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                    or "point_blank_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                    or "tiger_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                    or "wolf_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                )
             for actor_id in stance_rounds_raw
         )
         or any(stance_rounds_raw.get(actor_id) != stance.entered_round for actor_id, stance in martial_stances.items())
@@ -3716,6 +3733,7 @@ def _family_command_to_data(command) -> dict[str, Any] | None:
             "type": "Trip", "target_id": command.target_id,
             "maneuver_item_id": command.maneuver_item_id,
             "use_assurance": command.use_assurance,
+            "maneuver_attack_id": command.maneuver_attack_id,
         }
     if type(command) is Grapple:
         return {
@@ -3872,18 +3890,23 @@ def _family_command_from_data(data: Any):
         cls = Rage if kind == "Rage" else QuickTempered
         return cls(mode_id=mode_id, temporary_hp_choice=temporary_hp_choice)
     if kind in {"Trip", "Grapple"}:
-        if set(data) != {"type", "target_id", "maneuver_item_id", "use_assurance"}:
+        expected = {"type", "target_id", "maneuver_item_id", "use_assurance"}
+        if kind == "Trip":
+            expected |= {"maneuver_attack_id"}
+        if set(data) != expected and set(data) != expected - {"maneuver_attack_id"}:
             raise ValueError("save has invalid pending maneuver command")
         target_id, item_id = data["target_id"], data["maneuver_item_id"]
         use_assurance = data["use_assurance"]
+        attack_id = data.get("maneuver_attack_id")
         if (
             not isinstance(target_id, str) or not target_id
             or (item_id is not None and (not isinstance(item_id, str) or not item_id))
+            or (attack_id is not None and (not isinstance(attack_id, str) or not attack_id))
             or type(use_assurance) is not bool
         ):
             raise ValueError("save has invalid pending maneuver command")
         cls = Trip if kind == "Trip" else Grapple
-        return cls(target_id, item_id, use_assurance)
+        return cls(target_id, item_id, use_assurance, attack_id) if kind == "Trip" else cls(target_id, item_id, use_assurance)
     if kind == "Escape":
         if set(data) != {"type", "impediment_id", "check_method", "attack_id", "use_assurance"}:
             raise ValueError("save has invalid pending Escape command")

@@ -370,10 +370,13 @@ class Trip(FamilyCommand):
     target_id: str
     maneuver_item_id: str | None = None
     use_assurance: bool = False
+    maneuver_attack_id: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.use_assurance) is not bool:
             raise TypeError("use_assurance must be a boolean")
+        if self.maneuver_item_id is not None and self.maneuver_attack_id is not None:
+            raise TypeError("Trip cannot select both a maneuver item and an unarmed attack")
 
 
 @dataclass(frozen=True)
@@ -765,8 +768,37 @@ def add_timed_condition_effect(
     )
 
 
-def _maneuver_weapon(context: FamilyProcedureContext, item_id: str | None, action_trait: str):
-    """Resolve a held weapon profile by exact item id and printed action trait."""
+def _maneuver_weapon(
+    context: FamilyProcedureContext,
+    item_id: str | None,
+    action_trait: str,
+    attack_id: str | None = None,
+):
+    """Resolve a held weapon or a live unarmed maneuver profile."""
+
+    if item_id is not None and attack_id is not None:
+        raise ValueError("A maneuver cannot select both an item and an unarmed attack.")
+    if attack_id is not None:
+        profiles = tuple(
+            attack for attack in context.definition.attacks
+            if attack.attack_id == attack_id and "unarmed" in attack.traits
+        )
+        if len(profiles) != 1:
+            raise ValueError("The selected unarmed maneuver attack is not admitted.")
+        profile = profiles[0]
+        if not context.encounter._attack_usable(context.state, context.actor, profile):
+            raise ValueError("The selected unarmed maneuver attack is not currently usable.")
+        if action_trait not in profile.traits:
+            raise ValueError(f"{profile.name} does not have the {action_trait} trait.")
+        target_id = getattr(context.command, "target_id", None)
+        if context.pending is not None:
+            target_id = context.pending.target_id
+        target = context.state.creatures.get(target_id or "")
+        if attack_id == "wolf_jaws" and (
+            target is None or not context.encounter._is_flanked(context.state, context.actor, target)
+        ):
+            raise ValueError("Wolf Jaws gains the Trip trait only while actually flanking the target.")
+        return profile
 
     if item_id is None:
         return None
@@ -868,9 +900,10 @@ def _check_maneuver(
     action_trait: str,
     item_id: str | None,
     *,
+    attack_id: str | None = None,
     already_holding_target: bool = False,
 ):
-    profile = _maneuver_weapon(context, item_id, action_trait)
+    profile = _maneuver_weapon(context, item_id, action_trait, attack_id)
     source = _definition(context.actor)
     target_definition = _definition(target)
     if not maneuver_target_size_allowed(source.size, target_definition.size):
@@ -1658,7 +1691,10 @@ def _complete_action_unless_paused(context: FamilyProcedureContext, events: list
 def _finish_trip(context: FamilyProcedureContext, command: Trip, check_context) -> FamilyProcedureResult:
     try:
         target = _target(context, command.target_id)
-        profile = _check_maneuver(context, target, "trip", command.maneuver_item_id)
+        profile = _check_maneuver(
+            context, target, "trip", command.maneuver_item_id,
+            attack_id=command.maneuver_attack_id,
+        )
     except NotImplementedError as error:
         return FamilyProcedureResult(unsupported=str(error))
     except ValueError as error:
@@ -2317,7 +2353,10 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
             return FamilyProcedureResult(rejection="Trip requires one action.")
         try:
             target = _target(context, command.target_id)
-            _check_maneuver(context, target, "trip", command.maneuver_item_id)
+            _check_maneuver(
+                context, target, "trip", command.maneuver_item_id,
+                attack_id=command.maneuver_attack_id,
+            )
             dc = _save_dc(context, target, "reflex")
         except NotImplementedError as error:
             return FamilyProcedureResult(unsupported=str(error))
