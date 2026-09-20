@@ -20,6 +20,7 @@ from dataclasses import replace
 
 from .items import ItemInstance
 from .investigator_content import GUARD_DOG_KNOWLEDGE
+from .witch_content import COMMAND_TARGET
 from .model import (
     AttackDefinition,
     CreatureDefinition,
@@ -183,6 +184,60 @@ BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS = replace(
 )
 
 
+# Daze is recorded as one source-legal spell learned after the selected
+# Wizard's starting book was fixed.  It preserves the original starting book
+# and all daily slot counts while making the additional W1 option literal.
+BATTLE_MAGIC_WIZARD_DAZE = replace(
+    BATTLE_MAGIC_WIZARD,
+    definition_id="wizard_battle_magic_level_1_daze_prepared",
+    name="Level 1 Battle Magic Wizard (Daze prepared)",
+    prepared_spells=tuple(
+        replace(slot, slot_id="wizard_daze", spell_id="daze")
+        if slot.slot_id == "wizard_caustic_blast" else slot
+        for slot in BATTLE_MAGIC_WIZARD.prepared_spells
+    ),
+    spell_substitution_book=(
+        *BATTLE_MAGIC_WIZARD.spell_substitution_book,
+        SpellbookSpellDefinition("daze", 1, "ordinary_cantrip"),
+    ),
+    sheet_notes=(
+        *BATTLE_MAGIC_WIZARD.sheet_notes,
+        "Daze is one additional arcane cantrip legally learned after the fixed starting spellbook; it replaces Caustic Blast in this ordinary daily cantrip slot. The starting-book grant and all existing prepared-slot counts remain unchanged.",
+        "Daze is a two-action, 60-foot, basic Will-save 1d6 mental cantrip; a critical failure also causes stunned 1. Source: https://2e.aonprd.com/Spells.aspx?ID=1482.",
+    ),
+)
+
+
+# This daily alternate is a bounded hostile/control package.  Void Warp,
+# Fear, and Enfeeble were already in the fixed selected book; Command is one
+# source-legal arcane spell learned afterward, like the prior Daze option.
+# It leaves both the original starting-book grant and every daily slot count
+# intact, while choosing distinct Fortitude and Will suppression outcomes.
+BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS = replace(
+    BATTLE_MAGIC_WIZARD,
+    definition_id="wizard_battle_magic_level_1_suppression_spells_prepared",
+    name="Level 1 Battle Magic Wizard (suppression spells prepared)",
+    prepared_spells=tuple(
+        replace(slot, slot_id="wizard_void_warp", spell_id="void_warp")
+        if slot.slot_id == "wizard_caustic_blast" else
+        replace(slot, slot_id="wizard_fear", spell_id="fear")
+        if slot.slot_id == "wizard_breathe_fire" else
+        replace(slot, slot_id="wizard_command", spell_id="command")
+        if slot.slot_id == "wizard_enfeeble" else slot
+        for slot in BATTLE_MAGIC_WIZARD.prepared_spells
+    ),
+    spell_substitution_book=(
+        *BATTLE_MAGIC_WIZARD.spell_substitution_book,
+        SpellbookSpellDefinition("command", 1, "ordinary_rank_1"),
+    ),
+    sheet_notes=(
+        *BATTLE_MAGIC_WIZARD.sheet_notes,
+        "This daily hostile/control alternate prepares Void Warp, Fear, and Command in existing ordinary slots. Command is one additional arcane rank-1 spell legally learned after the fixed starting spellbook; it does not change starting-book or slot counts.",
+        "Sources: Void Warp https://2e.aonprd.com/Spells.aspx?ID=1745; Fear https://2e.aonprd.com/Spells.aspx?ID=1524; Enfeeble https://2e.aonprd.com/Spells.aspx?ID=1513; Command https://2e.aonprd.com/Spells.aspx?ID=1470.",
+    ),
+)
+
+
 BATTLE_MAGIC_WIZARD_SETUP = EncounterSetup(
     setup_id="staged_battle_magic_wizard_vs_two_guard_dogs",
     name="Battle Magic Wizard vs. Two Guard Dogs",
@@ -251,6 +306,29 @@ BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP = EncounterSetup(
         CreaturePlacement("wizard", BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS.definition_id, "Battle Magic Wizard", "blue", Position(1, 2)),
         CreaturePlacement("dog_a", "guard_dog_mc2924", "Guard Dog A", "red", Position(3, 1)),
         CreaturePlacement("dog_b", "guard_dog_mc2924", "Guard Dog B", "red", Position(3, 2)),
+    ),
+)
+
+BATTLE_MAGIC_WIZARD_DAZE_SETUP = EncounterSetup(
+    setup_id="battle_magic_wizard_daze_vs_guard_dog",
+    name="Battle Magic Wizard Daze versus Guard Dog",
+    width=15,
+    height=5,
+    placements=(
+        CreaturePlacement("wizard", BATTLE_MAGIC_WIZARD_DAZE.definition_id, "Battle Magic Wizard", "blue", Position(1, 2)),
+        CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(9, 2)),
+    ),
+)
+
+
+BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS_SETUP = EncounterSetup(
+    setup_id="battle_magic_wizard_suppression_spells_vs_common_speaker",
+    name="Battle Magic Wizard suppression spells versus Common Speaker",
+    width=15,
+    height=5,
+    placements=(
+        CreaturePlacement("wizard", BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS.definition_id, "Battle Magic Wizard", "blue", Position(1, 2)),
+        CreaturePlacement("enemy", COMMAND_TARGET.definition_id, "Common Speaker", "red", Position(5, 2)),
     ),
 )
 

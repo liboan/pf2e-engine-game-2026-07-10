@@ -30,6 +30,7 @@ from .model import (
     PairedStrikeSelection,
     PendingChoice,
     DamageResolution,
+    MartialStanceState,
     RaisedShieldState,
     ShieldBlockRecord,
     Position,
@@ -42,6 +43,7 @@ from .model import (
 from .conditions import CheckContext, ConditionValue, effective_condition_value
 from .health import HealthState, HealthTransition
 from .items import ItemInstance, STEEL_SHIELD, runtime_item_instance_id
+from .martial_defense import dueling_parry_requirements_met, extravagant_parry_requirements_met
 from .rune_content import ITEM_CATEGORIES, weapon_rune_profile_for_item
 from .checks import (
     CheckResult,
@@ -87,6 +89,8 @@ from .alchemy import AlchemyState, InfusedAlchemyItem
 from .alchemy_content import FORMULAS_BY_ID
 from .spells import CONCEALMENT_TARGETED_SPELL_IDS, SPELLS
 from .preparation import has_variable_preparations, prepared_slot_rejection
+from .w5_arms_persistence import W5_ARMS_ACTIVE_EFFECT_KINDS
+from .w5_focus_persistence import W5_FOCUS_ACTIVE_EFFECT_KINDS
 
 
 SAVE_VERSION = 18
@@ -369,9 +373,9 @@ def _infused_item_to_data(value: object) -> dict[str, Any]:
 
 
 def _load_alchemy_records(data: Any, setup) -> tuple[dict[str, AlchemyState], dict[str, InfusedAlchemyItem], set[str]]:
-    from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS
+    from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS, BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS, BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
     from .alchemy import FAR_LOBBER
-    from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+    from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS, BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT
 
     raw_states = data.get("alchemy_states", {})
     raw_items = data.get("infused_alchemy_items", {})
@@ -385,17 +389,25 @@ def _load_alchemy_records(data: Any, setup) -> tuple[dict[str, AlchemyState], di
         try:
             state = AlchemyState(_required_int(raw,"character_level"), _required_int(raw,"intelligence_modifier"), _required_str(raw,"research_field"), tuple(_required_str_list(raw,"field_formula_ids")), tuple(_required_str_list(raw,"known_formula_ids")), raw.get("selected_level_1_feat"), _required_str(raw,"daily_preparation_id"), _required_int(raw,"stored_vials"), _required_int(raw,"vial_capacity"), _required_int(raw,"exploration_seconds_toward_vial_recovery"), _required_int(raw,"next_creation_sequence"), _required_int(raw,"mutagen_temp_hp_available_at_seconds"), raw.get("selected_level_2_feat"))
         except (TypeError, ValueError) as e: raise ValueError("save has invalid Bomber Alchemy state") from e
-        level_two = (
-            next(
-                placement.definition_id
-                for placement in setup.placements
-                if placement.actor_id == actor_id
-            )
-            == BOMBER_ALCHEMIST_LEVEL_2.definition_id
+        definition_id = next(
+            placement.definition_id
+            for placement in setup.placements
+            if placement.actor_id == actor_id
         )
+        level_two = definition_id in {
+            BOMBER_ALCHEMIST_LEVEL_2.definition_id,
+            BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id,
+            BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id,
+        }
         expected_level = 2 if level_two else 1
         expected_formulas = (
-            BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS if level_two else BOMBER_FORMULA_IDS
+            BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS
+            if definition_id == BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id
+            else BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+            if definition_id == BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id
+            else BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+            if level_two
+            else BOMBER_FORMULA_IDS
         )
         expected_level_two_feat = FAR_LOBBER if level_two else None
         if (
@@ -475,12 +487,16 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 ],
                 "focus_points": creature.focus_points,
                 "focus_capacity": creature.focus_capacity,
+                "gravity_weapon_used_round": creature.gravity_weapon_used_round,
+                "gravity_weapon_bonus_attack_id": creature.gravity_weapon_bonus_attack_id,
                 "flourish_used_round": creature.flourish_used_round,
                 "composition_cast_at_start": creature.composition_cast_at_start,
                 "composition_cast_turn_actor_id": creature.composition_cast_turn_actor_id,
                 "composition_cast_turn_start": creature.composition_cast_turn_start,
                 "lingering_composition_pending": creature.lingering_composition_pending,
                 "reach_spell_pending": creature.reach_spell_pending,
+                "widen_spell_pending": creature.widen_spell_pending,
+                "energy_ablation_pending": creature.energy_ablation_pending,
                 "must_leave_occupied": creature.must_leave_occupied,
                 "temporary_hp": creature.temporary_hp,
                 "temporary_hp_source_id": creature.temporary_hp_source_id,
@@ -537,6 +553,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "witch_patron_used_start": creature.witch_patron_used_start,
                 "witch_restored_spirit_used_start": creature.witch_restored_spirit_used_start,
                 "witch_hex_cast_start": creature.witch_hex_cast_start,
+                "witch_cackle_used_start": creature.witch_cackle_used_start,
                 "minion_commanded_start": creature.minion_commanded_start,
                 "witch_turn_activity_start": creature.witch_turn_activity_start,
             }
@@ -572,6 +589,11 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
             actor_id: [raised.instance_id, raised.expires_at_owner_start]
             for actor_id, raised in sorted((state.raised_shields or {}).items())
         },
+        "martial_stances": {
+            actor_id: [stance.stance_id, stance.entered_round]
+            for actor_id, stance in sorted((state.martial_stances or {}).items())
+        },
+        "martial_stance_used_rounds": dict(sorted(state.martial_stance_used_rounds.items())),
         "initiative_tie_groups": [list(group) for group in (state.initiative_tie_groups or ())],
         "initiative_tie_orders": {
             str(index): list(actors) for index, actors in (state.initiative_tie_orders or {}).items()
@@ -593,6 +615,16 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
             ]
             for effect in state.feint_off_guard_effects
         ],
+        "overextending_feint_effects": [
+            [
+                effect.effect_id,
+                effect.source_actor_id,
+                effect.target_actor_id,
+                [effect.expiration.anchor_actor_id, effect.expiration.boundary, effect.expiration.occurrence],
+                effect.all_attacks,
+            ]
+            for effect in state.overextending_feint_effects
+        ],
         "tumble_behind_exposures": [
             [
                 effect.effect_id,
@@ -613,7 +645,8 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
              effect.target_actor_id, effect.value, effect.expires_at_source_start,
              effect.expires_at_world_time, effect.sustain_limit_source_start,
              effect.sustain_limit_world_time, effect.sustain_expires_at_source_end,
-             effect.selected_enemy_actor_id, effect.life_link_used_round]
+             effect.selected_enemy_actor_id, effect.life_link_used_round,
+             effect.glue_removal_actions]
             for effect in state.active_effects
         ],
         "persistent_effects": [
@@ -675,27 +708,37 @@ def _valid_alchemy_elixir_effect(
     row: list[Any], creatures: dict[str, CreatureState], starts: dict[str, int],
     world_time_seconds: int, infused_items: dict[str, Any], consumed_item_ids: set[str],
 ) -> bool:
-    """Validate the three finite Bomber elixir effects and their consumed origin."""
+    """Validate the finite Bomber elixir effects and their consumed origin."""
     from .alchemy_content import ElixirFacts, FORMULAS_BY_ID
 
     kind_to_formula = {
         "alchemy_elixir_of_life_minor": "elixir_of_life_minor",
         "alchemy_antidote_lesser": "antidote_lesser",
         "alchemy_antiplague_lesser": "antiplague_lesser",
+        "alchemy_cheetahs_elixir_lesser": "cheetahs_elixir_lesser",
+        "alchemy_bravos_brew_lesser": "bravos_brew_lesser",
     }
     formula_id = kind_to_formula[row[1]]
     formula = FORMULAS_BY_ID[formula_id]
     facts = formula.facts
-    if not isinstance(facts, ElixirFacts) or not facts.save_bonuses:
+    if not isinstance(facts, ElixirFacts) or facts.duration_seconds is None:
         return False
-    bonus = facts.save_bonuses[0]
+    expected_value = (
+        facts.speed_bonus_ft
+        if facts.effect == "speed_bonus"
+        else facts.save_bonuses[0].bonus
+        if facts.save_bonuses
+        else None
+    )
+    if expected_value is None or expected_value <= 0:
+        return False
     source = creatures[row[2]]
     target = creatures[row[3]]
     if (
-        row[4] != bonus.bonus
+        row[4] != expected_value
         or row[5] != starts[row[2]] + 1
         or type(row[6]) is not int
-        or not world_time_seconds < row[6] <= world_time_seconds + bonus.duration_seconds
+        or not world_time_seconds < row[6] <= world_time_seconds + facts.duration_seconds
         or row[0] not in {f"alchemy:{item_id}" for item_id in consumed_item_ids}
         or "bomber_alchemist" not in get_definition(source.definition_id).abilities
         or target.dead
@@ -705,8 +748,76 @@ def _valid_alchemy_elixir_effect(
     item = infused_items.get(item_id)
     if item is None or item.formula_id != formula_id or item.creator_actor_id != row[2]:
         return False
-    maximum = 600 if item.creation_kind == "quick_alchemy" else bonus.duration_seconds
+    maximum = 600 if item.creation_kind == "quick_alchemy" else facts.duration_seconds
     return row[6] <= world_time_seconds + maximum
+
+
+def _valid_alchemy_bomb_rider_effect(
+    row: list[Any], creatures: dict[str, CreatureState], starts: dict[str, int],
+    world_time_seconds: int, infused_items: dict[str, Any], consumed_item_ids: set[str],
+) -> bool:
+    """Validate Glue Bomb's sourced minute-long rider and consumed origin."""
+    from .alchemy_content import BombFacts, FORMULAS_BY_ID
+
+    facts = FORMULAS_BY_ID["glue_bomb_lesser"].facts
+    if not isinstance(facts, BombFacts):
+        return False
+    item_id = row[0].removeprefix("glue_bomb:")
+    item = infused_items.get(item_id)
+    source = creatures[row[2]]
+    return (
+        row[0].startswith("glue_bomb:")
+        and row[1] == "alchemy_glue_bomb_lesser"
+        and row[4] == facts.on_hit_effect_value == 10
+        and row[12] in {0, 1, 2}
+        and row[5] == starts[row[2]] + 1
+        and type(row[6]) is int
+        and world_time_seconds < row[6] <= world_time_seconds + (facts.on_hit_effect_duration_seconds or 0)
+        and item_id in consumed_item_ids
+        and item is not None
+        and item.formula_id == "glue_bomb_lesser"
+        and item.creator_actor_id == row[2]
+        and "bomber_alchemist" in get_definition(source.definition_id).abilities
+        and not creatures[row[3]].dead
+    )
+
+
+def _valid_bomber_bomb_condition_effect(
+    effect: ActiveConditionEffect,
+    creatures: dict[str, CreatureState],
+    starts: dict[str, int],
+    ends: dict[str, int],
+    active_effects: list[ActiveSpellEffect],
+) -> bool:
+    """Validate the condition half of Dread/Glue's sourced rider state."""
+    source = creatures.get(effect.source_actor_id)
+    target = creatures.get(effect.target_actor_id)
+    if source is None or target is None or "bomber_alchemist" not in get_definition(source.definition_id).abilities:
+        return False
+    if effect.kind == "frightened" and effect.effect_id.startswith("dread_ampoule:"):
+        return (
+            effect.value in {1, 2}
+            and effect.expiration.anchor_actor_id == effect.target_actor_id
+            and effect.expiration.boundary == "end"
+            and effect.expiration.occurrence == ends[effect.target_actor_id] + effect.value
+        )
+    if effect.kind == "immobilized" and effect.effect_id.startswith("glue_bomb:"):
+        glue_id = effect.effect_id.removesuffix(":immobilized")
+        return (
+            effect.value == 1
+            and effect.dc == 17
+            and effect.expiration.anchor_actor_id == effect.source_actor_id
+            and effect.expiration.boundary == "start"
+            and effect.expiration.occurrence == starts[effect.source_actor_id] + 1
+            and any(
+                current.effect_id == glue_id
+                and current.kind == "alchemy_glue_bomb_lesser"
+                and current.source_actor_id == effect.source_actor_id
+                and current.target_actor_id == effect.target_actor_id
+                for current in active_effects
+            )
+        )
+    return True
 
 
 def _valid_alchemy_mutagen_effect(
@@ -721,7 +832,7 @@ def _valid_alchemy_mutagen_effect(
     item_id = row[0].removeprefix("alchemy:")
     item = infused_items.get(item_id)
     source = creatures[row[2]]
-    return (
+    valid = (
         row[0] == f"alchemy:{item_id}" and row[3] == row[2] and row[4] == 1
         and row[5] == starts[row[2]] + 1 and type(row[6]) is int
         and world_time_seconds < row[6] <= world_time_seconds + formula.facts.duration_seconds
@@ -729,6 +840,15 @@ def _valid_alchemy_mutagen_effect(
         and item.formula_id == formula_id and item.creator_actor_id == row[2]
         and "bomber_alchemist" in get_definition(source.definition_id).abilities
     )
+    if not valid:
+        return False
+    if formula_id == "juggernaut_mutagen_lesser" and source.temporary_hp_source_id == row[0]:
+        return (
+            0 < source.temporary_hp <= formula.facts.temporary_hp
+            and source.temporary_hp_expires_at_seconds == row[6]
+            and source.temporary_hp_expires_at_source_start == 0
+        )
+    return True
 
 
 def _valid_alchemy_venom_coating(
@@ -853,6 +973,27 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save changed infused item identity or quantity")
         item_instances[instance_id] = instance
 
+    saved_starts_for_initiative = data.get("actor_start_counts", {})
+    saved_effects_for_initiative = data.get("active_effects", [])
+
+    def saved_juggernaut_penalty(actor_id: str) -> int:
+        if not isinstance(saved_starts_for_initiative, dict) or not isinstance(saved_effects_for_initiative, list):
+            return 0
+        for row in saved_effects_for_initiative:
+            if (
+                isinstance(row, list)
+                and len(row) >= 7
+                and row[1] == "alchemy_juggernaut_mutagen_lesser"
+                and row[3] == actor_id
+                and isinstance(row[2], str)
+                and type(row[5]) is int
+                and row[5] > saved_starts_for_initiative.get(row[2], 0)
+                and type(row[6]) is int
+                and row[6] > world_time_seconds
+            ):
+                return 2
+        return 0
+
     creatures: dict[str, CreatureState] = {}
     for placement in setup.placements:
         actor_id = placement.actor_id
@@ -900,7 +1041,7 @@ def _state_from_data(data: Any) -> EncounterState:
         if definition.initiative_exempt:
             if initiative != 0:
                 raise ValueError(f"saved familiar {actor_id!r} has an initiative")
-        elif not initiative_modifier + 1 <= initiative <= initiative_modifier + 20:
+        elif not initiative_modifier - saved_juggernaut_penalty(actor_id) + 1 <= initiative <= initiative_modifier + 20:
             raise ValueError(f"saved actor {actor_id!r} has invalid initiative")
         if not 0 <= actions_remaining <= 3 or strikes_this_turn < 0 or diagonals_this_turn < 0:
             raise ValueError(f"saved actor {actor_id!r} has invalid turn counters")
@@ -958,6 +1099,18 @@ def _state_from_data(data: Any) -> EncounterState:
             or (focus_capacity > 0 and not definition.focus_spells)
         ):
             raise ValueError(f"saved actor {actor_id!r} has focus capacity outside its reviewed definition")
+        gravity_weapon_used_round = raw.get("gravity_weapon_used_round", 0)
+        if type(gravity_weapon_used_round) is not int or gravity_weapon_used_round < 0:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Gravity Weapon marker")
+        gravity_weapon_bonus_attack_id = raw.get("gravity_weapon_bonus_attack_id")
+        if gravity_weapon_bonus_attack_id is not None and (
+            not isinstance(gravity_weapon_bonus_attack_id, str) or not gravity_weapon_bonus_attack_id
+        ):
+            raise ValueError(f"saved actor {actor_id!r} has invalid Gravity Weapon committed attack")
+        if gravity_weapon_bonus_attack_id is not None and gravity_weapon_bonus_attack_id not in {
+            attack.attack_id for attack in definition.attacks
+        }:
+            raise ValueError(f"saved actor {actor_id!r} has an unavailable Gravity Weapon committed attack")
         flourish_used_round = _required_int(raw, "flourish_used_round")
         composition_cast_at_start = _required_int(raw, "composition_cast_at_start")
         composition_cast_turn_actor_id = raw.get("composition_cast_turn_actor_id")
@@ -971,6 +1124,12 @@ def _state_from_data(data: Any) -> EncounterState:
         reach_spell_pending = raw.get("reach_spell_pending", False)
         if type(reach_spell_pending) is not bool:
             raise ValueError(f"saved actor {actor_id!r} has invalid Reach Spell state")
+        widen_spell_pending = raw.get("widen_spell_pending", False)
+        if type(widen_spell_pending) is not bool:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Widen Spell state")
+        energy_ablation_pending = raw.get("energy_ablation_pending")
+        if energy_ablation_pending is not None and energy_ablation_pending not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Energy Ablation state")
         must_leave_occupied = _required_bool(raw, "must_leave_occupied")
         temporary_hp = _required_int(raw, "temporary_hp")
         temporary_hp_source_id = raw.get("temporary_hp_source_id")
@@ -1105,6 +1264,7 @@ def _state_from_data(data: Any) -> EncounterState:
         witch_patron_used_start = raw.get("witch_patron_used_start", 0)
         witch_restored_spirit_used_start = raw.get("witch_restored_spirit_used_start", 0)
         witch_hex_cast_start = raw.get("witch_hex_cast_start", 0)
+        witch_cackle_used_start = raw.get("witch_cackle_used_start", 0)
         minion_commanded_start = raw.get("minion_commanded_start", 0)
         witch_turn_activity_start = raw.get("witch_turn_activity_start", 0)
         if (
@@ -1175,6 +1335,7 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(witch_restored_spirit_used_start) is not int
             or witch_restored_spirit_used_start < 0
             or type(witch_hex_cast_start) is not int or witch_hex_cast_start < 0
+            or type(witch_cackle_used_start) is not int or witch_cackle_used_start < 0
             or type(minion_commanded_start) is not int or minion_commanded_start < 0
             or type(witch_turn_activity_start) is not int or witch_turn_activity_start < 0
         ):
@@ -1335,12 +1496,16 @@ def _state_from_data(data: Any) -> EncounterState:
             spontaneous_slots=spontaneous_slots,
             focus_points=focus_points,
             focus_capacity=focus_capacity,
+            gravity_weapon_used_round=gravity_weapon_used_round,
+            gravity_weapon_bonus_attack_id=gravity_weapon_bonus_attack_id,
             flourish_used_round=flourish_used_round,
             composition_cast_at_start=composition_cast_at_start,
             composition_cast_turn_actor_id=composition_cast_turn_actor_id,
             composition_cast_turn_start=composition_cast_turn_start,
             lingering_composition_pending=lingering_composition_pending,
             reach_spell_pending=reach_spell_pending,
+            widen_spell_pending=widen_spell_pending,
+            energy_ablation_pending=energy_ablation_pending,
             must_leave_occupied=must_leave_occupied,
             temporary_hp=temporary_hp,
             temporary_hp_source_id=temporary_hp_source_id,
@@ -1387,6 +1552,7 @@ def _state_from_data(data: Any) -> EncounterState:
             witch_patron_used_start=witch_patron_used_start,
             witch_restored_spirit_used_start=witch_restored_spirit_used_start,
             witch_hex_cast_start=witch_hex_cast_start,
+            witch_cackle_used_start=witch_cackle_used_start,
             minion_commanded_start=minion_commanded_start,
             witch_turn_activity_start=witch_turn_activity_start,
         )
@@ -1407,6 +1573,7 @@ def _state_from_data(data: Any) -> EncounterState:
                 if definition_id in {
                     "barbarian_animal_bear_level_2_no_escape",
                     "barbarian_animal_bear_level_2_sudden_charge",
+                    "barbarian_animal_bear_level_2_intimidating_strike",
                 }
                 else None,
             )
@@ -1574,6 +1741,14 @@ def _state_from_data(data: Any) -> EncounterState:
         raise ValueError("save has an encounter clock before its current round")
     if any(creature.flourish_used_round < 0 or creature.flourish_used_round > round_number for creature in creatures.values()):
         raise ValueError("save has invalid per-round flourish use")
+    if any(creature.gravity_weapon_used_round > round_number for creature in creatures.values()):
+        raise ValueError("save has invalid Gravity Weapon round marker")
+    if any(
+        creature.gravity_weapon_bonus_attack_id is not None
+        and creature.gravity_weapon_used_round != round_number
+        for creature in creatures.values()
+    ):
+        raise ValueError("save has stale Gravity Weapon committed attack")
     for creature in creatures.values():
         if creature.precision_used_round > round_number:
             raise ValueError(f"saved actor {creature.actor_id!r} has invalid precision round")
@@ -1789,15 +1964,24 @@ def _state_from_data(data: Any) -> EncounterState:
     for actor_id, creature in creatures.items():
         if creature.stunned:
             source = creatures.get(creature.stunned_source_actor_id or "")
+            source_definition = get_definition(source.definition_id) if source is not None else None
+            stunning_blows = (
+                source_definition is not None
+                and "stunning_blows" in source_definition.abilities
+                and creature.stunned in {1, 3}
+            )
+            daze = (
+                source is not None
+                and creature.stunned == 1
+                and any(slot.spell_id == "daze" and slot.cantrip for slot in source.prepared_slots)
+            )
             if (
-                creature.stunned not in {1, 3}
-                or source is None
-                or "stunning_blows" not in get_definition(source.definition_id).abilities
+                not (stunning_blows or daze)
                 or creature.stunned_until_start != starts_raw[actor_id] + 1
             ):
-                raise ValueError(f"saved actor {actor_id!r} has invalid Stunning Blows state")
+                raise ValueError(f"saved actor {actor_id!r} has invalid admitted stunned state")
         elif creature.stunned_until_start or creature.stunned_source_actor_id is not None:
-            raise ValueError(f"saved actor {actor_id!r} has stale Stunning Blows state")
+            raise ValueError(f"saved actor {actor_id!r} has stale admitted stunned state")
     ends_raw = data.get("actor_end_counts")
     if (
         not isinstance(ends_raw, dict)
@@ -1844,21 +2028,47 @@ def _state_from_data(data: Any) -> EncounterState:
     ):
         raise ValueError("save has invalid Lingering Composition spellshape state")
     for creature in creatures.values():
-        if not creature.reach_spell_pending:
-            continue
-        definition = get_definition(creature.definition_id)
-        if (
-            "reach_spell" not in definition.abilities
-            or "Reach Spell" not in definition.feats
-            or not in_progress
-            or not initiative_finalized
-            or active_actor_id != creature.actor_id
-            # Reach Spell is a one-action activity. Its saved marker must
-            # prove that action has already been committed, but can remain
-            # at zero actions until the current turn ends.
-            or not 0 <= creature.actions_remaining <= 2
-        ):
-            raise ValueError("save has invalid Reach Spell spellshape state")
+        if sum(bool(marker) for marker in (creature.reach_spell_pending, creature.widen_spell_pending, creature.energy_ablation_pending is not None)) > 1:
+            raise ValueError("save has overlapping spellshape markers")
+        if creature.reach_spell_pending:
+            definition = get_definition(creature.definition_id)
+            if (
+                "reach_spell" not in definition.abilities
+                or "Reach Spell" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                # Reach Spell is a one-action activity. Its saved marker must
+                # prove that action has already been committed, but can remain
+                # at zero actions until the current turn ends.
+                or not 0 <= creature.actions_remaining <= 2
+            ):
+                raise ValueError("save has invalid Reach Spell spellshape state")
+        if creature.widen_spell_pending:
+            definition = get_definition(creature.definition_id)
+            if (
+                "widen_spell" not in definition.abilities
+                or "Widen Spell" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                # Widen Spell is a one-action activity. Its saved marker must
+                # prove that action has already been committed, but can remain
+                # at zero actions until the current turn ends.
+                or not 0 <= creature.actions_remaining <= 2
+            ):
+                raise ValueError("save has invalid Widen Spell spellshape state")
+        if creature.energy_ablation_pending is not None:
+            definition = get_definition(creature.definition_id)
+            if (
+                "energy_ablation" not in definition.abilities
+                or "Energy Ablation" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                or creature.actions_remaining < 0
+            ):
+                raise ValueError("save has invalid Energy Ablation spellshape state")
     weakness_raw = data.get("investigator_weakness_bonuses", [])
     if not isinstance(weakness_raw, list):
         raise ValueError("save has invalid Investigator Known Weaknesses bonuses")
@@ -1964,6 +2174,34 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save retains an expired Feint off-guard effect")
         feint_effect_ids.add(effect.effect_id)
         feint_effects.append(effect)
+    overextending_effects_raw = data.get("overextending_feint_effects", [])
+    if not isinstance(overextending_effects_raw, list):
+        raise ValueError("save has invalid Overextending Feint effects")
+    from .skill_actions import OverextendingFeintEffect
+
+    overextending_effects: list[OverextendingFeintEffect] = []
+    overextending_ids: set[str] = set()
+    for row in overextending_effects_raw:
+        if (
+            not isinstance(row, list) or len(row) != 5
+            or any(not isinstance(value, str) or not value for value in row[:3])
+            or not isinstance(row[3], list) or len(row[3]) != 3
+            or row[3][0] not in expected_ids or row[3][1] != "end"
+            or type(row[3][2]) is not int or row[3][2] < 1
+            or type(row[4]) is not bool or row[0] in overextending_ids
+            or row[1] not in expected_ids or row[2] not in expected_ids
+            or row[1] == row[2]
+        ):
+            raise ValueError("save has invalid Overextending Feint effect")
+        try:
+            expiration = EffectExpiration(row[3][0], row[3][1], row[3][2])
+            effect = OverextendingFeintEffect(row[0], row[1], row[2], expiration, row[4])
+        except (TypeError, ValueError) as error:
+            raise ValueError("save has invalid Overextending Feint effect") from error
+        if expiration.occurrence <= ends_raw[expiration.anchor_actor_id]:
+            raise ValueError("save retains an expired Overextending Feint effect")
+        overextending_ids.add(effect.effect_id)
+        overextending_effects.append(effect)
     tumble_effects_raw = data.get("tumble_behind_exposures", [])
     if not isinstance(tumble_effects_raw, list):
         raise ValueError("save has invalid Tumble Behind exposures")
@@ -2017,20 +2255,26 @@ def _state_from_data(data: Any) -> EncounterState:
     protection_pairs: set[tuple[str, str]] = set()
     fleeing_pairs: set[tuple[str, str]] = set()
     life_link_sources: set[str] = set()
+    dueling_parry_sources: set[str] = set()
+    extravagant_parry_sources: set[str] = set()
+    gravity_sources: set[str] = set()
+    hymn_pairs: set[tuple[str, str]] = set()
     for raw_row in effects_raw:
         # v17 saves before sustained-spell clocks stored the original seven
         # fields.  The appended Link round marker preserves all prior rows.
         if not isinstance(raw_row, list):
             raise ValueError("save has invalid active spell effect")
         if len(raw_row) == 7:
-            row = [*raw_row, 0, None, 0, None, 0]
+            row = [*raw_row, 0, None, 0, None, 0, 0]
         elif len(raw_row) == 9:
-            row = [*raw_row, 0, None, 0]
+            row = [*raw_row, 0, None, 0, 0]
         elif len(raw_row) == 10:
-            row = [*raw_row, None, 0]
+            row = [*raw_row, None, 0, 0]
         elif len(raw_row) == 11:
-            row = [*raw_row, 0]
+            row = [*raw_row, 0, 0]
         elif len(raw_row) == 12:
+            row = [*raw_row, 0]
+        elif len(raw_row) == 13:
             row = raw_row
         else:
             raise ValueError("save has invalid active spell effect")
@@ -2043,14 +2287,15 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(row[9]) is not int or row[9] < 0
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+            or type(row[12]) is not int or row[12] < 0
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", *W5_ARMS_ACTIVE_EFFECT_KINDS, *W5_FOCUS_ACTIVE_EFFECT_KINDS, "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "extravagant_parry", *W5_FOCUS_ACTIVE_EFFECT_KINDS, "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
                 and row[6] is not None
             )
             or (
@@ -2066,14 +2311,14 @@ def _state_from_data(data: Any) -> EncounterState:
                 )
             )
             or (
-                row[1] in {"alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser"}
+                row[1] in {"alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser"}
                 and not _valid_alchemy_elixir_effect(
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
                 )
             )
             or (
-                row[1] in {"alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser"}
+                row[1] in {"alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser"}
                 and not _valid_alchemy_mutagen_effect(
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
@@ -2084,6 +2329,53 @@ def _state_from_data(data: Any) -> EncounterState:
                 and not _valid_alchemy_venom_coating(
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
+                )
+            )
+            or (
+                row[1] == "alchemy_glue_bomb_lesser"
+                and not _valid_alchemy_bomb_rider_effect(
+                    row, creatures, starts_raw, world_time_seconds,
+                    infused_alchemy_items, consumed_infused_item_ids,
+                )
+            )
+            or (
+                row[1] not in {"alchemy_glue_bomb_lesser", "hymn_of_healing"}
+                and row[12] != 0
+            )
+            or (
+                row[1] == "alchemy_glue_bomb_lesser"
+                and row[12] > 2
+            )
+            or (
+                row[1] == "dueling_parry"
+                and (
+                    row[4] != 2
+                    or row[2] != row[3]
+                    or row[5] != starts_raw[row[2]] + 1
+                    or row[6] is not None
+                    or "dueling_parry" not in get_definition(
+                        creatures[row[2]].definition_id
+                    ).abilities
+                    or not dueling_parry_requirements_met(
+                        item_instances, creatures[row[2]],
+                        get_definition(creatures[row[2]].definition_id),
+                    )
+                    or row[2] in dueling_parry_sources
+                )
+            )
+            or (
+                row[1] == "extravagant_parry"
+                and (
+                    row[4] not in {1, 2}
+                    or row[2] != row[3]
+                    or row[5] != starts_raw[row[2]] + 1
+                    or row[6] is not None
+                    or "Extravagant Parry" not in get_definition(creatures[row[2]].definition_id).feats
+                    or not extravagant_parry_requirements_met(
+                        item_instances, creatures[row[2]],
+                        get_definition(creatures[row[2]].definition_id),
+                    )[0]
+                    or row[2] in extravagant_parry_sources
                 )
             )
             or (
@@ -2166,6 +2458,55 @@ def _state_from_data(data: Any) -> EncounterState:
                 )
             )
             or (
+                row[1] == "gravity_weapon"
+                and (
+                    row[4] != 1
+                    or row[2] != row[3]
+                    or not _valid_focus_duration_deadline(
+                        row[5], starts_raw[row[2]], round_number, world_time_seconds, row[6],
+                        duration_source_starts=10, duration_seconds=60,
+                        encounter_start_seconds=encounter_start_seconds,
+                    )
+                    or row[7] != 0
+                    or row[8] is not None
+                    or row[9] != 0
+                    or row[10] is not None
+                    or row[11] != 0
+                    or row[12] != 0
+                    or "gravity_weapon" not in get_definition(creatures[row[2]].definition_id).abilities
+                    or not any(spell.spell_id == "gravity_weapon" for spell in get_definition(creatures[row[2]].definition_id).focus_spells)
+                    or row[2] in gravity_sources
+                )
+            )
+            or (
+                row[1] == "hymn_of_healing"
+                and (
+                    row[4] != 2
+                    or not _valid_focus_duration_deadline(
+                        row[5], starts_raw[row[2]], round_number, world_time_seconds, row[6],
+                        duration_source_starts=4, duration_seconds=24,
+                        encounter_start_seconds=encounter_start_seconds,
+                    )
+                    or row[7] != row[5]
+                    or row[8] != row[6]
+                    or row[9] <= ends_raw[row[2]]
+                    or row[9] > ends_raw[row[2]] + 2
+                    or row[10] is not None
+                    or row[11] < 0
+                    or row[11] > starts_raw[row[3]]
+                    or row[12] > starts_raw[row[2]]
+                    or "hymn_of_healing" not in get_definition(creatures[row[2]].definition_id).abilities
+                    or not any(spell.spell_id == "hymn_of_healing" for spell in get_definition(creatures[row[2]].definition_id).focus_spells)
+                    or creatures[row[3]].team != creatures[row[2]].team
+                    or not (
+                        creatures[row[3]].hp > 0
+                        or creatures[row[3]].unconscious
+                        or creatures[row[3]].health_mode is HealthMode.PC
+                    )
+                    or (row[2], row[3]) in hymn_pairs
+                )
+            )
+            or (
                 row[1] == "fleeing"
                 and (
                     row[4] != 1
@@ -2181,9 +2522,10 @@ def _state_from_data(data: Any) -> EncounterState:
                         spell.spell_id == "fear"
                         and spell.rank == 1
                         and not spell.cantrip
-                        for spell in get_definition(
-                            creatures[row[2]].definition_id
-                        ).spontaneous_spells
+                        for spell in (
+                            *get_definition(creatures[row[2]].definition_id).prepared_spells,
+                            *get_definition(creatures[row[2]].definition_id).spontaneous_spells,
+                        )
                     )
                     or (row[2], row[3]) in fleeing_pairs
                 )
@@ -2400,6 +2742,14 @@ def _state_from_data(data: Any) -> EncounterState:
         ):
             raise ValueError("save has invalid Sigil effect")
         active_effect_ids.add(row[0])
+        if row[1] == "dueling_parry":
+            dueling_parry_sources.add(row[2])
+        if row[1] == "extravagant_parry":
+            extravagant_parry_sources.add(row[2])
+        if row[1] == "gravity_weapon":
+            gravity_sources.add(row[2])
+        if row[1] == "hymn_of_healing":
+            hymn_pairs.add((row[2], row[3]))
         if row[1] == "blood_magic":
             blood_magic_sources.add(row[2])
         if row[1] == "angelic_halo":
@@ -2408,6 +2758,26 @@ def _state_from_data(data: Any) -> EncounterState:
             anthem_pairs.add((row[2], row[3]))
         if row[1] == "sure_strike":
             sure_strike_sources.add(row[2])
+        if row[1] == "energy_ablation":
+            energy = row[0].split(":", 3)[2] if row[0].count(":") >= 2 else ""
+            definition = get_definition(creatures[row[2]].definition_id)
+            if (
+                row[2] != row[3] or row[4] != 1 or row[5] != starts_raw[row[2]] + 2
+                or type(row[6]) is not int or not world_time_seconds < row[6] <= world_time_seconds + 12
+                or energy not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}
+                or "energy_ablation" not in definition.abilities
+            ):
+                raise ValueError("save has invalid Energy Ablation effect")
+        if row[1] == "weapon_surge":
+            definition = get_definition(creatures[row[2]].definition_id)
+            if (
+                row[2] != row[3] or row[4] != 1 or row[5] != starts_raw[row[2]] + 1
+                or type(row[6]) is not int or not world_time_seconds < row[6] <= world_time_seconds + 6
+                or "weapon_surge" not in definition.abilities
+                or row[0].count(":") < 3
+                or row[0].split(":", 3)[2] not in creatures[row[2]].held_items
+            ):
+                raise ValueError("save has invalid Weapon Surge effect")
         if row[1] == "soothe":
             soothe_pairs.add((row[2], row[3]))
         if row[1] == "protection":
@@ -2417,6 +2787,22 @@ def _state_from_data(data: Any) -> EncounterState:
         if row[1] == "life_link":
             life_link_sources.add(row[2])
         effects.append(ActiveSpellEffect(*row))
+    effects_by_id = {effect.effect_id: effect for effect in effects}
+    for actor in creatures.values():
+        source_id = actor.temporary_hp_source_id
+        if source_id is None or not source_id.startswith("hymn_of_healing:"):
+            continue
+        hymn = effects_by_id.get(source_id)
+        if (
+            hymn is None
+            or hymn.kind != "hymn_of_healing"
+            or hymn.target_actor_id != actor.actor_id
+            or actor.temporary_hp <= 0
+            or actor.temporary_hp > 2
+            or actor.temporary_hp_expires_at_seconds is not None
+            or actor.temporary_hp_expires_at_source_start != starts_raw[hymn.source_actor_id] + 1
+        ):
+            raise ValueError("save has invalid Hymn of Healing temporary HP provenance")
     persistent_raw = data.get("persistent_effects", [])
     if not isinstance(persistent_raw, list):
         raise ValueError("save has invalid persistent damage effects")
@@ -2429,9 +2815,9 @@ def _state_from_data(data: Any) -> EncounterState:
             or any(not isinstance(value, str) or not value for value in row[:5])
             or not isinstance(row[5], list) or any(type(value) is not int or value < 2 for value in row[5])
             or type(row[6]) is not int or row[6] < 0
-            # The admitted spell sources author a one-minute expiration.  A
-            # save may retain only its remaining portion, never extend it or
-            # replace it with an unbounded GM condition.
+            # The admitted spell and Bomber bomb sources author a one-minute
+            # expiration. A save may retain only its remaining portion, never
+            # extend it or replace it with an unbounded GM condition.
             or type(row[7]) is not int or not world_time_seconds < row[7] <= world_time_seconds + 60
             or row[1] not in expected_ids or row[2] not in expected_ids
             or row[4] not in {"acid", "bleed", "fire"}
@@ -2442,6 +2828,11 @@ def _state_from_data(data: Any) -> EncounterState:
                 ("gouging_claw", "bleed", (), 4),
                 # Ignition's adjacent melee profile persists with d6s.
                 ("ignition", "fire", (6,), 0),
+                ("alchemists_fire_lesser", "fire", (), 1),
+                ("alchemists_fire_lesser", "fire", (), 2),
+                ("acid_flask_lesser", "acid", (6,), 0),
+                ("acid_flask_lesser", "acid", (6, 6), 0),
+                ("tiger_stance", "bleed", (4,), 0),
             }
             or (not row[5] and row[6] < 1)
             or row[0] in persistent_ids or (row[2], row[4]) in persistent_keys
@@ -2449,7 +2840,26 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save has invalid persistent damage effect")
         source = creatures[row[1]]
         source_definition = get_definition(source.definition_id)
-        if not (
+        if row[3] == "tiger_stance":
+            from .w5_stance_persistence import tiger_bleed_save_allowed
+            if not tiger_bleed_save_allowed(
+                source_definition, source_id=row[3], damage_type=row[4], dice=row[5], flat=row[6]
+            ):
+                raise ValueError("save has a persistent Tiger bleed without feat provenance")
+        elif row[3] in {"alchemists_fire_lesser", "acid_flask_lesser"}:
+            alchemy_state = alchemy_states.get(row[1])
+            if (
+                alchemy_state is None
+                or alchemy_state.character_level != 2
+                or not any(
+                    item.formula_id == row[3]
+                    and item.creator_actor_id == row[1]
+                    and item_id in consumed_infused_item_ids
+                    for item_id, item in infused_alchemy_items.items()
+                )
+            ):
+                raise ValueError("save has a persistent damage source without consumed Bomber formula provenance")
+        elif not (
             any(slot.spell_id == row[3] for slot in source.prepared_slots)
             or any(access.spell_id == row[3] for access in source_definition.spontaneous_spells)
         ):
@@ -2614,6 +3024,10 @@ def _state_from_data(data: Any) -> EncounterState:
         elif (effect.value not in {1, 3} or effect.command_mode not in {"approach", "flee", "release", "prone", "stand"}
               or effect.expiration.anchor_actor_id != effect.target_actor_id or effect.expiration.boundary != "end"):
             raise ValueError("save has invalid Command effect")
+        if effect.effect_id.startswith(("dread_ampoule:", "glue_bomb:")) and not _valid_bomber_bomb_condition_effect(
+            effect, creatures, starts_raw, ends_raw, effects,
+        ):
+            raise ValueError("save has invalid Bomber bomb condition provenance")
         completed_count = starts_raw[expiration.anchor_actor_id] if expiration.boundary == "start" else ends_raw[expiration.anchor_actor_id]
         if expiration.occurrence <= completed_count:
             raise ValueError("save retains an expired condition effect")
@@ -2746,6 +3160,62 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save has a raised shield that is absent, broken, or expired")
         raised_shields[actor_id] = RaisedShieldState(row[0], row[1])
 
+    martial_stances_raw = data.get("martial_stances", {})
+    if not isinstance(martial_stances_raw, dict) or not set(martial_stances_raw).issubset(expected_ids):
+        raise ValueError("save has invalid martial stances")
+    martial_stances: dict[str, MartialStanceState] = {}
+    for actor_id, row in martial_stances_raw.items():
+        actor = creatures[actor_id]
+        definition = get_definition(actor.definition_id)
+        if (
+            not isinstance(row, list) or len(row) != 2
+            or row[0] not in {"crane_stance", "point_blank_stance", "tiger_stance", "wolf_stance"} or type(row[1]) is not int
+            or not 1 <= row[1] <= round_number
+            or not in_progress or actor.unconscious or actor.dead
+            or (
+                row[0] == "crane_stance"
+                and (
+                    "crane_stance" not in definition.abilities
+                    or definition.armor_category not in {None, "unarmored"}
+                    or bool(actor.worn_items)
+                )
+            )
+            or (
+                row[0] == "point_blank_stance"
+                and (
+                    "point_blank_stance" not in definition.abilities
+                    or not any("ranged" in attack.traits and attack.item_id in actor.held_items for attack in definition.attacks)
+                )
+            )
+            or (
+                row[0] in {"tiger_stance", "wolf_stance"}
+                and (
+                    ("Tiger Stance" if row[0] == "tiger_stance" else "Wolf Stance") not in definition.feats
+                    or definition.armor_category not in {None, "unarmored"}
+                    or bool(actor.worn_items)
+                )
+            )
+        ):
+            raise ValueError("save has invalid Crane Stance state")
+        martial_stances[actor_id] = MartialStanceState(row[0], row[1])
+    stance_rounds_raw = data.get("martial_stance_used_rounds", {})
+    if (
+        not isinstance(stance_rounds_raw, dict)
+        or not set(stance_rounds_raw).issubset(expected_ids)
+        or any(type(value) is not int or not 1 <= value <= round_number for value in stance_rounds_raw.values())
+            or any(
+                not (
+                    "crane_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                    or "point_blank_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                    or "tiger_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                    or "wolf_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                )
+            for actor_id in stance_rounds_raw
+        )
+        or any(stance_rounds_raw.get(actor_id) != stance.entered_round for actor_id, stance in martial_stances.items())
+    ):
+        raise ValueError("save has invalid martial stance action history")
+
     light_orbs_raw = data.get("light_orbs")
     if not isinstance(light_orbs_raw, list):
         raise ValueError("save has invalid Light orbs")
@@ -2828,6 +3298,8 @@ def _state_from_data(data: Any) -> EncounterState:
         ground_items=ground_items,
         item_instances=item_instances,
         raised_shields=raised_shields,
+        martial_stances=martial_stances,
+        martial_stance_used_rounds=dict(stance_rounds_raw),
         initiative_tie_groups=tie_groups,
         initiative_tie_orders=tie_orders,
         initiative_tie_group_index=tie_group_index,
@@ -2835,6 +3307,7 @@ def _state_from_data(data: Any) -> EncounterState:
         actor_start_counts=dict(starts_raw),
         actor_end_counts=dict(ends_raw),
         feint_off_guard_effects=feint_effects,
+        overextending_feint_effects=overextending_effects,
         tumble_behind_exposures=tumble_effects,
         active_effects=effects,
         persistent_effects=persistent_effects,
@@ -2954,7 +3427,7 @@ def _state_from_data(data: Any) -> EncounterState:
                     or state.pending_choice.check_kind == "spell_save"
                 )
                 and state.pending_choice.spell_id in {
-                    "void_warp", "fear", "breathe_fire", "electric_arc",
+                    "daze", "void_warp", "fear", "breathe_fire", "electric_arc",
                     "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "harm",
                     "caustic_blast", "gale_blast",
                 }
@@ -3004,7 +3477,7 @@ def _validate_committed_spell_save_provenance(
         or caster is None
         or target is None
         or spell_id not in {
-            "void_warp", "fear", "breathe_fire", "electric_arc",
+            "daze", "void_warp", "fear", "breathe_fire", "electric_arc",
             "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "harm",
             "caustic_blast", "gale_blast",
         }
@@ -3113,6 +3586,35 @@ def _valid_active_duration_deadline(
         and world_deadline == expected_deadline
         and world_time_seconds >= encounter_start_seconds + (round_number - 1) * 6
         and (not in_progress or world_time_seconds == encounter_start_seconds + (round_number - 1) * 6)
+    )
+
+
+def _valid_focus_duration_deadline(
+    source_start_deadline: int,
+    source_starts: int,
+    round_number: int,
+    world_time_seconds: int,
+    world_deadline: int | None,
+    *,
+    duration_source_starts: int,
+    duration_seconds: int,
+    encounter_start_seconds: int,
+) -> bool:
+    """Validate a focus spell's original cast-time absolute deadline.
+
+    The source-start anchor and absolute deadline are written at cast time;
+    neither is rebased when a later round or Sustain action saves the state.
+    The source may advance within the spell's source-relative duration while
+    the absolute deadline remains the original cast-time clock value.
+    """
+    cast_start = source_start_deadline - duration_source_starts
+    expected_deadline = encounter_start_seconds + (cast_start - 1) * 6 + duration_seconds
+    return bool(
+        cast_start >= 1
+        and cast_start <= source_starts < source_start_deadline
+        and cast_start <= round_number
+        and world_time_seconds >= expected_deadline - duration_seconds
+        and world_deadline == expected_deadline
     )
 
 
@@ -3279,6 +3781,7 @@ def _pending_to_data(pending) -> dict[str, Any] | None:
         "damage_type": pending.damage_type,
         "nonlethal": pending.nonlethal,
         "damage_bonus_dice": pending.damage_bonus_dice,
+        "gravity_weapon_bonus": pending.gravity_weapon_bonus,
         "attack_actions_cost": pending.attack_actions_cost,
         "attack_count_cost": pending.attack_count_cost,
         "ranged_penalty": pending.ranged_penalty,
@@ -3356,6 +3859,7 @@ def _family_command_to_data(command) -> dict[str, Any] | None:
             "type": "Trip", "target_id": command.target_id,
             "maneuver_item_id": command.maneuver_item_id,
             "use_assurance": command.use_assurance,
+            "maneuver_attack_id": command.maneuver_attack_id,
         }
     if type(command) is Grapple:
         return {
@@ -3374,9 +3878,10 @@ def _family_command_to_data(command) -> dict[str, Any] | None:
             "type": "Demoralize", "target_id": command.target_id,
             "spoken_language": command.spoken_language,
             "use_intimidating_glare": command.use_intimidating_glare,
+            "youre_next_reaction": command.youre_next_reaction,
         }
     if type(command) is Feint:
-        return {"type": "Feint", "target_id": command.target_id}
+        return {"type": "Feint", "target_id": command.target_id, "use_overextending": command.use_overextending}
     if type(command) is TumbleThrough:
         return {
             "type": "TumbleThrough",
@@ -3511,18 +4016,23 @@ def _family_command_from_data(data: Any):
         cls = Rage if kind == "Rage" else QuickTempered
         return cls(mode_id=mode_id, temporary_hp_choice=temporary_hp_choice)
     if kind in {"Trip", "Grapple"}:
-        if set(data) != {"type", "target_id", "maneuver_item_id", "use_assurance"}:
+        expected = {"type", "target_id", "maneuver_item_id", "use_assurance"}
+        if kind == "Trip":
+            expected |= {"maneuver_attack_id"}
+        if set(data) != expected and set(data) != expected - {"maneuver_attack_id"}:
             raise ValueError("save has invalid pending maneuver command")
         target_id, item_id = data["target_id"], data["maneuver_item_id"]
         use_assurance = data["use_assurance"]
+        attack_id = data.get("maneuver_attack_id")
         if (
             not isinstance(target_id, str) or not target_id
             or (item_id is not None and (not isinstance(item_id, str) or not item_id))
+            or (attack_id is not None and (not isinstance(attack_id, str) or not attack_id))
             or type(use_assurance) is not bool
         ):
             raise ValueError("save has invalid pending maneuver command")
         cls = Trip if kind == "Trip" else Grapple
-        return cls(target_id, item_id, use_assurance)
+        return cls(target_id, item_id, use_assurance, attack_id) if kind == "Trip" else cls(target_id, item_id, use_assurance)
     if kind == "Escape":
         if set(data) != {"type", "impediment_id", "check_method", "attack_id", "use_assurance"}:
             raise ValueError("save has invalid pending Escape command")
@@ -3535,23 +4045,29 @@ def _family_command_from_data(data: Any):
             raise ValueError("save has invalid pending Escape command")
         return Escape(data["impediment_id"], data["check_method"], data["attack_id"], use_assurance)
     if kind == "Demoralize":
-        if set(data) != {"type", "target_id", "spoken_language", "use_intimidating_glare"}:
+        if set(data) not in (
+            {"type", "target_id", "spoken_language", "use_intimidating_glare"},
+            {"type", "target_id", "spoken_language", "use_intimidating_glare", "youre_next_reaction"},
+        ):
             raise ValueError("save has invalid pending Demoralize command")
         target_id, language, glare = data["target_id"], data["spoken_language"], data["use_intimidating_glare"]
+        youre_next = data.get("youre_next_reaction", False)
         if (
             not isinstance(target_id, str) or not target_id
             or (language is not None and (not isinstance(language, str) or not language))
             or type(glare) is not bool
+            or type(youre_next) is not bool
         ):
             raise ValueError("save has invalid pending Demoralize command")
-        return Demoralize(target_id, language, glare)
+        return Demoralize(target_id, language, glare, youre_next)
     if kind == "Feint":
-        if set(data) != {"type", "target_id"}:
+        if set(data) not in ({"type", "target_id"}, {"type", "target_id", "use_overextending"}):
             raise ValueError("save has invalid pending Feint command")
         target_id = data["target_id"]
-        if not isinstance(target_id, str) or not target_id:
+        use_overextending = data.get("use_overextending", False)
+        if not isinstance(target_id, str) or not target_id or type(use_overextending) is not bool:
             raise ValueError("save has invalid pending Feint command")
-        return Feint(target_id)
+        return Feint(target_id, use_overextending)
     if kind == "TumbleThrough":
         if set(data) != {"type", "path"} or not isinstance(data["path"], list) or not data["path"]:
             raise ValueError("save has invalid pending Tumble Through command")
@@ -3694,7 +4210,7 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
             "spell_save_hero_reroll", "spell_slot",
             "lingering_composition_hero_reroll", "counter_performance_save_choice", "counter_performance_bard_hero_reroll",
         "grabbed_manipulate_hero_reroll",
-        "family_action", "nimble_dodge", "concealment_hero_reroll",
+        "family_action", "nimble_dodge", "reactive_shield", "youre_next", "concealment_hero_reroll",
             "desperate_prayer", "witch_restored_spirit", "witch_restored_spirit_timing",
             "witch_restored_spirit_temp_hp", "witch_restored_spirit_willingness",
     }:
@@ -3738,6 +4254,9 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
     concealment_checked = _required_bool(data, "concealment_checked")
     is_reaction = _required_bool(data, "is_reaction")
     damage_bonus_dice = _required_int(data, "damage_bonus_dice")
+    gravity_weapon_bonus = data.get("gravity_weapon_bonus", False)
+    if type(gravity_weapon_bonus) is not bool:
+        raise ValueError("save has invalid pending Gravity Weapon marker")
     attack_actions_cost = _required_int(data, "attack_actions_cost")
     attack_count_cost = _required_int(data, "attack_count_cost")
     damage_type = data.get("damage_type")
@@ -3875,6 +4394,7 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
         damage_type=damage_type,
         nonlethal=nonlethal,
         damage_bonus_dice=damage_bonus_dice,
+        gravity_weapon_bonus=gravity_weapon_bonus,
         attack_actions_cost=attack_actions_cost,
         attack_count_cost=attack_count_cost,
         ranged_penalty=ints["ranged_penalty"],
@@ -3928,6 +4448,7 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "damage_type": continuation.damage_type,
         "nonlethal": continuation.nonlethal,
         "damage_bonus_dice": continuation.damage_bonus_dice,
+        "gravity_weapon_bonus": continuation.gravity_weapon_bonus,
         "attack_actions_cost": continuation.attack_actions_cost,
         "attack_count_cost": continuation.attack_count_cost,
         "attack_penalty": continuation.attack_penalty,
@@ -3955,7 +4476,9 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "spell_area_direction": None if continuation.spell_area_direction is None else [
             continuation.spell_area_direction.x, continuation.spell_area_direction.y
         ],
+        "widen_spell_area_length_ft": continuation.widen_spell_area_length_ft,
         "spell_mode": continuation.spell_mode,
+        "temporary_hp_choice": continuation.temporary_hp_choice,
         "hunter_aim_intent": (
             None if continuation.hunter_aim_intent is None else [
                 continuation.hunter_aim_intent.target_actor_id,
@@ -3976,6 +4499,8 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "attack_target_off_guard": continuation.attack_target_off_guard,
         "nimble_dodge_decided": continuation.nimble_dodge_decided,
         "nimble_dodge_used": continuation.nimble_dodge_used,
+        "reactive_shield_decided": continuation.reactive_shield_decided,
+        "overextending_feint_penalty": continuation.overextending_feint_penalty,
         "concealment_checked": continuation.concealment_checked,
         "light_control": continuation.light_control,
         "light_point": None if continuation.light_point is None else [
@@ -4034,7 +4559,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has invalid interrupted movement path")
     kind = _required_str(data, "kind")
     optional_strings = {}
-    for key in ("mode", "item_id", "target_id", "attack_id", "damage_type", "movement_kind", "reaction_trigger", "spell_id", "spell_target_id", "spell_target_item_id", "spell_target_wielder_id", "slot_id", "stage", "spell_source_kind", "blood_magic_recipient_id", "light_control", "light_color", "light_attachment_actor_id", "light_replacement_orb_id", "light_orb_id", "spell_mode"):
+    for key in ("mode", "item_id", "target_id", "attack_id", "damage_type", "movement_kind", "reaction_trigger", "spell_id", "spell_target_id", "spell_target_item_id", "spell_target_wielder_id", "slot_id", "stage", "spell_source_kind", "blood_magic_recipient_id", "light_control", "light_color", "light_attachment_actor_id", "light_replacement_orb_id", "light_orb_id", "spell_mode", "temporary_hp_choice"):
         value = data.get(key)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"save has invalid interrupted action {key}")
@@ -4043,6 +4568,12 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         key: _required_int(data, key)
         for key in ("next_step", "damage_bonus_dice", "attack_actions_cost", "attack_count_cost", "attack_penalty", "attack_count", "spell_actions", "ranged_penalty", "guidance_bonus")
     }
+    gravity_weapon_bonus = data.get("gravity_weapon_bonus", False)
+    if type(gravity_weapon_bonus) is not bool:
+        raise ValueError("save has invalid interrupted Gravity Weapon marker")
+    overextending_feint_penalty = data.get("overextending_feint_penalty", 0)
+    if type(overextending_feint_penalty) is not int or overextending_feint_penalty not in {0, -2}:
+        raise ValueError("save has invalid Overextending Feint penalty")
     sorcerous_potency = data.get("sorcerous_potency", 0)
     if type(sorcerous_potency) is not int or sorcerous_potency < 0:
         raise ValueError("save has invalid Sorcerous Potency")
@@ -4101,6 +4632,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
     include_self = data.get("include_self")
     spell_save_degree = data.get("spell_save_degree")
     reach_spell_effective_range_ft = data.get("reach_spell_effective_range_ft")
+    widen_spell_area_length_ft = data.get("widen_spell_area_length_ft")
     if include_self is not None and type(include_self) is not bool:
         raise ValueError("save has invalid interrupted spell self-inclusion")
     if spell_save_degree is not None and (type(spell_save_degree) is not int or not 0 <= spell_save_degree <= 3):
@@ -4111,6 +4643,14 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has invalid committed Reach Spell range")
     if reach_spell_effective_range_ft is not None and kind != "cast":
         raise ValueError("save has Reach Spell range on a non-cast continuation")
+    if widen_spell_area_length_ft is not None and (
+        type(widen_spell_area_length_ft) is not int or widen_spell_area_length_ft <= 0
+    ):
+        raise ValueError("save has invalid committed Widen Spell area")
+    if widen_spell_area_length_ft is not None and (
+        kind != "cast" or optional_strings["spell_id"] != "breathe_fire"
+    ):
+        raise ValueError("save has Widen Spell area on an invalid continuation")
     if (
         integers["next_step"] < 0
         or integers["damage_bonus_dice"] < 0
@@ -4305,6 +4845,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         damage_type=optional_strings["damage_type"],
         nonlethal=_required_bool(data, "nonlethal"),
         damage_bonus_dice=integers["damage_bonus_dice"],
+        gravity_weapon_bonus=gravity_weapon_bonus,
         attack_actions_cost=integers["attack_actions_cost"],
         attack_count_cost=integers["attack_count_cost"],
         attack_penalty=integers["attack_penalty"],
@@ -4322,6 +4863,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         slot_id=optional_strings["slot_id"],
         spell_actions=integers["spell_actions"],
         include_self=include_self,
+        temporary_hp_choice=optional_strings["temporary_hp_choice"],
         spell_source_kind=optional_strings["spell_source_kind"],
         sorcerous_potency=sorcerous_potency,
         blood_magic_recipient_id=optional_strings["blood_magic_recipient_id"],
@@ -4330,6 +4872,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         spell_save_degree=spell_save_degree,
         target_ids=tuple(target_ids),
         spell_area_direction=spell_area_direction,
+        widen_spell_area_length_ft=widen_spell_area_length_ft,
         spell_mode=optional_strings["spell_mode"],
         hunter_aim_intent=hunter_aim_intent,
         reach_spell_effective_range_ft=reach_spell_effective_range_ft,
@@ -4351,6 +4894,11 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         attack_target_off_guard=_required_bool(data, "attack_target_off_guard"),
         nimble_dodge_decided=_required_bool(data, "nimble_dodge_decided"),
         nimble_dodge_used=_required_bool(data, "nimble_dodge_used"),
+        reactive_shield_decided=(
+            _required_bool(data, "reactive_shield_decided")
+            if "reactive_shield_decided" in data else False
+        ),
+        overextending_feint_penalty=overextending_feint_penalty,
         concealment_checked=_required_bool(data, "concealment_checked"),
         targeting_failed=(
             _required_bool(data, "targeting_failed")
@@ -4701,6 +5249,7 @@ def _damage_resolution_to_data(resolution: DamageResolution | None) -> dict[str,
         "damage_type": resolution.damage_type,
         "check": _check_to_data(resolution.check),
         "attack_id": resolution.attack_id,
+        "item_id": resolution.item_id,
         "spell_id": resolution.spell_id,
         "nonlethal": resolution.nonlethal,
         "attacker_critical": resolution.attacker_critical,
@@ -4760,8 +5309,9 @@ def _damage_resolution_from_data(data: Any) -> DamageResolution | None:
     source = _required_str(data, "source")
     damage_type = _required_str(data, "damage_type")
     attack_id = data.get("attack_id")
+    item_id = data.get("item_id")
     spell_id = data.get("spell_id")
-    for name, value in (("attack_id", attack_id), ("spell_id", spell_id)):
+    for name, value in (("attack_id", attack_id), ("item_id", item_id), ("spell_id", spell_id)):
         if value is not None and (not isinstance(value, str) or not value):
             raise ValueError(f"save has invalid damage resolution {name}")
     if source_kind == "strike" and not attack_id:
@@ -4899,6 +5449,7 @@ def _damage_resolution_from_data(data: Any) -> DamageResolution | None:
         damage_type=damage_type,
         check=_check_from_data(data.get("check")),
         attack_id=attack_id,
+        item_id=item_id,
         spell_id=spell_id,
         nonlethal=_required_bool(data, "nonlethal"),
         attacker_critical=_required_bool(data, "attacker_critical"),

@@ -62,6 +62,8 @@ from .model import (
     Cast,
     LingeringComposition,
     ReachSpell,
+    WidenSpell,
+    EnergyAblation,
     Sustain,
     Dismiss,
     Command,
@@ -118,6 +120,7 @@ from .model import (
     is_combat_capable,
 )
 from .persistence import DiceSource, DiceSourceError, load_encounter, save_encounter
+from .spellshape import clear_pending_spellshape, has_pending_spellshape
 from .space import (
     flanking_geometry,
     grid_distance_feet,
@@ -126,6 +129,14 @@ from .space import (
     segment_crosses_cell_interior,
     step_cost,
 )
+
+
+_CARRYABLE_W2_ALCHEMY_EFFECT_KINDS = frozenset({
+    "alchemy_cheetahs_elixir_lesser",
+    "alchemy_bravos_brew_lesser",
+    "alchemy_juggernaut_mutagen_lesser",
+})
+_ALCHEMY_TEMP_HP_CHOICES = frozenset({"keep_existing", "gain_new"})
 from .health import (
     HealthState,
     HealthTransition,
@@ -161,6 +172,7 @@ from .spells import (
     CONCEALMENT_TARGETED_SPELL_IDS,
     SPELLS,
     basic_save_damage,
+    basic_save_damage_result,
     divine_lance_damage,
     heal_range_ft,
     heal_roll,
@@ -340,6 +352,7 @@ class Encounter:
                 if definition.definition_id in {
                     "barbarian_animal_bear_level_2_no_escape",
                     "barbarian_animal_bear_level_2_sudden_charge",
+                    "barbarian_animal_bear_level_2_intimidating_strike",
                 }
                 else None,
             ),
@@ -372,9 +385,12 @@ class Encounter:
         if "Quick Jump" not in definition.feats or actor.prone:
             raise ValueError("save has an unavailable Quick Jump continuation")
         from .skill_content import QUICK_JUMP
+        from .martial_defense import crane_stance_leap_bonus
 
         expected = self._prepare_skill_check(
-            state, actor, "athletics", 15, traits=QUICK_JUMP.traits,
+            state, actor, "athletics",
+            15 - crane_stance_leap_bonus(state, actor.actor_id),
+            traits=QUICK_JUMP.traits,
         )
         result = saved.result
         if (
@@ -393,9 +409,10 @@ class Encounter:
         speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
         if speed < 15:
             raise ValueError("save has Quick Jump below its required Speed")
-        normal_leap = 15 if speed >= 30 else 10
+        leap_bonus = crane_stance_leap_bonus(state, actor.actor_id)
+        normal_leap = (15 if speed >= 30 else 10) + leap_bonus
         maximum = (
-            min((result.total // 5) * 5, speed)
+            min((result.total // 5) * 5 + leap_bonus, speed)
             if result.degree >= DegreeOfSuccess.SUCCESS
             else normal_leap
         )
@@ -436,7 +453,7 @@ class Encounter:
             caster is None
             or continuation.kind != "cast"
             or continuation.spell_id not in SPELLS
-            or caster.reach_spell_pending
+            or has_pending_spellshape(caster)
         ):
             raise ValueError("save has invalid committed Reach Spell range")
         definition = get_definition(caster.definition_id)
@@ -454,6 +471,35 @@ class Encounter:
             or committed != expected
         ):
             raise ValueError("save has forged or unsupported committed Reach Spell range")
+
+    def _validate_committed_widen_spell_area(
+        self, state: EncounterState, continuation: ActionContinuation
+    ) -> None:
+        """Reject a saved cast whose widened cone was not actually committed."""
+        committed = continuation.widen_spell_area_length_ft
+        if committed is None:
+            return
+        caster = state.creatures.get(continuation.actor_id)
+        if (
+            caster is None
+            or continuation.kind != "cast"
+            or continuation.spell_id not in SPELLS
+            or has_pending_spellshape(caster)
+        ):
+            raise ValueError("save has invalid committed Widen Spell area")
+        definition = get_definition(caster.definition_id)
+        from .widen_spell import widened_cone_length
+
+        expected = widened_cone_length(
+            SPELLS[continuation.spell_id], spell_actions=continuation.spell_actions,
+        )
+        if (
+            "widen_spell" not in definition.abilities
+            or "Widen Spell" not in definition.feats
+            or expected is None
+            or committed != expected
+        ):
+            raise ValueError("save has forged or unsupported committed Widen Spell area")
 
     def _validate_tumble_through_continuation(
         self, state: EncounterState, continuation: ActionContinuation
@@ -618,14 +664,47 @@ class Encounter:
             seen.add(id(current))
             self._validate_quick_jump_continuation(state, current)
             self._validate_committed_reach_spell_range(state, current)
+            self._validate_committed_widen_spell_area(state, current)
             self._validate_tumble_through_continuation(state, current)
             self._validate_sudden_charge_continuation(state, current)
             self._validate_no_escape_follow(state, current)
             current = current.parent_continuation
 
+    def _validate_committed_strike_rider_effects(self, state: EncounterState) -> None:
+        """Fail closed for saved effects created by the finite W3 rider seam."""
+        for effect in state.condition_effects:
+            if not effect.effect_id.startswith(("snagging_strike:", "combat_grab:", "brutish_shove:")):
+                continue
+            source = state.creatures.get(effect.source_actor_id)
+            target = state.creatures.get(effect.target_actor_id)
+            if source is None or target is None:
+                raise ValueError("save has a Fighter rider with a missing creature")
+            abilities = get_definition(source.definition_id).abilities
+            if effect.effect_id.startswith("snagging_strike:"):
+                if (
+                    "snagging_strike" not in abilities or effect.kind != "off_guard" or effect.value != 1
+                    or effect.expiration != EffectExpiration(source.actor_id, "start", state.actor_start_counts.get(source.actor_id, 0) + 1)
+                    or grid_distance_feet(source.position, target.position) > 5
+                ):
+                    raise ValueError("save has invalid Snagging Strike effect")
+            elif effect.effect_id.startswith("combat_grab:"):
+                if (
+                    "combat_grab" not in abilities or effect.kind != "grabbed" or effect.value != 1
+                    or effect.expiration.boundary != "end" or effect.expiration.anchor_actor_id != source.actor_id
+                    or effect.dc != self._skill_dc(state, source.actor_id, "athletics")
+                    or effect.expiration.occurrence > state.actor_end_counts.get(source.actor_id, 0) + 2
+                ):
+                    raise ValueError("save has invalid Combat Grab effect")
+            elif (
+                "brutish_shove" not in abilities or effect.kind != "off_guard" or effect.value != 1
+                or effect.expiration != EffectExpiration(source.actor_id, "end", state.actor_end_counts.get(source.actor_id, 0) + 1)
+            ):
+                raise ValueError("save has invalid Brutish Shove effect")
+
     def _validate_pending_context(self) -> None:
         """Reject saved choices whose continuation no longer matches engine state."""
         state = self._state
+        self._validate_committed_strike_rider_effects(state)
         pending = state.pending_choice
         if pending is None:
             return
@@ -1012,6 +1091,9 @@ class Encounter:
             if pending.procedure_id == "barbarian:quick_tempered":
                 self._validate_quick_tempered_offer(state, pending)
                 return
+            if pending.procedure_id == "w4_offensive:exacting_strike":
+                self._validate_w4_exacting_press_pending(state, pending)
+                return
             self._validate_family_pending(state, pending)
             return
         if pending.kind == "nimble_dodge":
@@ -1033,6 +1115,95 @@ class Encounter:
                 )
             ):
                 raise ValueError("save has an unavailable or inconsistent Nimble Dodge choice")
+            return
+        if pending.kind == "youre_next":
+            actor = state.creatures.get(pending.actor_id or "")
+            definition = get_definition(actor.definition_id) if actor is not None else None
+            expected = tuple(
+                candidate.actor_id
+                for candidate in sorted(state.creatures.values(), key=lambda item: item.actor_id)
+                if actor is not None
+                and candidate.team != actor.team
+                and not candidate.defeated and not candidate.unconscious and not candidate.dead
+                and grid_distance_feet(actor.position, candidate.position) <= 60
+            )
+            expected_options = tuple(
+                [ChoiceOption(f"target:{target_id}", f"Demoralize {state.creatures[target_id].label} (+2)") for target_id in expected]
+                + [ChoiceOption("decline", "Decline")]
+            )
+            if (
+                actor is None or definition is None
+                or pending.owner_actor_id != actor.actor_id
+                or "You're Next" not in definition.feats
+                or not actor.reaction_available
+                or not expected
+                or pending.target_ids != expected
+                or pending.options != expected_options
+            ):
+                raise ValueError("save has an unavailable or inconsistent You're Next choice")
+            return
+        if pending.kind == "reactive_shield":
+            continuation = pending.continuation
+            attacker = state.creatures.get(pending.actor_id or "")
+            target = state.creatures.get(pending.target_id or "")
+            attack = self._find_attack(state, attacker, pending.attack_id) if attacker is not None else None
+            if (
+                continuation is None or attacker is None or target is None or attack is None
+                or pending.owner_actor_id != target.actor_id
+                or continuation.actor_id != attacker.actor_id
+                or continuation.target_id != target.actor_id
+                or continuation.kind != "reactive_shield"
+                or "melee" not in attack.traits or "ranged" in attack.traits
+                or not self._reactive_shield_available(state, attacker, target)
+                or pending.options != (
+                    ChoiceOption("use", "Use Reactive Shield (+2 AC)"),
+                    ChoiceOption("decline", "Decline"),
+                )
+            ):
+                raise ValueError("save has an unavailable or inconsistent Reactive Shield choice")
+            check = pending.check
+            if check is None:
+                raise ValueError("save has a Reactive Shield choice without its committed hit check")
+            if (
+                check.attack_id != attack.attack_id
+                or check.attack_count != pending.attack_count
+                or check.map_penalty != pending.attack_penalty
+                or check.traits != tuple(sorted(attack.traits))
+                or pending.attack_penalty != continuation.attack_penalty
+                or pending.attack_count != continuation.attack_count
+            ):
+                raise ValueError("save has an inconsistent Reactive Shield attack context")
+            expected_modifiers = _strike_modifier_breakdown_full(
+                attack,
+                pending.attack_penalty,
+                pending.nonlethal,
+                attacker.prone and not attacker.unconscious,
+                ranged_penalty=pending.ranged_penalty,
+                guidance_bonus=pending.guidance_bonus,
+                enfeebled=self._enfeebled_value(state, attacker.actor_id),
+                lethal_penalty_exempt=self._powerful_fist_lethal_penalty_exempt(
+                    attacker, attack, pending.nonlethal
+                ),
+            )
+            item_modifier = self._attack_item_potency_modifier(
+                state, attacker, attack, item_id=pending.item_id
+            )
+            if item_modifier is not None:
+                expected_modifiers = (*expected_modifiers, item_modifier)
+            expected_modifiers = (
+                *expected_modifiers,
+                *self._strike_condition_modifiers(state, attacker, attack),
+                *self._mutagen_modifiers(state, attacker, "attack", attack_traits=attack.traits),
+            )
+            if check.modifier_breakdown != expected_modifiers or check.modifier != combine_modifiers(expected_modifiers):
+                raise ValueError("save has forged Reactive Shield attack modifiers")
+            actual_continuation = continuation.parent_continuation
+            if check.dc != self._attack_dc(
+                state, attacker, target, attack,
+                target_off_guard=pending.attack_target_off_guard,
+                nimble_dodge=(actual_continuation.nimble_dodge_used if actual_continuation is not None else False),
+            ):
+                raise ValueError("save has forged Reactive Shield target AC")
             return
         if pending.kind == "concealment_hero_reroll":
             self._validate_concealment_pending(state, pending)
@@ -1090,7 +1261,7 @@ class Encounter:
             ) and not (
                 continuation.kind == "family_action"
                 and continuation.reaction_trigger == "manipulate"
-                and continuation.stage == "battle_medicine_check"
+                and continuation.stage in {"battle_medicine_check", "widen_spell"}
             ):
                 raise ValueError("save has a pending reaction for an inconsistent continuation")
             if continuation.kind == "cast" and continuation.spell_id == "runic_weapon":
@@ -1626,10 +1797,10 @@ class Encounter:
             else:
                 if pending.owner_actor_id != target.actor_id or target.health_mode is not HealthMode.PC or target.hero_points < 1:
                     raise ValueError("save has an unavailable spell save Hero Point choice")
-                if pending.spell_id not in {"void_warp", "fear", "breathe_fire", "electric_arc", "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "caustic_blast", "gale_blast"} or check.attack_id is not None:
+                if pending.spell_id not in {"daze", "void_warp", "fear", "breathe_fire", "electric_arc", "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "caustic_blast", "gale_blast"} or check.attack_id is not None:
                     raise ValueError("save has an unsupported pending spell save")
                 save_statistic = (
-                    "will" if pending.spell_id == "fear"
+                    "will" if pending.spell_id in {"daze", "fear"}
                     else "reflex" if pending.spell_id in {"breathe_fire", "electric_arc", "tempest_surge", "caustic_blast"}
                     else "fortitude"
                 )
@@ -1718,9 +1889,16 @@ class Encounter:
                 or pending.owner_actor_id != actor.actor_id
                 or actor.health_mode is not HealthMode.PC or actor.hero_points < 1
                 or continuation.actor_id != actor.actor_id
-                or continuation.kind not in {"cast", "interact", "ranged_strike"}
+                or continuation.kind not in {"cast", "interact", "ranged_strike", "family_action"}
                 or continuation.movement_kind not in {"manipulate", "ranged"}
-                or continuation.stage != "grabbed_manipulate_flat_check"
+                or (
+                    continuation.kind != "family_action"
+                    and continuation.stage != "grabbed_manipulate_flat_check"
+                )
+                or (
+                    continuation.kind == "family_action"
+                    and continuation.stage != "widen_spell_grabbed_flat_check"
+                )
                 or check.modifier != 0 or check.dc != 5
                 or check.attack_id is not None or check.map_penalty != 0
                 or check.modifier_breakdown
@@ -1760,6 +1938,23 @@ class Encounter:
             raise ValueError("save has a pending Strike for an unavailable item identity")
         if pending.damage_type not in self._attack_damage_types(attack):
             raise ValueError("save has an illegal pending Strike damage type")
+        gravity_effect_active = any(
+            effect.kind == "gravity_weapon"
+            and effect.source_actor_id == actor.actor_id
+            and effect.target_actor_id == actor.actor_id
+            and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
+            for effect in state.active_effects
+        )
+        expected_gravity_bonus = (
+            attack.item_id is not None
+            and gravity_effect_active
+            and actor.gravity_weapon_used_round == state.round_number
+            and actor.gravity_weapon_bonus_attack_id == attack.attack_id
+        )
+        if pending.gravity_weapon_bonus != expected_gravity_bonus:
+            raise ValueError("save has forged or inconsistent Gravity Weapon Strike provenance")
+        if pending.continuation is not None and pending.continuation.gravity_weapon_bonus != pending.gravity_weapon_bonus:
+            raise ValueError("save has inconsistent Gravity Weapon continuation provenance")
         if pending.nonlethal not in (True, False):
             raise ValueError("save has an invalid pending Strike intent")
         if pending.attack_actions_cost not in (0, 1, 2) or pending.attack_count_cost not in (0, 1, 2):
@@ -1774,6 +1969,7 @@ class Encounter:
                 "stand": "stand",
                 "ranged_strike": "ranged",
                 "cast": "manipulate",
+                "family_action": "manipulate",
             }
             justice_retaliation = (
                 continuation is not None
@@ -1783,6 +1979,10 @@ class Encounter:
             if continuation is None or (
                 not justice_retaliation
                 and expected_reaction_parent.get(continuation.kind) != continuation.reaction_trigger
+            ) or (
+                continuation is not None
+                and continuation.kind == "family_action"
+                and continuation.stage != "widen_spell"
             ):
                 raise ValueError("save has a pending reaction Strike without its parent action")
             if continuation.must_disrupt_on_critical != (continuation.reaction_trigger == "manipulate"):
@@ -1821,10 +2021,34 @@ class Encounter:
                 and pending.attack_actions_cost == 0
                 and pending.attack_count_cost == 1
             )
+            intimidating_strike = (
+                continuation is not None
+                and continuation.kind == "intimidating_strike"
+                and continuation.actor_id == actor.actor_id
+                and continuation.target_id == target.actor_id
+                and continuation.attack_id == attack.attack_id
+                and "intimidating_strike" in get_definition(actor.definition_id).abilities
+                and pending.attack_actions_cost == 2
+                and pending.attack_count_cost == 1
+                and "melee" in attack.traits
+            )
+            paired_strike_subordinate = (
+                continuation is not None
+                and continuation.kind == "paired_strike"
+                and continuation.paired_strike is not None
+                and pending.attack_actions_cost == 0
+                and pending.attack_count_cost == 1
+            )
+            paired_double_slice_non_agile = (
+                paired_strike_subordinate
+                and continuation.paired_strike.activity_id == "fighter:double_slice"
+                and continuation.paired_strike.next_index == 1
+                and "agile" not in attack.traits
+            )
             if (
-                pending.attack_actions_cost not in ((0, 1, 2) if sudden_charge_strike else (1, 2))
+                pending.attack_actions_cost not in ((0, 1, 2) if (sudden_charge_strike or paired_strike_subordinate) else (1, 2))
                 or pending.attack_count_cost not in (1, 2)
-                or (not hunter_aim and not sudden_charge_strike and pending.attack_count_cost != pending.attack_actions_cost)
+                or (not hunter_aim and not sudden_charge_strike and not intimidating_strike and not paired_strike_subordinate and pending.attack_count_cost != pending.attack_actions_cost)
                 or (hunter_aim and pending.attack_actions_cost != 2)
             ):
                 raise ValueError("save has inconsistent pending Strike costs")
@@ -1853,10 +2077,13 @@ class Encounter:
                 raise ValueError("save has impossible pending Strike count")
             attacks_before = actor.strikes_this_turn - pending.attack_count_cost
             expected_penalty = multiple_attack_penalty(attacks_before, attack.traits)
+            if paired_double_slice_non_agile:
+                expected_penalty -= 2
             expected_count = attacks_before + 1
             if (
                 pending.attack_actions_cost == 2
                 and not hunter_aim
+                and not intimidating_strike
                 and "vicious_swing" not in get_definition(actor.definition_id).abilities
             ):
                 raise ValueError("save has an unsupported pending two-action Strike")
@@ -1869,9 +2096,7 @@ class Encounter:
         distance = grid_distance_feet(actor.position, target.position)
         expected_ranged_penalty = 0
         if "ranged" in attack.traits:
-            range_increment_ft, max_range_ft = self._effective_ranged_profile(
-                state, actor, attack,
-            )
+            range_increment_ft, max_range_ft = self._effective_ranged_profile(state, actor, attack)
             if max_range_ft is None or range_increment_ft is None or distance > max_range_ft:
                 raise ValueError("save has an out-of-range pending Strike")
             expected_ranged_penalty = -2 * max(0, (distance - 1) // range_increment_ft)
@@ -1911,6 +2136,18 @@ class Encounter:
                 "Hunter's Aim",
             ))
         expected_modifiers = (*expected_modifiers, *self._strike_condition_modifiers(state, actor, attack), *self._mutagen_modifiers(state, actor, "attack", attack_traits=attack.traits))
+        from .skill_actions import overextending_feint_penalty
+
+        saved_overextending_penalty = overextending_feint_penalty(
+            tuple(state.overextending_feint_effects),
+            attacker_id=actor.actor_id,
+            target_id=target.actor_id,
+            actor_end_counts=state.actor_end_counts,
+        )
+        if saved_overextending_penalty:
+            expected_modifiers = (*expected_modifiers, Modifier(
+                saved_overextending_penalty, "circumstance", "Overextending Feint"
+            ))
         if check.modifier_breakdown != expected_modifiers or check.modifier != combine_modifiers(expected_modifiers):
             raise ValueError("save has a pending check with inconsistent Strike modifiers")
         if (
@@ -2081,8 +2318,9 @@ class Encounter:
                 )
             ):
                 raise ValueError("save has inconsistent Divine Lance concealment MAP state")
-            elif pending.spell_id in {"soothe", "protection", "fear", "void_warp", "guidance", "stabilize"}:
+            elif pending.spell_id in {"daze", "soothe", "protection", "fear", "void_warp", "guidance", "stabilize"}:
                 expected_actions = {
+                    "daze": 2,
                     "soothe": 2,
                     "protection": 2,
                     "fear": 2,
@@ -3438,12 +3676,19 @@ class Encounter:
 
         if state.ground_items:
             raise ValueError("all party gear must be carried before leaving the encounter")
-        if (
-            state.active_effects
-            or state.active_item_effects
-            or state.persistent_effects
-            or state.giant_centipede_venom_afflictions
-        ):
+        carried_active_effects: list[ActiveSpellEffect] = []
+        for effect in state.active_effects:
+            if effect.kind not in _CARRYABLE_W2_ALCHEMY_EFFECT_KINDS:
+                raise ValueError("next encounter cannot carry surviving turn-bound spell effects")
+            if effect.source_actor_id not in retained_ids or effect.target_actor_id not in retained_ids:
+                raise ValueError("next encounter cannot carry an item effect from a departed actor")
+            if effect.expires_at_world_time is None:
+                raise ValueError("next encounter cannot carry an item effect without an absolute expiry")
+            if effect.expires_at_world_time > state.world_time_seconds:
+                # Scene-local source-start occurrences reset to zero in the
+                # new scene; preserve only the absolute remaining duration.
+                carried_active_effects.append(replace(effect, expires_at_source_start=1))
+        if state.active_item_effects or state.persistent_effects or state.giant_centipede_venom_afflictions:
             raise ValueError("next encounter cannot carry surviving turn-bound spell effects")
         if state.condition_effects or state.feint_off_guard_effects:
             raise ValueError("next encounter cannot carry surviving turn-bound conditions")
@@ -3551,6 +3796,8 @@ class Encounter:
                 actor.composition_cast_turn_start = 0
                 actor.must_leave_occupied = False
                 actor.precision_used_round = 0
+                actor.gravity_weapon_used_round = 0
+                actor.gravity_weapon_bonus_attack_id = None
                 actor.panache = False
                 actor.panache_expires_at_end = None
                 actor.escape_lockout_until_start = 0
@@ -3592,7 +3839,7 @@ class Encounter:
             actor_start_counts={actor_id: 0 for actor_id in creatures},
             actor_end_counts={actor_id: 0 for actor_id in creatures},
             feint_off_guard_effects=[],
-            active_effects=[],
+            active_effects=carried_active_effects,
             active_item_effects=[],
             guidance_immunities={
                 actor_id: 601 for actor_id in guidance_deadlines
@@ -3619,8 +3866,9 @@ class Encounter:
             definition = get_definition(placement.definition_id)
             if definition.initiative_exempt:
                 continue
-            modifier = self._initiative_modifier_for_definition(
-                definition, placement.initiative_skill,
+            modifier = self._initiative_modifier_for_state(
+                next_state, next_state.creatures[placement.actor_id], definition,
+                placement.initiative_skill,
                 weather_perception_penalty=(0 if "storm_born" in definition.abilities else next_setup.weather_perception_circumstance_penalty),
             )
             next_state.creatures[placement.actor_id].initiative = dice.draw(20) + modifier
@@ -3698,7 +3946,8 @@ class Encounter:
                         EffectView(effect.kind, effect.source_actor_id,
                                    effect.target_actor_id, effect.value,
                                    effect.expires_at_source_start,
-                                   effect.expires_at_world_time)
+                                   effect.expires_at_world_time,
+                                   effect.effect_id)
                         for effect in state.active_effects
                         if effect.target_actor_id == creature.actor_id
                     ),
@@ -3942,11 +4191,83 @@ class Encounter:
                 if "melee" in attack.traits and self._strike_targets(actor, state, attack)
             )
         )
+        can_intimidating_strike = (
+            can_act and actions >= 2 and not actor.must_leave_occupied
+            and "intimidating_strike" in definition.abilities
+            and any(
+                "melee" in attack.traits and self._strike_targets(actor, state, attack)
+                and self._action_permitted(
+                    state, actor, "intimidating_strike",
+                    frozenset({"attack", "emotion", "fear", "mental"}),
+                )
+                for attack in usable
+            )
+        )
+        free_hand_targets = any(
+            grid_distance_feet(actor.position, state.creatures[target_id].position) <= 5
+            for attack in usable if "melee" in attack.traits
+            for target_id in self._strike_targets(actor, state, attack)
+        )
+        can_snagging_strike = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "snagging_strike" in definition.abilities
+            and self._free_hands(state, definition, actor) >= 1
+            and free_hand_targets
+            and self._action_permitted(state, actor, "snagging_strike", frozenset({"attack"}))
+        )
+        can_combat_grab = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "combat_grab" in definition.abilities and actor.strikes_this_turn >= 1
+            and self._free_hands(state, definition, actor) >= 1
+            and free_hand_targets
+            and self._action_permitted(state, actor, "combat_grab", frozenset({"attack", "press"}))
+        )
+        can_brutish_shove = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "brutish_shove" in definition.abilities and actor.strikes_this_turn >= 1
+            and any(
+                "melee" in attack.traits and attack.hands_required >= 2
+                and self._strike_targets(actor, state, attack)
+                for attack in usable
+            )
+            and self._action_permitted(state, actor, "brutish_shove", frozenset({"attack", "press"}))
+        )
         can_sudden_charge = (
             can_act and actions >= 2 and not actor.must_leave_occupied
             and "sudden_charge" in definition.abilities
             and actor.flourish_used_round != state.round_number
             and self._action_permitted(state, actor, "sudden_charge", frozenset({"flourish", "move"}))
+        )
+        melee_pair_attacks = tuple(
+            attack for attack in usable
+            if "melee" in attack.traits and self._strike_targets(actor, state, attack)
+        )
+        can_exacting_strike = (
+            can_act and actor.strikes_this_turn >= 1 and not actor.must_leave_occupied and "exacting_strike" in definition.abilities
+            and bool(melee_pair_attacks)
+            and self._action_permitted(state, actor, "exacting_strike", frozenset({"attack"}))
+        )
+        can_double_slice = (
+            can_act and actions >= 2 and not actor.must_leave_occupied
+            and "double_slice" in definition.abilities
+            and sum(attack.hands_required == 1 for attack in melee_pair_attacks) >= 2
+            and self._action_permitted(state, actor, "double_slice", frozenset({"attack"}))
+        )
+        hunted_prey = actor.hunted_prey
+        can_twin_takedown = (
+            can_act and not actor.must_leave_occupied and "twin_takedown" in definition.abilities
+            and hunted_prey is not None and hunted_prey.target_actor_id in state.creatures
+            and sum(attack.attack_id != "shortbow" for attack in melee_pair_attacks) >= 2
+            and hunted_prey.target_actor_id in {
+                target_id for attack in melee_pair_attacks
+                for target_id in self._strike_targets(actor, state, attack)
+            }
+            and self._action_permitted(state, actor, "twin_takedown", frozenset({"flourish"}))
+        )
+        can_twin_feint = (
+            can_act and actions >= 2 and not actor.must_leave_occupied and "twin_feint" in definition.abilities
+            and sum(bool({"agile", "finesse"} & attack.traits) for attack in melee_pair_attacks) >= 2
+            and self._action_permitted(state, actor, "twin_feint", frozenset({"attack"}))
         )
         from .monk import is_flurry_strike
 
@@ -4010,13 +4331,101 @@ class Encounter:
             can_act
             and actions >= 1
             and not actor.must_leave_occupied
-            and not actor.reach_spell_pending
+            and not has_pending_spellshape(actor)
             and "reach_spell" in definition.abilities
             and "Reach Spell" in definition.feats
             and self._action_permitted(
                 state, actor, "reach_spell", frozenset({"concentrate", "spellshape"})
             )
         )
+        can_widen_spell = (
+            can_act
+            and actions >= 1
+            and not actor.must_leave_occupied
+            and not has_pending_spellshape(actor)
+            and "widen_spell" in definition.abilities
+            and "Widen Spell" in definition.feats
+            and self._action_permitted(
+                state, actor, "widen_spell", frozenset({"manipulate", "spellshape"})
+            )
+        )
+        can_energy_ablation = (
+            can_act
+            and actions >= 1
+            and not actor.must_leave_occupied
+            and not has_pending_spellshape(actor)
+            and "energy_ablation" in definition.abilities
+            and "Energy Ablation" in definition.feats
+            and self._action_permitted(state, actor, "energy_ablation", frozenset({"spellshape"}))
+        )
+        can_cackle = (
+            "cackle" in definition.abilities
+            and "Cackle" in definition.feats
+            and actor.focus_points > 0
+            and actor.witch_cackle_used_start != state.actor_start_counts.get(actor.actor_id, 0)
+            and actor.witch_hex_cast_start != state.actor_start_counts.get(actor.actor_id, 0)
+            and any(
+                effect.kind == "stoke_the_heart" and effect.source_actor_id == actor.actor_id
+                for effect in state.active_effects
+            )
+            and self._action_permitted(state, actor, "cackle", frozenset({"auditory", "concentrate"}))
+        )
+        from .martial_defense import (
+            crane_stance_is_active, dueling_parry_requirements_met,
+            extravagant_parry_requirements_met,
+        )
+        from .martial_defense import point_blank_stance_is_active
+
+        can_dueling_parry = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "dueling_parry" in definition.abilities
+            and dueling_parry_requirements_met(state.item_instances, actor, definition)
+            and self._action_permitted(state, actor, "dueling_parry", frozenset())
+        )
+        can_extravagant_parry = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "Extravagant Parry" in definition.feats
+            and extravagant_parry_requirements_met(state, actor, definition)[0]
+            and self._action_permitted(state, actor, "extravagant_parry", frozenset())
+        )
+        can_crane_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "crane_stance" in definition.abilities
+            and definition.armor_category in {None, "unarmored"}
+            and not actor.worn_items
+            and not crane_stance_is_active(state, actor.actor_id)
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "crane_stance", frozenset({"stance"}))
+        )
+        can_dismiss_crane_stance = crane_stance_is_active(state, actor.actor_id)
+        can_point_blank_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "point_blank_stance" in definition.abilities
+            and not point_blank_stance_is_active(state, actor.actor_id)
+            and state.martial_stances.get(actor.actor_id) is None
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and any("ranged" in attack.traits and attack.item_id in actor.held_items for attack in definition.attacks)
+            and self._action_permitted(state, actor, "point_blank_stance", frozenset({"stance"}))
+        )
+        from .monk_stances import tiger_stance_is_active, wolf_stance_is_active
+        can_tiger_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "tiger_stance" in definition.abilities
+            and not actor.worn_items
+            and state.martial_stances.get(actor.actor_id) is None
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "tiger_stance", frozenset({"stance"}))
+        )
+        can_wolf_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "wolf_stance" in definition.abilities
+            and not actor.worn_items
+            and state.martial_stances.get(actor.actor_id) is None
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "wolf_stance", frozenset({"stance"}))
+        )
+        can_dismiss_tiger_stance = tiger_stance_is_active(state, actor.actor_id)
+        can_dismiss_wolf_stance = wolf_stance_is_active(state, actor.actor_id)
         can_arcane_bond = (
             can_act
             and "arcane_bond" in definition.abilities
@@ -4176,12 +4585,32 @@ class Encounter:
             can_step = False
             can_strike = False
             can_vicious = False
+            can_intimidating_strike = False
+            can_snagging_strike = False
+            can_combat_grab = False
+            can_brutish_shove = False
             can_sudden_charge = False
+            can_exacting_strike = False
+            can_double_slice = False
+            can_twin_takedown = False
+            can_twin_feint = False
             can_flurry = False
             can_hunt_prey = False
             can_hunted_shot = False
             can_hunters_aim = False
             can_reach_spell = False
+            can_widen_spell = False
+            can_energy_ablation = False
+            can_cackle = False
+            can_dueling_parry = False
+            can_extravagant_parry = False
+            can_crane_stance = False
+            can_dismiss_crane_stance = False
+            can_point_blank_stance = False
+            can_tiger_stance = False
+            can_wolf_stance = False
+            can_dismiss_tiger_stance = False
+            can_dismiss_wolf_stance = False
             can_stand = False
             can_crawl = False
             can_release = False
@@ -4204,19 +4633,42 @@ class Encounter:
                 ("activate_alchemy", can_act and activate_alchemy_available),
                 ("quick_bomber", can_act and "quick_bomber" in definition.abilities and any(
                     state.item_instances.get(item) is not None
-                    and self._admitted_bomber_bomb_facts(state.item_instances[item].definition_id) is not None
+                    and self._admitted_bomber_bomb_facts(
+                        state.item_instances[item].definition_id,
+                        character_level=state.alchemy_states[actor.actor_id].character_level,
+                    ) is not None
                     for item in actor.held_items + actor.stowed_items
                 )),
                 ("confident_finisher", can_finisher),
                 ("devise_stratagem", devise_available),
                 ("known_weaknesses", known_weaknesses_available),
                 ("vicious_swing", can_vicious),
+                ("intimidating_strike", can_intimidating_strike),
+                ("snagging_strike", can_snagging_strike),
+                ("combat_grab", can_combat_grab),
+                ("brutish_shove", can_brutish_shove),
                 ("sudden_charge", can_sudden_charge),
+                ("exacting_strike", can_exacting_strike),
+                ("double_slice", can_double_slice),
+                ("twin_takedown", can_twin_takedown),
+                ("twin_feint", can_twin_feint),
+                ("dueling_parry", can_dueling_parry),
+                ("extravagant_parry", can_extravagant_parry),
+                ("crane_stance", can_crane_stance),
+                ("dismiss_crane_stance", can_dismiss_crane_stance),
+                ("point_blank_stance", can_point_blank_stance),
+                ("tiger_stance", can_tiger_stance),
+                ("wolf_stance", can_wolf_stance),
+                ("dismiss_tiger_stance", can_dismiss_tiger_stance),
+                ("dismiss_wolf_stance", can_dismiss_wolf_stance),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
                 ("hunted_shot", can_hunted_shot),
                 ("hunter_aim", can_hunters_aim),
                 ("reach_spell", can_reach_spell),
+                ("widen_spell", can_widen_spell),
+                ("energy_ablation", can_energy_ablation),
+                ("cackle", can_cackle),
                 ("interact", bool(interact_options)),
                 ("release", can_release),
                 ("stand", can_stand),
@@ -4228,7 +4680,7 @@ class Encounter:
                 ("lingering_composition", can_act and actor.focus_points > 0 and "lingering_composition" in definition.abilities),
                 ("drain_bonded_item", can_arcane_bond),
                 ("cast", any(not spell.unavailable_reason and (spell.cantrip or spell.slots) for spell in spells)),
-                ("sustain_light", can_act and self._light_control_available(state, actor, "sustain")),
+                ("sustain_light", can_act and (self._light_control_available(state, actor, "sustain") or self._hymn_control_available(state, actor))),
                 ("dismiss_light", can_act and self._light_control_available(state, actor, "dismiss")),
                 ("dismiss_life_link", self._active_life_link(state, actor) is not None),
                 ("rage", rage_available),
@@ -4279,7 +4731,7 @@ class Encounter:
             spell = SPELLS.get(spell_id)
             if spell is None:
                 continue
-            if spell_id in {"lingering_composition", "counter_performance"}:
+            if spell_id in {"lingering_composition", "counter_performance", "cackle"}:
                 # This focus spellshape is a dedicated free action, not a
                 # creature-targeted Cast entry. Counter Performance is a
                 # saved reaction offered only by its eligible trigger.
@@ -4354,7 +4806,7 @@ class Encounter:
                         traits=tuple(sorted(spell_traits(spell_id, actions))),
                     ))
                     continue
-                if spell_id in {"angelic_halo", "courageous_anthem", "shield", "detect_magic"}:
+                if spell_id in {"angelic_halo", "courageous_anthem", "shield", "detect_magic", "weapon_surge", "gravity_weapon"}:
                     target_options.append(SpellTargetOption(
                         actions, (),
                         traits=tuple(sorted(spell_traits(spell_id, actions))),
@@ -4452,7 +4904,9 @@ class Encounter:
                 and self._is_living_target(target)
                 and "void_healing" not in get_definition(target.definition_id).abilities
             )
-        if spell_id in {"force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
+        if spell_id == "hymn_of_healing":
+            return target.team == caster.team and self._is_living_target(target)
+        if spell_id in {"daze", "force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
             return target.actor_id != caster.actor_id and not target.dead and not target.defeated
         if spell_id == "vitality_lash":
             return target.actor_id != caster.actor_id and not target.dead and (
@@ -4479,8 +4933,12 @@ class Encounter:
             return self._is_living_target(target)
         return not target.dead and not target.defeated
 
-    def _breathe_fire_targets(self, state, caster, direction: Position) -> tuple[str, ...]:
-        cells = cone_cells(Footprint(caster.position), direction, 15)
+    def _breathe_fire_targets(
+        self, state, caster, direction: Position, *, length_ft: int = 15
+    ) -> tuple[str, ...]:
+        if type(length_ft) is not int or length_ft not in {15, 20}:
+            raise ValueError("Breathe Fire has an unsupported cone length")
+        cells = cone_cells(Footprint(caster.position), direction, length_ft)
         return tuple(
             target.actor_id
             for target in state.creatures.values()
@@ -4518,6 +4976,20 @@ class Encounter:
         except UnsupportedHealthRuleError as error:
             return self._result(ResultStatus.UNSUPPORTED, str(error))
 
+        # Dueling Parry has a continuous one-weapon/empty-other-hands
+        # requirement. Resolve every completed command first, then discard a
+        # guard whose equipment facts no longer qualify; a later retrieve or
+        # draw cannot reactivate that same use of the feat.
+        from .martial_defense import (
+            end_dueling_parries_with_broken_requirements,
+            end_extravagant_parries_with_broken_requirements,
+        )
+        from .fighter import end_snagging_strikes_out_of_reach
+
+        end_dueling_parries_with_broken_requirements(draft)
+        end_extravagant_parries_with_broken_requirements(draft)
+        end_snagging_strikes_out_of_reach(draft)
+
         self._state = draft
         self._dice = dice
         pending = draft.pending_choice is not None
@@ -4548,11 +5020,11 @@ class Encounter:
             raise _Rejected("There is no active actor.")
         actor = state.creatures[actor_id]
         self._refresh_barbarian_state(state, actor)
-        # Reach Spell is spent by the next eligible Cast; every other action
-        # (including a free action or End Turn) invalidates its pending marker.
+        # A spellshape is spent by the next Cast; every other action (including
+        # a free action or End Turn) invalidates its pending marker.
         # Rejected commands remain atomic because this is the draft state.
-        if actor.reach_spell_pending and not isinstance(command, (Cast, ReachSpell)):
-            actor.reach_spell_pending = False
+        if has_pending_spellshape(actor) and not isinstance(command, (Cast, ReachSpell, WidenSpell, EnergyAblation)):
+            clear_pending_spellshape(actor)
         lingering = actor.lingering_composition_pending
         fleeing = self._active_fleeing_effect(state, actor)
         if fleeing is not None and not isinstance(command, Flee):
@@ -4810,9 +5282,31 @@ class Encounter:
 
     def _step(self, state: EncounterState, dice: DiceSource, actor: CreatureState, command: Step) -> list[Event]:
         definition = get_definition(actor.definition_id)
-        if effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor)) < 10:
+        speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
+        from .monk_stances import tiger_step_enabled
+
+        tiger = tiger_step_enabled(state, actor.actor_id, speed)
+        if speed < 10:
             raise _Rejected("Step requires a land Speed of at least 10 feet.")
-        return self._begin_move(state, dice, actor, (command.destination,), "step", reactions=False, max_distance=5)
+        path = command.path or (command.destination,)
+        if path[-1] != command.destination:
+            raise _Rejected("Step destination must be the final square in its path.")
+        if command.path is not None and not tiger:
+            raise _Rejected("A multi-square Step requires active Tiger Stance and Speed 20 or higher.")
+        if tiger and len(path) > 2:
+            raise _Rejected("Tiger Stance supports at most two Step squares.")
+        if len(path) == 2 and not tiger:
+            raise _Rejected("An ordinary Step moves only one square.")
+        if tiger and len(path) == 2:
+            if any(
+                self._occupant_at(state, point, except_actor=actor.actor_id) is not None
+                for point in path
+            ):
+                raise _Rejected("Tiger Stance cannot Step through an occupied intermediate square.")
+        return self._begin_move(
+            state, dice, actor, path, "step", reactions=False,
+            max_distance=10 if tiger else 5,
+        )
 
     def _crawl(self, state: EncounterState, dice: DiceSource, actor: CreatureState, command: Crawl) -> list[Event]:
         if not actor.prone:
@@ -5044,14 +5538,36 @@ class Encounter:
             advanced_alchemy_capacity,
             build_alchemy_state,
         )
-        from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS
-        from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+        from .alchemist_content import (
+            BOMBER_FIELD_FORMULA_IDS,
+            BOMBER_FORMULA_IDS,
+            BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS,
+            BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS,
+        )
+        from .content import (
+            BOMBER_ALCHEMIST_LEVEL_2,
+            BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS,
+            BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS,
+            BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT,
+        )
         for actor in state.creatures.values():
             definition = get_definition(actor.definition_id)
             if "bomber_alchemist" not in definition.abilities:
                 continue
-            level_two = definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2.definition_id
-            formula_ids = BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS if level_two else BOMBER_FORMULA_IDS
+            level_two = definition.definition_id in {
+                BOMBER_ALCHEMIST_LEVEL_2.definition_id,
+                BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id,
+                BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id,
+            }
+            formula_ids = (
+                BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS
+                if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id
+                else BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+                if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id
+                else BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+                if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2.definition_id
+                else BOMBER_FORMULA_IDS
+            )
             state.alchemy_states[actor.actor_id] = build_alchemy_state(
                 AlchemyBuildChoices(
                     "bomber",
@@ -5111,6 +5627,14 @@ class Encounter:
         formula = FORMULAS_BY_ID[infused.formula_id]
         if not isinstance(formula.facts, (ElixirFacts, MutagenFacts, PoisonFacts)):
             raise _Rejected("That selected formula activation is not available.")
+        is_juggernaut = formula.formula_id == "juggernaut_mutagen_lesser"
+        if is_juggernaut:
+            if actor.temporary_hp > 0 and command.temporary_hp_choice not in _ALCHEMY_TEMP_HP_CHOICES:
+                raise _Rejected("Choose keep_existing or gain_new for the temporary-HP pool before drinking Juggernaut Mutagen.")
+            if actor.temporary_hp == 0 and command.temporary_hp_choice is not None:
+                raise _Rejected("A temporary-HP choice is only available when an existing pool remains.")
+        elif command.temporary_hp_choice is not None:
+            raise _Rejected("A temporary-HP choice is only available for Juggernaut Mutagen.")
         if isinstance(formula.facts, PoisonFacts):
             return self._coat_giant_centipede_venom(state, dice, actor, command, infused, formula)
         target = state.creatures.get(command.target_id or actor.actor_id)
@@ -5125,33 +5649,53 @@ class Encounter:
         except AlchemyRuleError as error:
             raise _Rejected(str(error)) from error
         if actor.actions_remaining < formula.activation_actions:
-            raise _Rejected("This formula activation requires one action.")
+            raise _Rejected(f"This formula activation requires {formula.activation_actions} action(s).")
         actor.actions_remaining -= formula.activation_actions
         actor.held_items.remove(command.item_id)
         state.consumed_infused_item_ids.add(command.item_id)
         events=[]
         if isinstance(formula.facts, ElixirFacts):
-            if formula.formula_id == "elixir_of_life_minor":
+            facts = formula.facts
+            duration = facts.duration_seconds
+            if duration is None:
+                raise _Rejected(f"{formula.name} has no admitted duration.")
+            if facts.effect == "heal":
                 amount = dice.draw(6)
                 if target.health_mode is HealthMode.PC:
                     self._apply_health_transition(state, target, pc_healing(self._health_state(target), amount))
                 else:
                     target.hp = min(get_definition(target.definition_id).hp, target.hp + amount)
-                bonus = formula.facts.save_bonuses[0]
-                state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, bonus.bonus, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + bonus.duration_seconds))
-                events.append(Event("alchemy_healing", actor.actor_id, target.actor_id, f"{target.label} drinks Minor Elixir of Life and heals {amount} HP (1d6 {amount}); +1 item to Fortitude saves against poison or disease for 10 minutes."))
-            else:
-                bonus = formula.facts.save_bonuses[0]
-                from .alchemy import quick_alchemy_effect_duration
-                duration = quick_alchemy_effect_duration(bonus.duration_seconds) if infused.creation_kind == "quick_alchemy" else bonus.duration_seconds
+                bonus = facts.save_bonuses[0]
                 state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, bonus.bonus, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
-                events.append(Event("alchemy_save_bonus", actor.actor_id, target.actor_id, f"{target.label} gains +{bonus.bonus} to Fortitude saves against {bonus.against.replace('_', ' ')}."))
+                events.append(Event("alchemy_healing", actor.actor_id, target.actor_id, f"{target.label} drinks Minor Elixir of Life and heals {amount} HP (1d6 {amount}); +1 item to Fortitude saves against poison or disease for 10 minutes."))
+            elif facts.effect == "save_bonus":
+                bonus = facts.save_bonuses[0]
+                from .alchemy import quick_alchemy_effect_duration
+                duration = quick_alchemy_effect_duration(duration) if infused.creation_kind == "quick_alchemy" else duration
+                state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, bonus.bonus, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+                detail = " and +2 against fear" if formula.formula_id == "bravos_brew_lesser" else ""
+                events.append(Event("alchemy_save_bonus", actor.actor_id, target.actor_id, f"{target.label} gains +{bonus.bonus} to {bonus.statistic.title()} saves for {duration} seconds{detail}."))
+            elif facts.effect == "speed_bonus":
+                if facts.speed_bonus_ft <= 0:
+                    raise _Rejected(f"{formula.name} has no admitted Speed bonus.")
+                from .alchemy import quick_alchemy_effect_duration
+                duration = quick_alchemy_effect_duration(duration) if infused.creation_kind == "quick_alchemy" else duration
+                state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, facts.speed_bonus_ft, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+                events.append(Event("alchemy_speed_bonus", actor.actor_id, target.actor_id, f"{target.label} gains a +{facts.speed_bonus_ft}-foot status bonus to Speed for {duration} seconds."))
+            else:
+                raise _Rejected(f"{formula.name} has an unsupported elixir effect.")
         elif isinstance(formula.facts, MutagenFacts):
             if target.actor_id != actor.actor_id:
                 raise _Rejected("The selected mutagens are drunk only by their user.")
             from .alchemy import quick_alchemy_effect_duration
             duration = quick_alchemy_effect_duration(formula.facts.duration_seconds) if infused.creation_kind == "quick_alchemy" else formula.facts.duration_seconds
-            prior = next((effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind in {"alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser"}), None)
+            mutagen_kinds = {
+                "alchemy_bestial_mutagen_lesser",
+                "alchemy_cognitive_mutagen_lesser",
+                "alchemy_juggernaut_mutagen_lesser",
+            }
+            prior = next((effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind in mutagen_kinds), None)
+            cleared_counteracted_juggernaut_temp_hp = False
             if prior is not None:
                 check = resolve_check(dice.draw(20), 5, 15)
                 events.append(Event("alchemy_counteract", actor.actor_id, actor.actor_id, f"{actor.label} attempts to counteract the prior mutagen: d20 {check.die} + 5 = {check.total} vs DC 15.", check=check))
@@ -5159,9 +5703,46 @@ class Encounter:
                     events.append(Event("alchemy_mutagen_failed", actor.actor_id, actor.actor_id, f"{formula.name} fails to counteract the existing mutagen; the consumed item has no effect."))
                     return self._complete_action(state, actor, events, dice=dice)
                 state.active_effects.remove(prior)
-            state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, actor.actor_id, 1, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+                if prior.kind == "alchemy_juggernaut_mutagen_lesser" and actor.temporary_hp_source_id == prior.effect_id:
+                    # Counteracting the source ends its printed benefit.  A
+                    # keep-existing choice can preserve another pool, but it
+                    # cannot preserve temporary HP granted by the removed
+                    # Juggernaut effect.
+                    actor.temporary_hp = 0
+                    actor.temporary_hp_source_id = None
+                    actor.temporary_hp_expires_at_seconds = None
+                    actor.temporary_hp_expires_at_source_start = 0
+                    cleared_counteracted_juggernaut_temp_hp = True
+            effect_id = f"alchemy:{command.item_id}"
+            effect_value = formula.facts.save_bonuses[0].bonus if formula.facts.save_bonuses else 1
+            state.active_effects.append(ActiveSpellEffect(effect_id, f"alchemy_{formula.formula_id}", actor.actor_id, actor.actor_id, effect_value, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+            gaining_temporary_hp = (
+                formula.facts.temporary_hp > 0
+                and (
+                    command.temporary_hp_choice == "gain_new"
+                    or (
+                        actor.temporary_hp == 0
+                        and (
+                            command.temporary_hp_choice is None
+                            or cleared_counteracted_juggernaut_temp_hp
+                        )
+                    )
+                )
+            )
+            if gaining_temporary_hp:
+                actor.temporary_hp = formula.facts.temporary_hp
+                actor.temporary_hp_source_id = effect_id
+                actor.temporary_hp_expires_at_seconds = state.world_time_seconds + duration
+                actor.temporary_hp_expires_at_source_start = 0
             replacement = " It counteracts the previous mutagen." if prior else ""
-            events.append(Event("alchemy_mutagen", actor.actor_id, actor.actor_id, f"{actor.label} drinks {formula.name}; its printed benefits and drawbacks last {duration} seconds.{replacement}"))
+            temp_text = (
+                f" It grants {formula.facts.temporary_hp} temporary HP."
+                if gaining_temporary_hp
+                else " It keeps the existing temporary-HP pool."
+                if formula.facts.temporary_hp > 0
+                else ""
+            )
+            events.append(Event("alchemy_mutagen", actor.actor_id, actor.actor_id, f"{actor.label} drinks {formula.name}; its printed benefits and drawbacks last {duration} seconds.{temp_text}{replacement}"))
         else:
             raise _Rejected("Giant Centipede Venom coating is the next selected activation path.")
         return self._complete_action(state, actor, events, dice=dice)
@@ -5195,7 +5776,10 @@ class Encounter:
         definition = get_definition(actor.definition_id)
         if "quick_bomber" not in definition.abilities:
             raise _Unsupported("Quick Bomber is not admitted for this creature.")
-        if self._admitted_bomber_bomb_facts(command.formula_id) is None:
+        if self._admitted_bomber_bomb_facts(
+            command.formula_id,
+            character_level=state.alchemy_states[actor.actor_id].character_level,
+        ) is None:
             raise _Rejected("Quick Bomber requires one selected prepared Bomber formula.")
         if type(command.only_primary_splash) is not bool:
             raise _Rejected("Quick Bomber splash restriction must be true or false.")
@@ -5250,7 +5834,251 @@ class Encounter:
             vicious_swing=True,
         )
 
-    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
+    def _start_intimidating_strike(self, context, command):
+        """Commit Intimidating Strike to the ordinary melee Strike pipeline."""
+        from .fighter import IntimidatingStrike
+
+        if not isinstance(command, IntimidatingStrike):
+            return FamilyProcedureResult(rejection="Intimidating Strike needs its fighter command.")
+        return self._start_committed_strike_rider(context, command, "intimidating_strike")
+
+    def _start_w4_exacting_strike(self, context, command):
+        """Commit Exacting Strike to the ordinary melee Strike pipeline."""
+        from .w4_offensive import ExactingStrike
+
+        if not isinstance(command, ExactingStrike):
+            return FamilyProcedureResult(rejection="Exacting Strike needs its typed command.")
+        attack = self._select_attack(context.state, context.actor, command.attack_id, item_id=command.item_id)
+        target = context.state.creatures.get(command.target_id)
+        if attack is None or target is None or "melee" not in attack.traits:
+            return FamilyProcedureResult(rejection="Exacting Strike requires an available melee Strike and active target.")
+        parent = ActionContinuation(
+            kind="exacting_strike", actor_id=context.actor.actor_id,
+            target_id=command.target_id, attack_id=command.attack_id,
+        )
+        events = self._start_strike(
+            context.state, context.dice, context.actor,
+            command.target_id, command.attack_id, command.item_id,
+            command.damage_type, command.nonlethal,
+            actions_cost=1, attack_count_cost=1, vicious_swing=False,
+            melee_required=True, parent=parent,
+        )
+        return FamilyProcedureResult(events=tuple(events))
+
+    def _validate_w4_exacting_press_pending(self, state, pending):
+        """Validate the success/failure-effect choice for Exacting Strike."""
+        actor = state.creatures.get(pending.actor_id or "")
+        target = state.creatures.get(pending.target_id or "")
+        continuation = pending.continuation
+        resolution = pending.damage_resolution
+        attack = self._find_attack(state, actor, pending.attack_id) if actor is not None else None
+        if (
+            actor is None
+            or target is None
+            or attack is None
+            or continuation is None
+            or resolution is None
+            or pending.owner_actor_id != actor.actor_id
+            or pending.family_id != "martial"
+            or pending.procedure_id != "w4_offensive:exacting_strike"
+            or pending.options != (
+                ChoiceOption("full_hit", "Apply the successful Strike"),
+                ChoiceOption("failure_effect", "Use the Press failure effect (no damage; no MAP)"),
+            )
+            or continuation.kind != "exacting_strike"
+            or continuation.actor_id != actor.actor_id
+            or continuation.target_id != target.actor_id
+            or continuation.attack_id != attack.attack_id
+            or resolution.source_kind != "strike"
+            or resolution.actor_id != actor.actor_id
+            or resolution.target_id != target.actor_id
+            or resolution.attack_id != attack.attack_id
+            or resolution.continuation != continuation
+            or resolution.pending_defense_choice is not None
+            or pending.damage_result is None
+            or pending.damage_result != resolution.group.results[0]
+            or pending.damage_result_is_mitigated
+            or pending.check is None
+            or pending.check != resolution.check
+            or pending.attack_count != actor.strikes_this_turn
+            or pending.attack_count_cost != 1
+            or pending.attack_actions_cost != 1
+            or pending.attack_penalty != multiple_attack_penalty(actor.strikes_this_turn - 1, attack.traits)
+            or (
+                (attack.item_id is None and pending.item_id is not None)
+                or (attack.item_id is not None and pending.item_id not in self._held_attack_item_ids(state, actor, attack))
+            )
+            or not self._attack_equipped(state, actor, attack)
+            or target.defeated
+            or actor.unconscious
+            or actor.dead
+        ):
+            raise ValueError("save has an unavailable or inconsistent Exacting Strike Press choice")
+
+    def _resolve_w4_exacting_press_choice(self, state, dice, pending, command):
+        """Apply Exacting Strike's success result or its Press failure effect."""
+        self._validate_w4_exacting_press_pending(state, pending)
+        actor = state.creatures[pending.actor_id]
+        target = state.creatures[pending.target_id]
+        continuation = pending.continuation
+        resolution = pending.damage_resolution
+        assert continuation is not None and resolution is not None and pending.check is not None
+        if command.option_id == "full_hit":
+            return [Event(
+                "exacting_strike_full_hit", actor.actor_id, target.actor_id,
+                f"{actor.label} keeps Exacting Strike's successful hit.", check=pending.check,
+            )] + self._resolve_damage_to_health(state, dice, resolution, resumed=True)
+        if command.option_id != "failure_effect":
+            raise _Rejected("Choose the successful Strike or Exacting Strike's Press failure effect.")
+        if actor.strikes_this_turn < 1:
+            raise _Rejected("Exacting Strike's Press failure effect can no longer remove its MAP.")
+        actor.strikes_this_turn -= 1
+        events = [Event(
+            "exacting_strike_failure_effect", actor.actor_id, target.actor_id,
+            f"{actor.label} uses Exacting Strike's Press failure effect; the hit deals no damage and does not increase MAP.",
+            check=pending.check,
+        )]
+        events.extend(self._resume_continuation(
+            state, dice, continuation, critical=False,
+        ))
+        return events
+
+    def _start_committed_strike_rider(self, context, command, kind):
+        """Commit the finite Fighter result-rider family to one Strike path."""
+        from .fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike
+
+        if kind not in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove"}:
+            return FamilyProcedureResult(rejection="Unsupported committed Strike rider.")
+        if not isinstance(command, (IntimidatingStrike, SnaggingStrike, CombatGrab, BrutishShove)):
+            return FamilyProcedureResult(rejection="Fighter rider needs its matching command.")
+        target = context.state.creatures.get(command.target_id)
+        attack = self._select_attack(context.state, context.actor, command.attack_id, item_id=command.item_id)
+        if target is None or attack is None:
+            return FamilyProcedureResult(rejection="Fighter rider requires an active target and held attack.")
+        if "melee" not in attack.traits:
+            return FamilyProcedureResult(rejection="Fighter Strike riders require a melee Strike.")
+        if kind in {"snagging_strike", "combat_grab"}:
+            if grid_distance_feet(context.actor.position, target.position) > 5:
+                return FamilyProcedureResult(rejection="This feat requires the target within reach of the Fighter's free hand.")
+        if kind == "brutish_shove":
+            if attack.hands_required < 2:
+                return FamilyProcedureResult(rejection="Brutish Shove requires a two-handed melee weapon.")
+            sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
+            if (
+                command.shove_destination is not None
+                and sizes.get(get_definition(target.definition_id).size, 99) <= sizes.get(context.definition.size, -1)
+            ):
+                destination = command.shove_destination
+                away_x = (target.position.x > context.actor.position.x) - (target.position.x < context.actor.position.x)
+                away_y = (target.position.y > context.actor.position.y) - (target.position.y < context.actor.position.y)
+                if (
+                    not in_bounds(destination, context.state.map_width, context.state.map_height)
+                    or grid_distance_feet(target.position, destination) != 5
+                    or destination != Position(target.position.x + away_x, target.position.y + away_y)
+                    or self._occupant_at(context.state, destination, except_actor=target.actor_id) is not None
+                ):
+                    return FamilyProcedureResult(rejection="Brutish Shove needs an open adjacent destination directly away from the Fighter.")
+        parent = ActionContinuation(
+            kind=kind,
+            actor_id=context.actor.actor_id,
+            target_id=command.target_id,
+            attack_id=command.attack_id,
+            path=(
+                (command.shove_destination,)
+                if isinstance(command, BrutishShove) and command.shove_destination is not None
+                else ()
+            ),
+            mode=("failure_effect" if isinstance(command, BrutishShove) and command.failure_effect else ("follow" if isinstance(command, BrutishShove) and command.follow else None)),
+        )
+        events = self._start_strike(
+            context.state, context.dice, context.actor,
+            command.target_id, command.attack_id, command.item_id,
+            command.damage_type, command.nonlethal,
+            actions_cost=2 if kind == "intimidating_strike" else 1, attack_count_cost=1, vicious_swing=False,
+            melee_required=True,
+            parent=parent,
+        )
+        return FamilyProcedureResult(events=tuple(events))
+
+    @staticmethod
+    def _committed_rider_parent(continuation):
+        """Find a Fighter rider through a temporary Justice reaction wrapper."""
+        current = continuation
+        while current is not None:
+            if current.kind in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove"}:
+                return current
+            current = current.parent_continuation
+        return None
+
+    def _apply_committed_strike_rider(
+        self, state, dice, actor, target, continuation, *, damage: int, critical: bool, hit: bool,
+    ) -> list[Event]:
+        """Resolve the admitted Fighter result rider after the Strike is final."""
+        from .fighter import apply_committed_strike_rider_for_kind
+
+        parent = self._committed_rider_parent(continuation)
+        if parent is None:
+            return []
+        if parent.kind != "brutish_shove" and not hit:
+            return []
+        if parent.kind == "brutish_shove" and not hit and critical:
+            return []
+        if parent.kind == "brutish_shove" and hit and parent.mode != "failure_effect":
+            sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
+            if sizes.get(get_definition(target.definition_id).size, 99) > sizes.get(get_definition(actor.definition_id).size, -1):
+                return [Event(
+                    "brutish_shove_size", actor.actor_id, target.actor_id,
+                    f"{target.label} is larger than {actor.label}, so Brutish Shove has no hit rider.",
+                )]
+        context = FamilyProcedureContext(
+            self, state, dice, actor, get_definition(actor.definition_id), "martial"
+        )
+        events = list(apply_committed_strike_rider_for_kind(
+            context, kind=parent.kind, target_id=target.actor_id, damage=damage,
+            critical=critical, hit=hit,
+        ))
+        if parent.kind != "brutish_shove" or not hit or parent.mode == "failure_effect":
+            return events
+        if not parent.path:
+            events.append(Event(
+                "brutish_shove_not_used", actor.actor_id, target.actor_id,
+                f"{actor.label} does not use Brutish Shove's optional automatic Shove.",
+            ))
+            return events
+        origin, destination = target.position, parent.path[0]
+        away_x = (origin.x > actor.position.x) - (origin.x < actor.position.x)
+        away_y = (origin.y > actor.position.y) - (origin.y < actor.position.y)
+        if (
+            grid_distance_feet(origin, destination) != 5
+            or destination != Position(origin.x + away_x, origin.y + away_y)
+            or self._occupant_at(
+            state, destination, except_actor=target.actor_id
+            ) is not None
+        ):
+            events.append(Event("brutish_shove_blocked", actor.actor_id, target.actor_id, "Brutish Shove's chosen destination is no longer open."))
+            return events
+        dx, dy = destination.x - origin.x, destination.y - origin.y
+        target.position = destination
+        if critical:
+            second = Position(destination.x + dx, destination.y + dy)
+            if in_bounds(second, state.map_width, state.map_height) and self._occupant_at(
+                state, second, except_actor=target.actor_id
+            ) is None:
+                target.position = second
+        events.append(Event(
+            "brutish_shove", actor.actor_id, target.actor_id,
+            f"{actor.label}'s Brutish Shove moves {target.label} from {_coord(origin)} to {_coord(target.position)} without triggering reactions.",
+            position=target.position,
+        ))
+        if parent.mode == "follow":
+            follow_steps = 2 if target.position != destination else 1
+            follow = Position(actor.position.x + dx * follow_steps, actor.position.y + dy * follow_steps)
+            if self._occupant_at(state, follow, except_actor=actor.actor_id) is None:
+                actor.position = follow
+                events.append(Event("brutish_shove_follow", actor.actor_id, target.actor_id, f"{actor.label} follows the Shoved target without triggering reactions.", position=follow))
+        return events
+
+    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None, attack_penalty_adjustment=0, target_off_guard_override=None):
         if not isinstance(target_id, str):
             raise _Rejected("Strike target id must be text.")
         if actions_cost > actor.actions_remaining:
@@ -5276,6 +6104,8 @@ class Encounter:
                     raise _Rejected(f"Attack {attack_id!r} requires its listed item to be held.")
                 raise _Rejected(f"Attack {attack_id!r} is not currently available.")
             raise _Unsupported(f"Attack {attack_id!r} is not supported in S1 or for this creature.")
+        if melee_required and "melee" not in attack.traits:
+            raise _Rejected("Intimidating Strike requires a melee Strike.")
         if hunter_aim_intent is not None:
             from .ranger import validate_hunter_aim_intent
 
@@ -5406,19 +6236,29 @@ class Encounter:
 
         feint_off_guard_applied = self._commit_feint_strike(state, actor, target, attack)
         tumble_behind_off_guard = self._commit_tumble_behind_strike(state, actor, target)
-        target_off_guard = self._attacker_off_guard(
-            state,
-            actor,
-            target,
-            attack,
-            feint_off_guard=feint_off_guard_applied,
-            tumble_behind_off_guard=tumble_behind_off_guard,
+        target_off_guard = (
+            target_off_guard_override
+            if target_off_guard_override is not None
+            else self._attacker_off_guard(
+                state,
+                actor,
+                target,
+                attack,
+                feint_off_guard=feint_off_guard_applied,
+                tumble_behind_off_guard=tumble_behind_off_guard,
+            )
         )
         penalty = multiple_attack_penalty(actor.strikes_this_turn, attack.traits)
+        penalty += attack_penalty_adjustment
         actor.actions_remaining -= actions_cost
         state.taking_cover.discard(actor.actor_id)
         if not is_ranged:
             actor.strikes_this_turn += attack_count_cost
+        if attack.item_id is not None:
+            from .strike_hooks import committed_first_weapon_attempt
+
+            committed_first_weapon_attempt(state, actor=actor, attack=attack)
+        gravity_weapon_bonus = actor.gravity_weapon_bonus_attack_id == attack.attack_id
         if vicious_swing:
             actor.flourish_used_round = state.round_number
         selected_item_id = self._held_attack_item_id(state, actor, attack, item_id=item_id)
@@ -5437,6 +6277,7 @@ class Encounter:
             attack_actions_cost=actions_cost,
             attack_count_cost=attack_count_cost,
             damage_bonus_dice=1 if vicious_swing else 0,
+            gravity_weapon_bonus=gravity_weapon_bonus,
             vicious_swing=vicious_swing,
             finisher=finisher,
             hunter_aim_intent=hunter_aim_intent,
@@ -5474,6 +6315,14 @@ class Encounter:
         if len(paired.selections) != paired.next_index + 1 or len(paired.outcomes) != paired.next_index:
             return FamilyProcedureResult(rejection="The paired Strike stage is inconsistent.")
         selection = paired.selections[paired.next_index]
+        if paired.activity_id == "fighter:double_slice" and paired.next_index == 1:
+            # Double Slice makes both one-handed Strikes at the same current
+            # MAP, then counts as two attacks for later actions.
+            context.actor.strikes_this_turn = paired.initial_attack_count
+        selected_attack = next(
+            attack for attack in get_definition(context.actor.definition_id).attacks
+            if attack.attack_id == selection.attack_id
+        )
         parent = ActionContinuation(
             kind="paired_strike",
             actor_id=context.actor.actor_id,
@@ -5484,6 +6333,18 @@ class Encounter:
             selection.target_id, selection.attack_id, None,
             selection.damage_type, selection.nonlethal,
             actions_cost=0, attack_count_cost=1, vicious_swing=False,
+            attack_penalty_adjustment=(
+                -2
+                if paired.activity_id == "fighter:double_slice"
+                and paired.next_index == 1
+                and "agile" not in selected_attack.traits
+                else 0
+            ),
+            target_off_guard_override=(
+                True
+                if paired.activity_id == "rogue:twin_feint" and paired.next_index == 1
+                else None
+            ),
             parent=parent,
         )
         return FamilyProcedureResult(events=tuple(events))
@@ -5596,6 +6457,15 @@ class Encounter:
                 actor.actor_id,
                 f"{target.label} may use Nimble Dodge before {actor.label}'s attack roll.",
             )]
+        if context.overextending_feint_penalty == 0:
+            from .skill_actions import overextending_feint_penalty
+
+            context.overextending_feint_penalty = overextending_feint_penalty(
+                tuple(state.overextending_feint_effects),
+                attacker_id=actor.actor_id,
+                target_id=target.actor_id,
+                actor_end_counts=state.actor_end_counts,
+            )
         stratagem_roll = consume_stratagem(
             actor,
             target_id=target.actor_id,
@@ -5638,6 +6508,8 @@ class Encounter:
         )
         if item_modifier is not None:
             modifiers = (*modifiers, item_modifier)
+        if self._weapon_surge_applies(state, actor, attack, context.item_id):
+            modifiers = (*modifiers, Modifier(1, "status", "Weapon Surge"))
         if context.hunter_aim_intent is not None:
             from .ranger import hunter_aim_attack_bonus
 
@@ -5651,6 +6523,12 @@ class Encounter:
             modifiers = (*modifiers, weakness_bonus)
         if context.sure_strike_used:
             modifiers = self._sure_strike_attack_modifiers(modifiers)
+        if context.overextending_feint_penalty:
+            modifiers = (*modifiers, Modifier(
+                context.overextending_feint_penalty,
+                "circumstance",
+                "Overextending Feint",
+            ))
         modifier = combine_modifiers(modifiers)
         dc = self._attack_dc(
             state, actor, target, attack,
@@ -5706,6 +6584,7 @@ class Encounter:
                 damage_type=context.damage_type,
                 nonlethal=context.nonlethal,
                 damage_bonus_dice=context.damage_bonus_dice,
+                gravity_weapon_bonus=context.gravity_weapon_bonus,
                 attack_actions_cost=context.attack_actions_cost,
                 attack_count_cost=context.attack_count_cost,
                 ranged_penalty=context.ranged_penalty,
@@ -5723,6 +6602,15 @@ class Encounter:
                 ),
             )
             return [self._attack_event(actor, target, check)]
+        if context.overextending_feint_penalty:
+            from .skill_actions import consume_overextending_feint_on_attack
+
+            state.overextending_feint_effects = list(consume_overextending_feint_on_attack(
+                tuple(state.overextending_feint_effects),
+                attacker_id=actor.actor_id,
+                target_id=target.actor_id,
+                actor_end_counts=state.actor_end_counts,
+            ))
         return self._resolve_attack_result(
             state, dice, actor, target, attack, check,
             damage_type=context.damage_type or attack.damage_type,
@@ -5732,6 +6620,7 @@ class Encounter:
             is_reaction=context.kind == "reaction_strike",
             continuation=context if context.finisher else parent,
             item_id=context.item_id,
+            gravity_weapon_bonus=context.gravity_weapon_bonus,
             investigator_strategic_strike=bool(stratagem_roll is not None and context.use_intelligence),
             investigator_use_intelligence=bool(stratagem_roll is not None and context.use_intelligence),
             bomber_only_primary_splash=context.bomber_only_primary_splash,
@@ -5787,11 +6676,19 @@ class Encounter:
         nonlethal=False, damage_bonus_dice=0, is_reaction=False, continuation=None,
         attack_target_off_guard=False, item_id=None,
         investigator_strategic_strike=False, investigator_use_intelligence=False,
-        bomber_only_primary_splash=False,
+        bomber_only_primary_splash=False, gravity_weapon_bonus=False,
     ) -> list[Event]:
         events = [self._attack_event(actor, target, check)]
+        from .strike_hooks import final_check_outcome
+
+        events.extend(final_check_outcome(
+            state, attacker=actor, target=target, attack=attack, check=check
+        ))
+        weapon_surge = self._weapon_surge_applies(state, actor, attack, item_id)
         finisher = bool(continuation is not None and continuation.finisher)
         if check.degree not in (DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS):
+            if weapon_surge:
+                self._consume_weapon_surge(state, actor)
             if (
                 check.degree is DegreeOfSuccess.CRITICAL_FAILURE
                 and attack.attack_id == "dagger"
@@ -5855,18 +6752,25 @@ class Encounter:
             landing = self._land_thrown_item(state, actor, target, attack, item_id)
             if landing is not None:
                 events.append(landing)
-            bomb_facts = self._admitted_bomber_bomb_facts(attack.item_id)
+            bomb_facts = self._admitted_bomber_bomb_facts(
+                attack.item_id,
+                character_level=get_definition(actor.definition_id).level,
+            )
             if (
                 check.degree is DegreeOfSuccess.FAILURE
                 and bomb_facts is not None
                 and bomb_facts.splash_damage
             ):
                 events.extend(self._apply_bomber_miss_primary_splash(
-                    state, dice, actor, target, attack, bomb_facts
+                    state, dice, actor, target, attack, bomb_facts, item_id=item_id
                 ))
                 if state.pending_choice is not None:
                     raise _Unsupported("A bomb splash that pauses for a defense choice after a miss is not yet admitted.")
             if continuation is not None:
+                events.extend(self._apply_committed_strike_rider(
+                    state, dice, actor, target, continuation, damage=0,
+                    critical=check.degree is DegreeOfSuccess.CRITICAL_FAILURE, hit=False,
+                ))
                 if not is_reaction:
                     self._record_paired_outcome(
                         continuation,
@@ -5876,6 +6780,16 @@ class Encounter:
                         nonlethal=nonlethal,
                         hit=False,
                     )
+                if check.degree is DegreeOfSuccess.FAILURE:
+                    current = continuation
+                    while current is not None and current.kind != "exacting_strike":
+                        current = current.parent_continuation
+                    if current is not None and actor.strikes_this_turn > 0:
+                        actor.strikes_this_turn -= 1
+                        events.append(Event(
+                            "exacting_strike_exact", actor.actor_id, target.actor_id,
+                            f"{actor.label}'s Exacting Strike misses without increasing its multiple attack penalty.",
+                        ))
                 events.extend(self._resume_continuation(
                     state, dice, continuation,
                     critical=check.degree is DegreeOfSuccess.CRITICAL_FAILURE,
@@ -5889,6 +6803,36 @@ class Encounter:
                 events.extend(self._end_turn(state, actor, early=False, dice=dice))
             return events
 
+        if (
+            check.degree in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS}
+            and not is_reaction
+            and not (continuation is not None and continuation.reactive_shield_decided)
+            and "melee" in attack.traits
+            and "ranged" not in attack.traits
+            and self._reactive_shield_available(state, actor, target)
+        ):
+            self._present_reactive_shield_after_hit(
+                state, actor, target, attack, check,
+                damage_type=damage_type or attack.damage_type,
+                nonlethal=nonlethal,
+                damage_bonus_dice=damage_bonus_dice,
+                gravity_weapon_bonus=gravity_weapon_bonus,
+                attack_target_off_guard=attack_target_off_guard,
+                item_id=item_id,
+                investigator_strategic_strike=investigator_strategic_strike,
+                investigator_use_intelligence=investigator_use_intelligence,
+                bomber_only_primary_splash=bomber_only_primary_splash,
+                parent_continuation=continuation,
+            )
+            events.append(Event(
+                "reactive_shield_choice",
+                target.actor_id,
+                actor.actor_id,
+                f"{target.label} was hit by {actor.label}'s melee Strike and may use Reactive Shield.",
+                check=check,
+            ))
+            return events
+
         pack_bonus = 1 if "pack_attack" in get_definition(actor.definition_id).abilities and self._pack_attack_applies(state, actor, target) else 0
         bonus_dice = damage_bonus_dice + pack_bonus
         damage = self._roll_attack_damage(
@@ -5900,8 +6844,15 @@ class Encounter:
             strategic_strike=investigator_strategic_strike,
             use_intelligence=investigator_use_intelligence,
             finisher=finisher,
+            weapon_surge=weapon_surge,
+            gravity_weapon_bonus=gravity_weapon_bonus,
         )
-        bomb_facts = self._admitted_bomber_bomb_facts(attack.item_id)
+        if weapon_surge:
+            self._consume_weapon_surge(state, actor)
+        bomb_facts = self._admitted_bomber_bomb_facts(
+            attack.item_id,
+            character_level=get_definition(actor.definition_id).level,
+        )
         if bomb_facts is not None and bomb_facts.splash_damage:
             damage = self._bomb_damage_with_primary_splash(damage, attack.attack_id, bomb_facts)
         resolution = DamageResolution(
@@ -5925,7 +6876,48 @@ class Encounter:
             is_reaction=is_reaction,
             continuation=continuation,
             bomber_only_primary_splash=bomber_only_primary_splash,
+            item_id=item_id,
         )
+        if continuation is not None and continuation.kind == "exacting_strike" and not is_reaction:
+            self._set_pending(
+                state,
+                kind="family_action",
+                owner_actor_id=actor.actor_id,
+                prompt=(
+                    f"{actor.label} succeeded with Exacting Strike; choose the hit or its Press failure effect."
+                ),
+                options=(
+                    ChoiceOption("full_hit", "Apply the successful Strike"),
+                    ChoiceOption("failure_effect", "Use the Press failure effect (no damage; no MAP)"),
+                ),
+                details=(
+                    f"Successful result: d20 {check.die} + {check.modifier} = {check.total} vs AC {check.dc}.",
+                    "The Press trait allows a successful action to use its failure effect instead.",
+                ),
+                actor_id=actor.actor_id,
+                target_id=target.actor_id,
+                attack_id=attack.attack_id,
+                item_id=item_id,
+                attack_penalty=check.map_penalty,
+                attack_count=check.attack_count,
+                check=check,
+                damage_result=damage,
+                damage_type=damage_type or attack.damage_type,
+                nonlethal=nonlethal,
+                attack_critical=check.degree is DegreeOfSuccess.CRITICAL_SUCCESS,
+                attack_actions_cost=1,
+                attack_count_cost=1,
+                continuation=continuation,
+                family_id="martial",
+                procedure_id="w4_offensive:exacting_strike",
+                damage_resolution=resolution,
+            )
+            events.append(Event(
+                "exacting_strike_press_choice", actor.actor_id, target.actor_id,
+                f"{actor.label}'s Exacting Strike succeeds; choose the hit or Press failure effect.",
+                check=check, damage=damage,
+            ))
+            return events
         if finisher:
             from .swashbuckler import ConfidentFinisher
 
@@ -6002,7 +6994,7 @@ class Encounter:
         base = dict((name, modifier) for name, _rank, modifier in get_definition(target.definition_id).saves).get("fortitude")
         if base is None:
             raise _Unsupported("Giant Centipede Venom needs an admitted Fortitude save.")
-        modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, target), *self._alchemy_fortitude_save_modifiers(state, target, "poison"), *self._mutagen_modifiers(state, target, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, target), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
+        modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, target), *self._alchemy_save_modifiers(state, target, "fortitude", against="poison"), *self._mutagen_modifiers(state, target, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, target), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
         check = replace(resolve_check(dice.draw(20), combine_modifiers(modifiers), 17), modifier_breakdown=tuple(modifiers))
         events = [Event("venom_fortitude_save", actor.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Fortitude"), check=check)]
         if check.degree in {DegreeOfSuccess.FAILURE, DegreeOfSuccess.CRITICAL_FAILURE}:
@@ -6067,7 +7059,7 @@ class Encounter:
             base = dict((name, modifier) for name, _rank, modifier in get_definition(actor.definition_id).saves).get("fortitude")
             if base is None:
                 raise _Unsupported("Giant Centipede Venom needs an admitted Fortitude save.")
-            modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, actor), *self._alchemy_fortitude_save_modifiers(state, actor, "poison"), *self._mutagen_modifiers(state, actor, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, actor), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
+            modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, actor), *self._alchemy_save_modifiers(state, actor, "fortitude", against="poison"), *self._mutagen_modifiers(state, actor, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, actor), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
             check = replace(resolve_check(dice.draw(20), combine_modifiers(modifiers), effect.dc), modifier_breakdown=tuple(modifiers))
             events.append(Event("venom_fortitude_save", effect.source_actor_id, actor.actor_id, _spell_save_text(actor, check, statistic="Fortitude"), check=check))
             delta = {DegreeOfSuccess.CRITICAL_SUCCESS: -2, DegreeOfSuccess.SUCCESS: -1, DegreeOfSuccess.FAILURE: 1, DegreeOfSuccess.CRITICAL_FAILURE: 2}[check.degree]
@@ -6116,6 +7108,25 @@ class Encounter:
             position=target.position,
         )
 
+    @staticmethod
+    def _weapon_surge_applies(state, actor, attack, item_id) -> bool:
+        selected_item = item_id or attack.item_id
+        if selected_item is None:
+            return False
+        return any(
+            effect.kind == "weapon_surge"
+            and effect.source_actor_id == actor.actor_id
+            and effect.effect_id.split(":")[2:3] == [selected_item]
+            for effect in state.active_effects
+        )
+
+    @staticmethod
+    def _consume_weapon_surge(state, actor) -> None:
+        state.active_effects[:] = [
+            effect for effect in state.active_effects
+            if not (effect.kind == "weapon_surge" and effect.source_actor_id == actor.actor_id)
+        ]
+
     def _roll_attack_damage(
         self,
         state,
@@ -6132,6 +7143,8 @@ class Encounter:
         strategic_strike=False,
         use_intelligence=False,
         finisher=False,
+        weapon_surge=False,
+        gravity_weapon_bonus=False,
     ):
         modifier = self._damage_modifier(state, actor, attack)
         weapon_dice = attack.damage_dice
@@ -6145,6 +7158,19 @@ class Encounter:
                 striking_applies=attack.striking_applies,
                 unarmed="unarmed" in attack.traits,
             )
+        from .focus_buffs import gravity_weapon_modifier
+        gravity_modifier = gravity_weapon_modifier(
+            state, actor, attack, tuple(weapon_dice), applies=gravity_weapon_bonus,
+        )
+        if gravity_modifier is not None:
+            modifier = self._damage_modifier(
+                state, actor, attack, extra_status_modifiers=(gravity_modifier,)
+            )
+        from .martial_defense import point_blank_stance_damage_bonus
+
+        modifier += point_blank_stance_damage_bonus(
+            state, actor, state.creatures[target_id], attack
+        )
         terms = [DamageTerm(
             source=attack.attack_id,
             damage_type=damage_type,
@@ -6156,6 +7182,13 @@ class Encounter:
                 else frozenset()
             ),
         )]
+        if weapon_surge:
+            terms.append(DamageTerm(
+                source="weapon_surge",
+                damage_type="spirit",
+                dice=(6,),
+                tags=frozenset({"sanctified"}),
+            ))
         if strategic_strike:
             term = strategic_strike_damage_term(
                 attack,
@@ -6244,6 +7277,11 @@ class Encounter:
                 # A finalized hit consumes Precision even when its precision
                 # component is later prevented by an immunity or resistance.
                 actor.precision_used_round = state.round_number
+        if attack.attack_id == "wolf_jaws" and target_is_off_guard:
+            terms.append(DamageTerm(
+                source="wolf_stance_precision", damage_type=damage_type,
+                dice=(), modifier=1, tags=frozenset({"precision"}),
+            ))
         result = roll_damage_terms(
             tuple(terms), dice.draw, critical=critical
         )
@@ -6602,8 +7640,22 @@ class Encounter:
             for effect in state.active_effects
             if effect.kind == "frostbite_weakness" and effect.target_actor_id == target.actor_id
         )
+        bomber_immunities = self._bomber_bomb_damage_immunities(state, target, resolution)
+        energy_ablation = tuple(
+            DamageDefense(
+                "resistance",
+                effect.effect_id.split(":", 2)[2],
+                effect.value,
+                source=effect.effect_id,
+            )
+            for effect in state.active_effects
+            if effect.kind == "energy_ablation"
+            and effect.target_actor_id == target.actor_id
+            and len(effect.effect_id.split(":", 2)) == 3
+        )
         base_defenses, paired_parent = self._paired_base_defenses(
-            resolution, (*get_definition(target.definition_id).damage_defenses, *frostbite_weakness)
+            resolution,
+            (*get_definition(target.definition_id).damage_defenses, *frostbite_weakness, *bomber_immunities, *energy_ablation),
         )
         defenses = self._justice_damage_defenses(state, resolution, base_defenses)
         try:
@@ -6983,6 +8035,21 @@ class Encounter:
             details=details,
             shield_block=outcome.shield_block,
         )]
+        if resolution.source_kind == "strike" and resolution.attacker_critical and damage.total > 0:
+            from .strike_hooks import post_mitigation_damaging_critical
+
+            hook_event = post_mitigation_damaging_critical(
+                state,
+                attacker=attacker,
+                target=target,
+                attack=self._find_attack(state, attacker, resolution.attack_id or ""),
+                damage=damage,
+                check=resolution.check,
+                continuation=resolution.continuation,
+                damage_resolution=resolution,
+            )
+            if hook_event is not None:
+                events.append(hook_event)
         if health_choice is not None:
             event_kind = "heroic_recovery" if health_choice == "heroic_recovery" else "health_changed"
             events.append(Event(
@@ -7077,6 +8144,11 @@ class Encounter:
 
         if outcome.defeated:
             events.append(Event("defeated", attacker.actor_id, target.actor_id, f"{target.label} is defeated."))
+        if resolution.source_kind == "strike" and resolution.continuation is not None:
+            events.extend(self._apply_committed_strike_rider(
+                state, dice, attacker, target, resolution.continuation,
+                damage=damage.total, critical=resolution.attacker_critical, hit=True,
+            ))
         if resolution.source_kind == "strike":
             bomb_facts = self._admitted_bomber_bomb_facts_for_attack(attacker, resolution.attack_id)
             if bomb_facts is not None:
@@ -7084,13 +8156,22 @@ class Encounter:
                     state, dice, resolution, attacker, target, bomb_facts,
                     only_primary_splash=resolution.bomber_only_primary_splash,
                 ))
+        if (
+            outcome.defeated
+            and resolution.continuation is None
+            and not resolution.is_reaction
+            and self._present_youre_next(state, attacker, target)
+        ):
+            return events
         self._finish_if_team_defeated(state)
         # Commit the shared Flurry defense ledger only after this damage event
         # has cleared its own Shield Block/Hero/Justice continuations.  A
         # saved Shield choice re-enters damage resolution, so committing it
         # earlier would make the same Strike consume IWR twice on resume.
         base_defenses, paired_parent = self._paired_base_defenses(
-            resolution, get_definition(target.definition_id).damage_defenses
+            resolution,
+            (*get_definition(target.definition_id).damage_defenses,
+             *self._bomber_bomb_damage_immunities(state, target, resolution)),
         )
         effective_defenses = self._justice_damage_defenses(state, resolution, base_defenses)
         mitigation = apply_damage_defenses(
@@ -7111,6 +8192,11 @@ class Encounter:
                 nonlethal=resolution.nonlethal,
                 hit=True,
             )
+        # A post-mitigation GM choice belongs to this already-resolved
+        # Strike. Preserve its parent continuation until the choice is made;
+        # resuming the paired activity here would overwrite that choice.
+        if state.pending_choice is not None:
+            return events
         retaliation_events, retaliation_started = self._justice_retaliation(
             state, dice, resolution
         )
@@ -7142,6 +8228,55 @@ class Encounter:
             events = self._complete_action(state, attacker, events, dice=dice)
         return events
 
+    def _present_youre_next(self, state, attacker, defeated_target) -> bool:
+        """Offer the finite post-defeat reaction before the attack completes."""
+
+        definition = get_definition(attacker.definition_id)
+        if (
+            "You're Next" not in definition.feats
+            or not attacker.reaction_available
+            or attacker.unconscious
+            or attacker.dead
+        ):
+            return False
+        target_ids = tuple(
+            candidate.actor_id
+            for candidate in sorted(state.creatures.values(), key=lambda item: item.actor_id)
+            if candidate.team != attacker.team
+            and candidate.actor_id != defeated_target.actor_id
+            and not candidate.defeated
+            and not candidate.unconscious
+            and not candidate.dead
+            and grid_distance_feet(attacker.position, candidate.position) <= 60
+        )
+        if not target_ids:
+            return False
+        self._set_pending(
+            state,
+            kind="youre_next",
+            owner_actor_id=attacker.actor_id,
+            prompt=f"{attacker.label} may use You're Next after defeating {defeated_target.label}.",
+            options=tuple(
+                [ChoiceOption(f"target:{target_id}", f"Demoralize {state.creatures[target_id].label} (+2)") for target_id in target_ids]
+                + [ChoiceOption("decline", "Decline")]
+            ),
+            details=("Reaction; choose an enemy within 60 feet for a Demoralize attempt with a +2 circumstance bonus.",),
+            actor_id=attacker.actor_id,
+            target_ids=target_ids,
+        )
+        return True
+
+    def _finish_after_youre_next(self, state, dice, attacker, events):
+        self._finish_if_team_defeated(state)
+        if (
+            state.in_progress
+            and attacker.actions_remaining == 0
+            and state.pending_choice is None
+            and not self._free_devise_target_ids(state, attacker)
+        ):
+            events.extend(self._end_turn(state, attacker, early=False, dice=dice))
+        return events
+
     @staticmethod
     def _bomb_damage_with_primary_splash(damage, attack_id, facts):
         """Fold primary splash into the Strike effect before defenses.
@@ -7161,7 +8296,7 @@ class Encounter:
             total=damage.total + facts.splash_damage,
         )
 
-    def _apply_bomber_miss_primary_splash(self, state, dice, attacker, target, attack, facts):
+    def _apply_bomber_miss_primary_splash(self, state, dice, attacker, target, attack, facts, *, item_id):
         """A missed bomb still applies its splash to the primary target."""
         splash = DamageResult(
             (DamageComponent(
@@ -7181,6 +8316,7 @@ class Encounter:
             target_id=target.actor_id,
             source=f"{attack.attack_id}_splash",
             damage_type=facts.damage_type,
+            item_id=item_id,
         )
         return self._resolve_damage_to_health(state, dice, resolution, resumed=False)
 
@@ -7208,42 +8344,174 @@ class Encounter:
                         (splash,), "family", frozenset({"bomb", "splash"}),
                     ), actor_id=attacker.actor_id, target_id=recipient.actor_id,
                     source=f"{attack_id}_splash", damage_type=facts.damage_type,
+                    item_id=resolution.item_id,
                 )
                 events.extend(self._resolve_damage_to_health(state, dice, splash_resolution, resumed=False))
         if resolution.check is not None and resolution.check.degree in {
             DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS,
         } and not target.defeated:
-            if facts.on_hit_effect == "off_guard":
-                kind, value = "off_guard", 1
-                text = f"{target.label} is off-guard until {attacker.label}'s next turn."
-            elif facts.on_hit_effect == "speed_minus_5":
-                kind, value = "speed_penalty", 5
-                text = f"{target.label} takes a -5-foot status penalty to all Speeds until its next turn ends."
-            else:
-                return events
-            if facts.on_hit_effect_deadline == "thrower_next_turn_start":
-                anchor, boundary = attacker.actor_id, "start"
-            elif facts.on_hit_effect_deadline == "target_next_turn_end":
-                anchor, boundary = target.actor_id, "end"
-            else:
-                return events
+            if facts.persistent_damage_type is not None:
+                bomb_formula_id = next(
+                    (attack.item_id for attack in get_definition(attacker.definition_id).attacks
+                     if attack.attack_id == attack_id),
+                    None,
+                )
+                persistent_multiplier = 2 if resolution.attacker_critical else 1
+                self._apply_persistent_effect(
+                    state,
+                    attacker,
+                    target,
+                    bomb_formula_id or "bomber_bomb",
+                    facts.persistent_damage_type,
+                    dice=facts.persistent_damage_dice * persistent_multiplier,
+                    flat=facts.persistent_damage_flat * persistent_multiplier,
+                )
+                events.append(Event(
+                    "persistent_applied", attacker.actor_id, target.actor_id,
+                    f"{target.label} takes persistent {facts.persistent_damage_type} damage.",
+                ))
+            events.extend(self._apply_bomber_bomb_rider(
+                state, resolution, attacker, target, facts,
+            ))
+        return events
+
+    @staticmethod
+    def _apply_bomber_bomb_rider(state, resolution, attacker, target, facts):
+        """Apply the finite bomb riders through their shared sourced lifecycles."""
+        if (
+            resolution.check is None
+            or resolution.check.degree not in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS}
+            or target.defeated
+            or facts.on_hit_effect is None
+        ):
+            return []
+        critical = resolution.attacker_critical
+        effect_id = f"{resolution.attack_id}:{attacker.actor_id}:{target.actor_id}:{state.next_choice_id}"
+        if facts.on_hit_effect == "off_guard":
+            kind, value = "off_guard", facts.on_hit_effect_value or 1
+            text = f"{target.label} is off-guard until {attacker.label}'s next turn."
+            anchor, boundary = attacker.actor_id, "start"
+            occurrence = state.actor_start_counts.get(anchor, 0) + 1
             state.condition_effects[:] = [
                 effect for effect in state.condition_effects
                 if not (effect.kind == kind and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
             ]
             state.condition_effects.append(ActiveConditionEffect(
-                f"{attack_id}:{attacker.actor_id}:{target.actor_id}:{state.next_choice_id}", kind,
-                attacker.actor_id, target.actor_id, value,
-                EffectExpiration(anchor, boundary, (state.actor_start_counts if boundary == "start" else state.actor_end_counts).get(anchor, 0) + 1),
+                effect_id, kind, attacker.actor_id, target.actor_id, value,
+                EffectExpiration(anchor, boundary, occurrence),
             ))
-            events.append(Event("bomb_rider", attacker.actor_id, target.actor_id, text))
-        return events
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
+        if facts.on_hit_effect == "speed_minus_5":
+            kind, value = "speed_penalty", facts.on_hit_effect_value or 5
+            text = f"{target.label} takes a -{value}-foot status penalty to all Speeds until its next turn ends."
+            anchor, boundary = target.actor_id, "end"
+            occurrence = state.actor_end_counts.get(anchor, 0) + 1
+            state.condition_effects[:] = [
+                effect for effect in state.condition_effects
+                if not (effect.kind == kind and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+            ]
+            state.condition_effects.append(ActiveConditionEffect(
+                effect_id, kind, attacker.actor_id, target.actor_id, value,
+                EffectExpiration(anchor, boundary, occurrence),
+            ))
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
+        if facts.on_hit_effect == "frightened":
+            from .opponent_content import PUBLISHED_OPPONENT_PROFILES
+
+            dynamic_immunity = any(
+                immunity.target_actor_id == target.actor_id
+                and immunity.expires_at_seconds > state.world_time_seconds
+                and immunity.kind in {"mental", "poison", "fear", "emotion", "frightened"}
+                for immunity in state.condition_immunities
+            )
+            published = PUBLISHED_OPPONENT_PROFILES.get(target.definition_id)
+            printed_immunity = published is not None and bool(
+                {"mental", "poison", "fear", "emotion", "frightened"}
+                & set(published.condition_immunities)
+            )
+            if dynamic_immunity or printed_immunity:
+                return []
+            value = facts.on_critical_hit_value if critical and facts.on_critical_hit_value is not None else facts.on_hit_effect_value or 1
+            state.condition_effects[:] = [
+                effect for effect in state.condition_effects
+                if not (effect.kind == "frightened" and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+            ]
+            state.condition_effects.append(ActiveConditionEffect(
+                f"dread_ampoule:{attacker.actor_id}:{target.actor_id}:{state.next_choice_id}",
+                "frightened", attacker.actor_id, target.actor_id, value,
+                EffectExpiration(target.actor_id, "end", state.actor_end_counts.get(target.actor_id, 0) + value),
+            ))
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, f"{target.label} is frightened {value}.")]
+        if facts.on_hit_effect == "glue_speed_penalty":
+            duration = facts.on_hit_effect_duration_seconds
+            value = facts.on_hit_effect_value
+            if duration is None or value is None or facts.on_hit_effect_dc is None:
+                return []
+            state.active_effects[:] = [
+                effect for effect in state.active_effects
+                if not (effect.kind == "alchemy_glue_bomb_lesser" and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+            ]
+            if resolution.item_id is None:
+                return []
+            glue_id = f"glue_bomb:{resolution.item_id}"
+            state.active_effects.append(ActiveSpellEffect(
+                glue_id, "alchemy_glue_bomb_lesser", attacker.actor_id, target.actor_id,
+                value, state.actor_start_counts.get(attacker.actor_id, 0) + 1,
+                state.world_time_seconds + duration,
+            ))
+            if critical and facts.on_critical_hit_effect == "glue_immobilized":
+                state.condition_effects[:] = [
+                    effect for effect in state.condition_effects
+                    if not (effect.effect_id.startswith("glue_bomb:") and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+                ]
+                state.condition_effects.append(ActiveConditionEffect(
+                    f"{glue_id}:immobilized", "immobilized", attacker.actor_id, target.actor_id,
+                    facts.on_critical_hit_value or 1,
+                    EffectExpiration(attacker.actor_id, "start", state.actor_start_counts.get(attacker.actor_id, 0) + 1),
+                    facts.on_hit_effect_dc,
+                ))
+                text = f"{target.label} takes a -{value}-foot status penalty and is stuck to the solid ground for 1 round, until {attacker.label}'s next turn starts."
+            else:
+                text = f"{target.label} takes a -{value}-foot status penalty to all Speeds for {duration} seconds."
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
+        return []
 
     @staticmethod
-    def _admitted_bomber_bomb_facts(formula_id):
+    def _bomber_bomb_damage_immunities(state, target, resolution):
+        """Return the finite Dread damage immunity for one bomb recipient."""
+        item_id = resolution.item_id
+        if not isinstance(item_id, str):
+            return ()
+        from .alchemy_content import FORMULAS_BY_ID
+        from .opponent_content import PUBLISHED_OPPONENT_PROFILES
+
+        infused = state.infused_alchemy_items.get(item_id)
+        formula_id = getattr(infused, "formula_id", None) or item_id
+        formula = FORMULAS_BY_ID.get(formula_id)
+        if formula is None or formula.formula_id != "dread_ampoule_lesser":
+            return ()
+        dynamic_immunity = any(
+            immunity.target_actor_id == target.actor_id
+            and immunity.expires_at_seconds > state.world_time_seconds
+            and immunity.kind in {"mental", "poison"}
+            for immunity in state.condition_immunities
+        )
+        published = PUBLISHED_OPPONENT_PROFILES.get(target.definition_id)
+        printed_immunity = published is not None and bool(
+            {"mental", "poison"} & set(published.condition_immunities)
+        )
+        if not (dynamic_immunity or printed_immunity):
+            return ()
+        return (DamageDefense(
+            "immunity", "mental", 0,
+            source=f"{resolution.source}:dread_ampoule_immunity",
+        ),)
+
+    @staticmethod
+    def _admitted_bomber_bomb_facts(formula_id, *, character_level=1):
         from .alchemist_content import admitted_bomber_bomb_facts
 
-        return admitted_bomber_bomb_facts(formula_id)
+        return admitted_bomber_bomb_facts(formula_id, character_level=character_level)
 
     def _admitted_bomber_bomb_facts_for_attack(self, actor, attack_id):
         if not isinstance(attack_id, str):
@@ -7252,11 +8520,11 @@ class Encounter:
             (candidate for candidate in get_definition(actor.definition_id).attacks if candidate.attack_id == attack_id),
             None,
         )
-        return None if attack is None else self._admitted_bomber_bomb_facts(attack.item_id)
+        return None if attack is None else self._admitted_bomber_bomb_facts(
+            attack.item_id, character_level=get_definition(actor.definition_id).level,
+        )
 
-    def _damage_modifier(self, state, actor, attack):
-        if attack.damage_attribute is None:
-            return attack.damage_modifier
+    def _damage_modifier(self, state, actor, attack, *, extra_status_modifiers=()):
         modifiers = condition_modifiers(
             self._conditions_for_actor(state, actor),
             CheckContext("damage", attack.damage_attribute, attack.traits),
@@ -7266,7 +8534,7 @@ class Encounter:
         # avoids the old Strength-only subtraction and prevents double
         # application when an active spell effect is present.
         anthem = self._courageous_anthem_damage_modifiers(state, actor)
-        return attack.damage_modifier + combine_modifiers((*modifiers, *anthem))
+        return attack.damage_modifier + combine_modifiers((*modifiers, *anthem, *extra_status_modifiers))
 
     @staticmethod
     def _courageous_anthem_damage_modifiers(state, actor):
@@ -7282,19 +8550,15 @@ class Encounter:
         )
 
     def _effective_ranged_profile(self, state, actor, attack):
-        """Return the finite selected-Bomber range profile for an attack."""
-        if attack.max_range_ft is None or attack.range_increment_ft is None:
-            return attack.range_increment_ft, attack.max_range_ft
-        alchemy_state = state.alchemy_states.get(actor.actor_id)
-        if (
-            self._admitted_bomber_bomb_facts(attack.item_id) is None
-            or alchemy_state is None
-        ):
-            return attack.range_increment_ft, attack.max_range_ft
-        from .alchemy import bomber_bomb_range_increment
+        """Return the finite selected ranged profile for an attack."""
+        from .ranged_profiles import effective_ranged_profile
 
-        increment = bomber_bomb_range_increment(alchemy_state, attack.range_increment_ft)
-        return increment, increment * 6
+        bomber_facts = self._admitted_bomber_bomb_facts(
+            attack.item_id, character_level=get_definition(actor.definition_id).level,
+        )
+        return effective_ranged_profile(
+            state, actor, attack, bomber_facts=bomber_facts
+        )
 
     def _strike_targets(self, actor: CreatureState, state: EncounterState, attack=None) -> tuple[str, ...]:
         definition = get_definition(actor.definition_id)
@@ -7318,6 +8582,10 @@ class Encounter:
         return tuple(reachable)
 
     def _attack_usable(self, state, actor, attack) -> bool:
+        from .martial_defense import crane_stance_attack_permitted
+
+        if not crane_stance_attack_permitted(state, actor.actor_id, attack.attack_id):
+            return False
         barbarian_state = actor.barbarian_state
         if barbarian_state is not None:
             from .barbarian import animal_attack_ids, attack_allowed_during_rage
@@ -7672,6 +8940,18 @@ class Encounter:
         )
         return modifier is not None and not target.unconscious and not target.dead
 
+    def _reactive_shield_available(self, state, attacker, target) -> bool:
+        definition = get_definition(target.definition_id)
+        return (
+            ("Reactive Shield" in definition.feats or "reactive_shield" in definition.abilities)
+            and target.reaction_available
+            and not target.unconscious
+            and not target.dead
+            and self._held_shield_instance(state, target) is not None
+            and not attacker.unconscious
+            and not attacker.dead
+        )
+
     def _present_nimble_dodge(self, state, attacker, target, continuation) -> None:
         continuation.nimble_dodge_decided = False
         self._set_pending(
@@ -7701,6 +8981,53 @@ class Encounter:
             attack_target_off_guard=continuation.attack_target_off_guard,
             nimble_dodge_used=continuation.nimble_dodge_used,
             is_reaction=continuation.kind == "reaction_strike",
+            continuation=continuation,
+        )
+
+    def _present_reactive_shield_after_hit(
+        self, state, attacker, target, attack, check, *, damage_type,
+        nonlethal, damage_bonus_dice, attack_target_off_guard, item_id,
+        investigator_strategic_strike, investigator_use_intelligence,
+        bomber_only_primary_splash, parent_continuation, gravity_weapon_bonus=False,
+    ) -> None:
+        if parent_continuation is not None:
+            parent_continuation.reactive_shield_decided = True
+        continuation = ActionContinuation(
+            kind="reactive_shield",
+            actor_id=attacker.actor_id,
+            target_id=target.actor_id,
+            attack_id=attack.attack_id,
+            attack_penalty=check.map_penalty,
+            attack_count=check.attack_count or 1,
+            reactive_shield_decided=True,
+            parent_continuation=parent_continuation,
+        )
+        self._set_pending(
+            state,
+            kind="reactive_shield",
+            owner_actor_id=target.actor_id,
+            prompt=f"{target.label} was hit by {attacker.label}'s melee Strike and may use Reactive Shield.",
+            options=(
+                ChoiceOption("use", "Use Reactive Shield (+2 AC)"),
+                ChoiceOption("decline", "Decline"),
+            ),
+            details=(
+                f"Raise the held shield immediately; its +2 circumstance AC applies to the triggering attack.",
+                "Using Reactive Shield spends the target's shared reaction.",
+            ),
+            actor_id=attacker.actor_id,
+            target_id=target.actor_id,
+            attack_id=attack.attack_id,
+            attack_penalty=check.map_penalty,
+            attack_count=check.attack_count or 1,
+            check=check,
+            item_id=item_id,
+            damage_type=damage_type,
+            nonlethal=nonlethal,
+            damage_bonus_dice=damage_bonus_dice,
+            gravity_weapon_bonus=gravity_weapon_bonus,
+            attack_target_off_guard=attack_target_off_guard,
+            damage_context=("bomber_only_primary" if bomber_only_primary_splash else None),
             continuation=continuation,
         )
 
@@ -7796,6 +9123,15 @@ class Encounter:
             and effect.expires_at_world_time > state.world_time_seconds
             and effect.target_actor_id in state.creatures
             and grid_distance_feet(actor.position, state.creatures[effect.target_actor_id].position) <= 5
+        )
+        choices.extend(
+            ("remove_glue", effect.effect_id)
+            for effect in state.active_effects
+            if effect.kind == "alchemy_glue_bomb_lesser"
+            and effect.target_actor_id in state.creatures
+            and not state.creatures[effect.target_actor_id].dead
+            and grid_distance_feet(actor.position, state.creatures[effect.target_actor_id].position) <= 5
+            and effect.glue_removal_actions < 3
         )
         choices.extend(
             ("toggle_sigil", effect.effect_id)
@@ -7972,6 +9308,16 @@ class Encounter:
             )
         )
 
+    def _hymn_control_available(self, state, actor) -> bool:
+        return any(
+            effect.kind == "hymn_of_healing"
+            and effect.source_actor_id == actor.actor_id
+            and effect.expires_at_source_start > state.actor_start_counts.get(actor.actor_id, 0)
+            and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
+            and effect.sustain_limit_source_start > state.actor_start_counts.get(actor.actor_id, 0)
+            for effect in state.active_effects
+        ) and self._action_permitted(state, actor, "sustain_hymn_of_healing", frozenset({"concentrate"}))
+
     def _light_orb_index_for_control(
         self, state: EncounterState, actor: CreatureState, orb_id: str
     ) -> int:
@@ -7992,6 +9338,44 @@ class Encounter:
         self, state: EncounterState, dice: DiceSource, actor: CreatureState, command: Sustain
     ) -> list[Event]:
         """Spend one action to move, detach, or offer attachment of a Light orb."""
+        hymn_effect = next(
+            (effect for effect in state.active_effects
+             if effect.effect_id == command.orb_id
+             and effect.source_actor_id == actor.actor_id
+             and effect.kind == "hymn_of_healing"),
+            None,
+        )
+        if hymn_effect is not None:
+            if command.point is not None or command.attachment_actor_id is not None:
+                raise _Rejected("Sustain Hymn of Healing takes no movement or attachment selection.")
+            if command.temporary_hp_choice not in {None, "keep_existing", "gain_new"}:
+                raise _Rejected("Hymn of Healing temporary HP choice must be keep_existing or gain_new.")
+            start = state.actor_start_counts.get(actor.actor_id, 0)
+            if start >= hymn_effect.sustain_limit_source_start:
+                raise _Rejected("Hymn of Healing has reached its four-round sustain limit.")
+            self._require_action_permitted(state, actor, "sustain_hymn_of_healing", frozenset({"concentrate"}))
+            actor.actions_remaining -= 1
+            refreshed = replace(
+                hymn_effect,
+                expires_at_source_start=hymn_effect.sustain_limit_source_start,
+                expires_at_world_time=hymn_effect.sustain_limit_world_time or state.world_time_seconds + 24,
+                sustain_expires_at_source_end=state.actor_end_counts.get(actor.actor_id, 0) + 2,
+            )
+            hymn_index = state.active_effects.index(hymn_effect)
+            state.active_effects[hymn_index] = refreshed
+            events = []
+            if hymn_effect.glue_removal_actions != start:
+                refreshed = replace(refreshed, glue_removal_actions=start)
+                state.active_effects[hymn_index] = refreshed
+                target = state.creatures[refreshed.target_actor_id]
+                if target.temporary_hp > 0 and target.temporary_hp_source_id != refreshed.effect_id and command.temporary_hp_choice is None:
+                    raise _Rejected("Hymn of Healing requires an explicit temporary HP choice before resolving.")
+                events.extend(self._grant_hymn_temp_hp(
+                    state, actor, target, refreshed,
+                    choice=command.temporary_hp_choice,
+                ))
+            events.append(Event("hymn_sustained", actor.actor_id, refreshed.target_actor_id, f"{actor.label} sustains Hymn of Healing."))
+            return self._complete_action(state, actor, events, dice=dice)
         hex_effect = next(
             (effect for effect in state.active_effects
              if effect.effect_id == command.orb_id
@@ -8768,6 +10152,27 @@ class Encounter:
                 caster.actor_id,
                 f"{caster.label} raises a magical shield; +1 circumstance AC until their next turn starts.",
             )], dice=dice)
+        if spell_id == "weapon_surge":
+            item_id = continuation.spell_target_item_id
+            if item_id is None or item_id not in caster.held_items:
+                return [Event("action_stopped", caster.actor_id, None, "Weapon Surge's target weapon is no longer held.")]
+            start = state.actor_start_counts.get(caster.actor_id, 0)
+            state.active_effects[:] = [
+                effect for effect in state.active_effects
+                if not (effect.kind == "weapon_surge" and effect.source_actor_id == caster.actor_id)
+            ]
+            state.active_effects.append(ActiveSpellEffect(
+                effect_id=f"weapon_surge:{caster.actor_id}:{item_id}:{state.next_choice_id}",
+                kind="weapon_surge", source_actor_id=caster.actor_id,
+                target_actor_id=caster.actor_id, value=1,
+                expires_at_source_start=start + 1,
+                expires_at_world_time=state.world_time_seconds + 6,
+            ))
+            continuation.stage = "done"
+            return self._complete_action(state, caster, [Event(
+                "weapon_surge", caster.actor_id, None,
+                f"{caster.label} imbues {item_id}; its next Strike gains +1 status and 1d6 spirit damage.",
+            )], dice=dice)
         if spell_id == "light":
             return self._resolve_light(state, dice, caster, continuation)
         if spell_id == "sigil":
@@ -8974,6 +10379,26 @@ class Encounter:
             if caster.witch_restored_spirit_used_start == start:
                 return self._complete_action(state, caster, events, dice=dice)
             return self._offer_restored_spirit_choice(state, caster, events, dice=dice)
+        if spell_id == "gravity_weapon":
+            if continuation.spell_source_kind != "focus" or continuation.spell_actions != 1:
+                raise _Rejected("Gravity Weapon requires its one-action focus form.")
+            state.active_effects[:] = [
+                effect for effect in state.active_effects
+                if not (effect.kind == "gravity_weapon" and effect.source_actor_id == caster.actor_id)
+            ]
+            start = state.actor_start_counts.get(caster.actor_id, 0)
+            state.active_effects.append(ActiveSpellEffect(
+                f"gravity_weapon:{caster.actor_id}:{state.next_choice_id}",
+                "gravity_weapon", caster.actor_id, caster.actor_id, 1,
+                start + 10, state.world_time_seconds + 60,
+            ))
+            continuation.stage = "done"
+            return self._complete_action(state, caster, [Event(
+                "gravity_weapon", caster.actor_id, caster.actor_id,
+                f"{caster.label} casts Gravity Weapon; the first held-weapon Strike each round gains a status bonus equal to twice its weapon damage dice.",
+            )], dice=dice)
+        if spell_id == "hymn_of_healing":
+            return self._resolve_hymn_of_healing(state, dice, caster, continuation)
         if spell_id == "command":
             target = state.creatures.get(continuation.target_id or "")
             if target is None or target.dead or target.defeated:
@@ -9021,22 +10446,13 @@ class Encounter:
             source_start = state.actor_start_counts.get(caster.actor_id, 0)
             active_actor_id = state.initiative_order[state.active_index] if state.initiative_order else None
             active_start = state.actor_start_counts.get(active_actor_id or "", 0)
-            if (
-                caster.composition_cast_at_start == source_start
-                or active_actor_id is None
-                or (caster.composition_cast_turn_actor_id, caster.composition_cast_turn_start) == (active_actor_id, active_start)
-            ):
+            from .bard_compositions import clear_prior_compositions, composition_cast_allowed
+            if not composition_cast_allowed(caster, state, active_actor_id=active_actor_id, active_start=active_start):
                 raise _Rejected("Only one composition spell can be cast each turn.")
             # This literal procedure owns the only admitted composition today.
             # Removing a source's prior effect retains the Composition trait's
             # replacement rule without introducing a general aura subsystem.
-            state.active_effects[:] = [
-                effect for effect in state.active_effects
-                if not (
-                    effect.kind == "courageous_anthem"
-                    and effect.source_actor_id == caster.actor_id
-                )
-            ]
+            clear_prior_compositions(state, source_actor_id=caster.actor_id)
             caster.composition_cast_at_start = source_start
             caster.composition_cast_turn_actor_id = active_actor_id
             caster.composition_cast_turn_start = active_start
@@ -9182,6 +10598,8 @@ class Encounter:
             return events + self._complete_action(state, caster, [], dice=dice)
         if spell_id == "fear":
             return self._roll_fear_save(state, dice, caster, target, continuation)
+        if spell_id == "daze":
+            return self._roll_daze_save(state, dice, caster, target, continuation)
         if spell_id == "harm":
             if continuation.spell_actions != 2:
                 raise _Rejected("Harm is admitted only in its two-action living-target form.")
@@ -9408,8 +10826,8 @@ class Encounter:
 
     def _resolve_breathe_fire(self, state, dice, caster, continuation):
         """Apply one shared Breathe Fire roll through each listed Reflex save."""
-        if continuation.spell_source_kind != "prepared" or continuation.spell_actions != 2:
-            raise _Rejected("Breathe Fire requires a prepared two-action rank-1 slot.")
+        if continuation.spell_source_kind not in {"prepared", "spontaneous"} or continuation.spell_actions != 2:
+            raise _Rejected("Breathe Fire requires a two-action rank-1 prepared or spontaneous cast.")
         if continuation.spell_damage is None:
             continuation.spell_damage = resolve_damage(
                 DamagePacket("Breathe Fire", "fire", 6, 2, 0), dice.draw
@@ -9543,9 +10961,7 @@ class Encounter:
         raw_damage = continuation.spell_damage
         if raw_damage is None:
             raise _Rejected("Gale Blast's shared damage roll is missing.")
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(raw_damage, components=(replace(raw_damage.components[0], amount=total),), total=total,
-                         adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw_damage, check.degree)
         index = int((continuation.stage or "gale:0:0").split(":")[1])
         push_ft = 10 if check.degree is DegreeOfSuccess.CRITICAL_FAILURE else 5 if check.degree is DegreeOfSuccess.FAILURE else 0
         continuation.stage = f"gale:{index}:{push_ft}"
@@ -9619,13 +11035,7 @@ class Encounter:
         raw_damage = continuation.spell_damage
         if raw_damage is None:
             raise _Rejected("Electric Arc's shared damage roll is missing.")
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(
-            raw_damage,
-            components=(replace(raw_damage.components[0], amount=total),),
-            total=total,
-            adjustment=f"basic_save:{check.degree.name.lower()}",
-        )
+        damage = basic_save_damage_result(raw_damage, check.degree)
         return [Event(
             "spell_save", caster.actor_id, target.actor_id,
             _spell_save_text(target, check, statistic="Reflex"), check=check,
@@ -9748,8 +11158,7 @@ class Encounter:
 
     def _resolve_tempest_surge_result(self, state, dice, caster, target, check, continuation):
         raw_damage = resolve_damage(DamagePacket("Tempest Surge", "electricity", 12, 1, 0), dice.draw)
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(raw_damage, components=(replace(raw_damage.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw_damage, check.degree)
         events = [Event("spell_save", caster.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Reflex"), check=check)]
         if check.degree in {DegreeOfSuccess.FAILURE, DegreeOfSuccess.CRITICAL_FAILURE}:
             occurrence = state.actor_start_counts.get(caster.actor_id, 0) + 1
@@ -9770,8 +11179,7 @@ class Encounter:
     def _resolve_vitality_lash_result(self, state, dice, caster, target, check, continuation):
         status_bonus = combine_modifiers(self._courageous_anthem_damage_modifiers(state, caster))
         raw = resolve_damage(DamagePacket("Vitality Lash", "vitality", 6, 2, status_bonus), dice.draw)
-        total = basic_save_damage(raw.total, check.degree)
-        damage = replace(raw, components=(replace(raw.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw, check.degree)
         events = [Event("spell_save", caster.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Fortitude"), check=check)]
         if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
             occurrence = state.actor_start_counts.get(caster.actor_id, 0) + 1
@@ -9852,31 +11260,24 @@ class Encounter:
 
     def _apply_persistent_effect(self, state, caster, target, spell_id, damage_type, *, dice=(), flat=0) -> None:
         """Install one comparable persistent type, replacing only a weaker one."""
-        # These are the only admitted non-blood-bearing profiles.  Keep this
-        # finite fact here until creature physiology becomes a first-class
-        # sheet field; Gouging Claw's initial damage still resolves normally.
-        if damage_type == "bleed" and target.definition_id in {
-            "skeleton_guard_mc3193", "zombie_shambler_mc3249",
-        }:
-            return
-        previous = next(
-            (effect for effect in state.persistent_effects
-             if effect.target_actor_id == target.actor_id and effect.damage_type == damage_type),
-            None,
+        # The shared helper owns same-type comparison and finite installation;
+        # this legacy wrapper preserves the spell/alchemy API and its explicit
+        # rejection when an incomparable source needs a GM ruling.
+        from .persistent_effects import install_persistent_effect
+
+        installed, previous = install_persistent_effect(
+            state,
+            source_actor_id=caster.actor_id,
+            target_actor_id=target.actor_id,
+            source_id=spell_id,
+            damage_type=damage_type,
+            dice=tuple(dice),
+            flat=flat,
         )
-        if previous is not None:
-            # The selected spells only compare flat bleed amounts.  Do not
-            # invent a cross-die strength ordering: that needs a GM ruling.
-            if bool(previous.dice) != bool(dice) or previous.dice != tuple(dice):
-                raise _Unsupported("Replacing incomparable persistent damage needs an explicit GM ruling.")
-            if flat <= previous.flat:
-                return
-            state.persistent_effects.remove(previous)
-        state.persistent_effects.append(PersistentDamageEffect(
-            f"persistent:{spell_id}:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
-            caster.actor_id, target.actor_id, spell_id, damage_type, tuple(dice), flat,
-            state.world_time_seconds + 60,
-        ))
+        if previous is not None and installed is None and (
+            bool(previous.dice) != bool(dice) or previous.dice != tuple(dice)
+        ):
+            raise _Unsupported("Replacing incomparable persistent damage needs an explicit GM ruling.")
 
     def _roll_persistent_attack_spell(self, state, dice, caster, target, continuation):
         spell_id = continuation.spell_id
@@ -10116,12 +11517,11 @@ class Encounter:
         if performance_modifier is None:
             raise _Rejected("Counter Performance requires an admitted Performance modifier.")
         bard.reaction_available = False
-        bard.reach_spell_pending = False
+        clear_pending_spellshape(bard)
         bard.focus_points -= 1
         bard.composition_cast_turn_actor_id, bard.composition_cast_turn_start = active_actor_id, active_start
-        state.active_effects[:] = [effect for effect in state.active_effects if not (
-            effect.kind == "courageous_anthem" and effect.source_actor_id == bard.actor_id
-        )]
+        from .bard_compositions import clear_prior_compositions
+        clear_prior_compositions(state, source_actor_id=bard.actor_id)
         performance = replace(resolve_check(dice.draw(20), performance_modifier, original.dc),
             modifier_breakdown=(Modifier(performance_modifier, "untyped", "printed Performance modifier"),))
         events = [Event("counter_performance_cast", bard.actor_id, target.actor_id,
@@ -10173,6 +11573,7 @@ class Encounter:
             "frostbite": self._resolve_direct_fortitude_result,
             "enfeeble": self._resolve_direct_fortitude_result,
             "void_warp": self._resolve_void_warp_result,
+            "daze": self._resolve_daze_result,
         }
         try:
             resolver = resolvers[continuation.spell_id]
@@ -10182,12 +11583,9 @@ class Encounter:
 
     def _resolve_harm_result(self, state, dice, caster, target, check, continuation):
         """Resolve the finite rank-one two-action Harm basic Fortitude form."""
-        raw = resolve_damage(DamagePacket("Harm", "void", 8, 1, 0), dice.draw)
-        total = basic_save_damage(raw.total, check.degree)
-        damage = replace(
-            raw, components=(replace(raw.components[0], amount=total),), total=total,
-            adjustment=f"basic_save:{check.degree.name.lower()}",
-        )
+        die_sides = 10 if "harming_hands" in get_definition(caster.definition_id).abilities else 8
+        raw = resolve_damage(DamagePacket("Harm", "void", die_sides, 1, 0), dice.draw)
+        damage = basic_save_damage_result(raw, check.degree)
         events = [Event(
             "spell_save", caster.actor_id, target.actor_id,
             _spell_save_text(target, check, statistic="Fortitude"), check=check,
@@ -10196,6 +11594,62 @@ class Encounter:
             state, dice, caster, target, damage, check=check, source="harm",
             damage_type="void", continuation=continuation,
         )
+
+    def _resolve_hymn_of_healing(self, state, dice, caster, continuation):
+        target = state.creatures.get(continuation.target_id or "")
+        if (
+            continuation.spell_source_kind != "focus"
+            or continuation.spell_actions != 2
+            or target is None
+            or target.dead
+            or target.team != caster.team
+            or not self._is_living_target(target)
+            or grid_distance_feet(caster.position, target.position) > 30
+        ):
+            return [Event("action_stopped", caster.actor_id, continuation.target_id, "Hymn of Healing's recipient is no longer eligible.")]
+        from .bard_compositions import clear_prior_compositions, composition_cast_allowed
+        active_actor_id = state.initiative_order[state.active_index] if state.initiative_order else None
+        active_start = state.actor_start_counts.get(active_actor_id or "", 0)
+        if not composition_cast_allowed(caster, state, active_actor_id=active_actor_id, active_start=active_start):
+            raise _Rejected("Only one composition spell can be cast each turn.")
+        clear_prior_compositions(state, source_actor_id=caster.actor_id)
+        source_start = state.actor_start_counts.get(caster.actor_id, 0)
+        caster.composition_cast_at_start = source_start
+        caster.composition_cast_turn_actor_id = active_actor_id
+        caster.composition_cast_turn_start = active_start
+        effect = ActiveSpellEffect(
+            f"hymn_of_healing:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
+            "hymn_of_healing", caster.actor_id, target.actor_id, 2,
+            source_start + 4, state.world_time_seconds + 24,
+            sustain_limit_source_start=source_start + 4,
+            sustain_limit_world_time=state.world_time_seconds + 24,
+            sustain_expires_at_source_end=state.actor_end_counts.get(caster.actor_id, 0) + 2,
+        )
+        state.active_effects.append(effect)
+        events = self._grant_hymn_temp_hp(
+            state, caster, target, effect,
+            choice=continuation.temporary_hp_choice,
+        )
+        continuation.stage = "done"
+        events.append(Event("hymn_of_healing", caster.actor_id, target.actor_id, f"{caster.label} starts Hymn of Healing on {target.label}; fast healing 2 begins at the recipient's next turn start."))
+        return events + self._complete_action(state, caster, [], dice=dice)
+
+    def _grant_hymn_temp_hp(self, state, caster, target, effect, *, choice=None):
+        if target.temporary_hp > 0 and target.temporary_hp_source_id != effect.effect_id:
+            if choice not in {"keep_existing", "gain_new"}:
+                raise _Rejected("Hymn of Healing requires an explicit temporary HP choice before resolving.")
+            if choice == "gain_new":
+                target.temporary_hp = 2
+                target.temporary_hp_source_id = effect.effect_id
+                target.temporary_hp_expires_at_seconds = None
+                target.temporary_hp_expires_at_source_start = state.actor_start_counts.get(caster.actor_id, 0) + 1
+                return [Event("temporary_hp_replaced", caster.actor_id, target.actor_id, f"{target.label} replaces existing temporary HP with Hymn of Healing's 2 temporary HP.")]
+            return [Event("temporary_hp_kept", caster.actor_id, target.actor_id, f"{target.label} keeps existing temporary HP instead of Hymn of Healing's 2 temporary HP.")]
+        target.temporary_hp = 2
+        target.temporary_hp_source_id = effect.effect_id
+        target.temporary_hp_expires_at_seconds = None
+        target.temporary_hp_expires_at_source_start = state.actor_start_counts.get(caster.actor_id, 0) + 1
+        return [Event("temporary_hp", caster.actor_id, target.actor_id, f"{target.label} gains 2 temporary HP from Hymn of Healing.")]
 
     def _resolve_direct_fortitude_result(self, state, dice, caster, target, check, continuation):
         spell_id = continuation.spell_id
@@ -10210,8 +11664,7 @@ class Encounter:
             self._record_arcane_bond_completed(caster, continuation)
             return events + self._complete_action(state, caster, [], dice=dice)
         damage = resolve_damage(DamagePacket("Frostbite", "cold", 4, 2, 0), dice.draw)
-        total = basic_save_damage(damage.total, check.degree)
-        damage = replace(damage, components=(replace(damage.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(damage, check.degree)
         if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
             state.active_effects.append(ActiveSpellEffect(
                 effect_id=f"frostbite_weakness:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
@@ -10861,6 +12314,34 @@ class Encounter:
         ))
         return events
 
+    def _roll_daze_save(self, state, dice, caster, target, continuation):
+        """Resolve Daze's single-target basic Will save."""
+        if continuation.spell_actions != 2:
+            raise _Rejected("Daze requires its two-action cantrip form.")
+        return self._roll_spell_save(
+            state, dice, caster, target, continuation, "daze", "will",
+        )
+
+    def _resolve_daze_result(self, state, dice, caster, target, check, continuation):
+        """Apply Daze's basic mental damage and critical-failure stun."""
+        raw = resolve_damage(DamagePacket("Daze", "mental", 6, 1, 0), dice.draw)
+        damage = basic_save_damage_result(raw, check.degree)
+        events = [Event(
+            "spell_save", caster.actor_id, target.actor_id,
+            _spell_save_text(target, check, statistic="Will"), check=check,
+        )]
+        if check.degree is DegreeOfSuccess.CRITICAL_FAILURE and self._apply_stunned(
+            state, caster, target, 1,
+        ):
+            events.append(Event(
+                "condition_applied", caster.actor_id, target.actor_id,
+                f"{target.label} is stunned 1 until the start of its next turn.", check=check,
+            ))
+        return events + self._apply_spell_damage(
+            state, dice, caster, target, damage, check=check, source="daze",
+            damage_type="mental", nonlethal=True, continuation=continuation,
+        )
+
     def _roll_fear_save(self, state, dice, caster, target, continuation):
         """Roll Fear's Will save, honoring Guidance before Hero Point choice."""
         return self._roll_spell_save(
@@ -10946,6 +12427,24 @@ class Encounter:
             expires_at_world_time=state.world_time_seconds + 6 * duration_rounds,
         ))
 
+    def _apply_stunned(self, state, source, target, value: int) -> bool:
+        """Apply an admitted stunned value through the literal saved fields.
+
+        Stunned values use the strongest current value; both currently admitted
+        sources expire at the start of the target's next turn and remove the
+        target's reaction immediately.
+        """
+        if type(value) is not int or value < 1:
+            raise ValueError("stunned requires a positive whole value")
+        until_start = state.actor_start_counts.get(target.actor_id, 0) + 1
+        if target.stunned >= value and target.stunned_until_start >= until_start:
+            return False
+        target.stunned = value
+        target.stunned_source_actor_id = source.actor_id
+        target.stunned_until_start = until_start
+        target.reaction_available = False
+        return True
+
     def apply_family_damage(
         self,
         state,
@@ -10998,7 +12497,7 @@ class Encounter:
         )
 
     def _apply_spell_damage(self, state, dice, caster, target, damage, *, check, source, damage_type,
-                            attacker_critical=False, target_critical_failure=False, continuation,
+                            attacker_critical=False, target_critical_failure=False, nonlethal=False, continuation,
                             enfeebled_on_failure=0):
         if not isinstance(damage, DamageResult) or damage.total < 0:
             raise _Rejected("Spell damage must be a valid rolled damage result.")
@@ -11016,6 +12515,7 @@ class Encounter:
             damage_type=damage_type,
             check=check,
             spell_id=source,
+            nonlethal=nonlethal,
             attacker_critical=attacker_critical,
             target_critical_failure=target_critical_failure,
             continuation=continuation,
@@ -11029,9 +12529,26 @@ class Encounter:
         if command.item_id not in actor.held_items:
             raise _Rejected(f"{command.item_id!r} is not held and cannot be released.")
         actor.held_items.remove(command.item_id)
+        state.active_effects[:] = [
+            effect for effect in state.active_effects
+            if not (
+                effect.kind == "weapon_surge"
+                and effect.source_actor_id == actor.actor_id
+                and effect.effect_id.split(":")[2:3] == [command.item_id]
+            )
+        ]
         raised = state.raised_shields.get(actor.actor_id)
         if raised is not None and raised.instance_id == command.item_id:
             state.raised_shields.pop(actor.actor_id, None)
+        from .martial_defense import point_blank_stance_is_active
+
+        if point_blank_stance_is_active(state, actor.actor_id):
+            definition = get_definition(actor.definition_id)
+            if not any(
+                "ranged" in attack.traits and attack.item_id in actor.held_items
+                for attack in definition.attacks
+            ):
+                state.martial_stances.pop(actor.actor_id, None)
         state.ground_items.setdefault(actor.position, []).append(command.item_id)
         actor.witch_turn_activity_start = state.actor_start_counts.get(actor.actor_id, 0)
         return [Event("release", actor.actor_id, None, f"{actor.label} releases {command.item_id} onto {_coord(actor.position)}.", position=actor.position)]
@@ -11211,6 +12728,23 @@ class Encounter:
             except ValueError as error:
                 raise _Rejected(str(error)) from error
             return events
+        if (
+            continuation.kind == "family_action"
+            and continuation.stage in {"widen_spell", "widen_spell_grabbed_checked"}
+        ):
+            definition = get_definition(actor.definition_id)
+            if (
+                "widen_spell" not in definition.abilities
+                or "Widen Spell" not in definition.feats
+                or has_pending_spellshape(actor)
+            ):
+                raise _Rejected("Widen Spell is no longer available.")
+            actor.widen_spell_pending = True
+            events.append(Event(
+                "widen_spell_ready", actor.actor_id, None,
+                f"{actor.label} shapes their next eligible area spell with Widen Spell.",
+            ))
+            return self._complete_action(state, actor, events, dice=dice)
         if continuation.kind == "stand":
             events.append(Event("stand", actor.actor_id, None, f"{actor.label} is no longer prone."))
             return self._complete_action(state, actor, events, dice=dice)
@@ -11278,7 +12812,13 @@ class Encounter:
         state: EncounterState, actor: CreatureState, continuation: ActionContinuation
     ) -> bool:
         return (
-            continuation.kind in {"cast", "interact", "ranged_strike"}
+            (
+                continuation.kind in {"cast", "interact", "ranged_strike"}
+                or (
+                    continuation.kind == "family_action"
+                    and continuation.stage in {"widen_spell", "widen_spell_grabbed_flat_check"}
+                )
+            )
             and continuation.movement_kind in {"manipulate", "ranged"}
             and continuation.stage != "grabbed_manipulate_checked"
             and any(
@@ -11292,7 +12832,11 @@ class Encounter:
     ) -> list[Event]:
         """Resolve Grabbed after reactions and before the manipulate effect."""
         check = resolve_check(dice.draw(20), 0, 5)
-        continuation.stage = "grabbed_manipulate_flat_check"
+        continuation.stage = (
+            "widen_spell_grabbed_flat_check"
+            if continuation.kind == "family_action" and continuation.stage == "widen_spell"
+            else "grabbed_manipulate_flat_check"
+        )
         events = [Event(
             "grabbed_manipulate_flat_check",
             actor.actor_id,
@@ -11327,7 +12871,14 @@ class Encounter:
     def _finish_grabbed_manipulate_check(
         self, state, dice, actor, continuation: ActionContinuation, check
     ) -> list[Event]:
-        continuation.stage = "grabbed_manipulate_checked"
+        continuation.stage = (
+            "widen_spell_grabbed_checked"
+            if (
+                continuation.kind == "family_action"
+                and continuation.stage == "widen_spell_grabbed_flat_check"
+            )
+            else "grabbed_manipulate_checked"
+        )
         if check.degree < DegreeOfSuccess.SUCCESS:
             return [Event(
                 "action_lost",
@@ -11369,6 +12920,11 @@ class Encounter:
             return self._complete_action(state, actor, [Event(
                 "sudden_charge_complete", actor.actor_id, continuation.target_id,
                 f"{actor.label} completes Sudden Charge.",
+            )], dice=dice)
+        if continuation.kind in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove", "exacting_strike"}:
+            return self._complete_action(state, actor, [Event(
+                f"{continuation.kind}_complete", actor.actor_id, continuation.target_id,
+                f"{actor.label} completes {continuation.kind.replace('_', ' ')}.",
             )], dice=dice)
         if continuation.finisher:
             if critical:
@@ -11456,11 +13012,7 @@ class Encounter:
             check=check,
         )]
         value = 3 if check.degree is DegreeOfSuccess.CRITICAL_FAILURE else 1 if check.degree is DegreeOfSuccess.FAILURE else 0
-        if value:
-            target.stunned = value
-            target.stunned_source_actor_id = monk.actor_id
-            target.stunned_until_start = state.actor_start_counts.get(target.actor_id, 0) + 1
-            target.reaction_available = False
+        if value and self._apply_stunned(state, monk, target, value):
             events.append(Event(
                 "condition_applied", monk.actor_id, target.actor_id,
                 f"{target.label} is stunned {value} until the start of its next turn.", check=check,
@@ -11688,7 +13240,7 @@ class Encounter:
 
     def _perform_reaction(self, state, dice, reactor, target, continuation, attack, damage_type, nonlethal, item_id=None):
         reactor.reaction_available = False
-        reactor.reach_spell_pending = False
+        clear_pending_spellshape(reactor)
         feint_off_guard_applied = self._commit_feint_strike(state, reactor, target, attack)
         target_off_guard = self._attacker_off_guard(
             state, reactor, target, attack, feint_off_guard=feint_off_guard_applied
@@ -11732,6 +13284,39 @@ class Encounter:
                 actor.worn_items.remove(item_id)
             actor.held_items.append(item_id)
             text = f"{actor.label} draws {item_id}."
+        elif mode == "remove_glue":
+            effect = next(
+                (current for current in state.active_effects
+                 if current.effect_id == item_id
+                 and current.kind == "alchemy_glue_bomb_lesser"
+                 and current.target_actor_id in state.creatures
+                 and not state.creatures[current.target_actor_id].dead
+                 and grid_distance_feet(actor.position, state.creatures[current.target_actor_id].position) <= 5),
+                None,
+            )
+            if effect is None:
+                raise _Rejected("The selected Glue Bomb effect is no longer in reach.")
+            count = effect.glue_removal_actions + 1
+            if count >= 3:
+                state.active_effects.remove(effect)
+                base_id = effect.effect_id
+                state.condition_effects[:] = [
+                    current for current in state.condition_effects
+                    if current.effect_id != f"{base_id}:immobilized"
+                ]
+                return Event(
+                    "glue_removed", actor.actor_id, effect.target_actor_id,
+                    f"{actor.label} completes the third careful action and removes the Glue Bomb effects.",
+                    position=actor.position,
+                )
+            state.active_effects[state.active_effects.index(effect)] = replace(
+                effect, glue_removal_actions=count,
+            )
+            return Event(
+                "glue_removal_progress", actor.actor_id, effect.target_actor_id,
+                f"{actor.label} carefully removes part of the Glue Bomb residue ({count}/3 actions).",
+                position=actor.position,
+            )
         elif mode == "stow" and item_id in actor.held_items:
             actor.held_items.remove(item_id)
             actor.stowed_items.append(item_id)
@@ -11817,6 +13402,8 @@ class Encounter:
         )
 
     def _complete_action(self, state, actor, events, *, dice=None):
+        if state.pending_choice is None:
+            actor.gravity_weapon_bonus_attack_id = None
         if (
             state.in_progress
             and actor.actions_remaining == 0
@@ -11911,6 +13498,86 @@ class Encounter:
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 if dx == 0 and dy == 0:
+                    continue
+                point = Position(actor.position.x + dx, actor.position.y + dy)
+                if not in_bounds(point, state.map_width, state.map_height):
+                    continue
+                cost, _ = step_cost(actor.position, point, actor.diagonals_this_turn)
+                if cost > 5:
+                    continue
+                occupant = self._occupant_at(state, point, except_actor=actor.actor_id)
+                if occupant is not None:
+                    if occupant.team == actor.team and not occupant.defeated and not occupant.unconscious and not occupant.dead:
+                        if actor.actions_remaining < 2 or actor.must_leave_occupied:
+                            continue
+                    elif not self._can_share_with_body(actor, occupant):
+                        continue
+                candidates.append(point)
+        from .monk_stances import tiger_step_enabled
+
+        if tiger_step_enabled(
+            state, actor.actor_id,
+            effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor)),
+        ):
+            # Advertise the final squares of legal two-square paths as well;
+            # callers that need the exact path can use _step_paths below.
+            for path in self._step_paths(actor, state):
+                if len(path) == 2:
+                    candidates.append(path[-1])
+        return tuple(sorted(candidates))
+
+    def _step_paths(self, actor: CreatureState, state: EncounterState) -> tuple[tuple[Position, ...], ...]:
+        """Return bounded legal one- and two-square Tiger Step paths."""
+        one = tuple(
+            (point,) for point in self._step_destinations_without_tiger(actor, state)
+        )
+        paths = list(one)
+        if actor.prone:
+            return tuple(paths)
+        definition = get_definition(actor.definition_id)
+        speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
+        from .monk_stances import tiger_step_enabled
+
+        if not tiger_step_enabled(state, actor.actor_id, speed):
+            return tuple(paths)
+        for first in self._step_destinations_without_tiger(actor, state):
+            # Tiger's extended Step cannot enter or cross an occupied square;
+            # keep advertised paths narrower than legacy ally-sharing movement.
+            if self._occupant_at(state, first, except_actor=actor.actor_id) is not None:
+                continue
+            try:
+                _first_cost, first_diagonal_count = step_cost(
+                    actor.position, first, actor.diagonals_this_turn
+                )
+            except ValueError:
+                continue
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if not dx and not dy:
+                        continue
+                    final = Position(first.x + dx, first.y + dy)
+                    if not in_bounds(final, state.map_width, state.map_height):
+                        continue
+                    if final == actor.position:
+                        continue
+                    try:
+                        cost, _ = step_cost(
+                            first, final,
+                            actor.diagonals_this_turn + first_diagonal_count,
+                        )
+                    except ValueError:
+                        continue
+                    if cost > 5 or self._occupant_at(state, final, except_actor=actor.actor_id) is not None:
+                        continue
+                    paths.append((first, final))
+        return tuple(paths)
+
+    def _step_destinations_without_tiger(self, actor: CreatureState, state: EncounterState) -> tuple[Position, ...]:
+        """One-square destination projection used to seed Tiger paths."""
+        candidates: list[Position] = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if not dx and not dy:
                     continue
                 point = Position(actor.position.x + dx, actor.position.y + dy)
                 if not in_bounds(point, state.map_width, state.map_height):
@@ -12185,6 +13852,41 @@ class Encounter:
         starts = state.actor_start_counts
         assert starts is not None
         starts[actor.actor_id] = starts.get(actor.actor_id, 0) + 1
+        hymn_sources = {
+            effect.effect_id: effect.source_actor_id
+            for effect in state.active_effects
+            if effect.kind == "hymn_of_healing"
+        }
+        for recipient in state.creatures.values():
+            if (
+                recipient.temporary_hp_source_id is not None
+                and recipient.temporary_hp_source_id.startswith("hymn_of_healing:")
+                and hymn_sources.get(recipient.temporary_hp_source_id) == actor.actor_id
+                and recipient.temporary_hp_expires_at_source_start
+                and recipient.temporary_hp_expires_at_source_start <= starts[actor.actor_id]
+            ):
+                recipient.temporary_hp = 0
+                recipient.temporary_hp_source_id = None
+                recipient.temporary_hp_expires_at_seconds = None
+                recipient.temporary_hp_expires_at_source_start = 0
+        for hymn in tuple(state.active_effects):
+            if (
+                hymn.kind == "hymn_of_healing"
+                and hymn.target_actor_id == actor.actor_id
+                and hymn.life_link_used_round != starts[actor.actor_id]
+            ):
+                target = state.creatures.get(hymn.target_actor_id)
+                if target is not None and self._is_living_target(target):
+                    if target.health_mode is HealthMode.PC:
+                        self._apply_health_transition(
+                            state, target, pc_healing(self._health_state(target), 2)
+                        )
+                    else:
+                        target.hp = min(get_definition(target.definition_id).hp, target.hp + 2)
+                        target.unconscious = False
+                    state.active_effects[state.active_effects.index(hymn)] = replace(
+                        hymn, life_link_used_round=starts[actor.actor_id]
+                    )
         for item_id, infused in tuple(state.infused_alchemy_items.items()):
             if (infused.creator_actor_id == actor.actor_id
                 and infused.activation_deadline == "creator_next_turn_start"
@@ -12244,8 +13946,17 @@ class Encounter:
             ):
                 expired.append(effect)
             else:
+                if effect.kind.startswith("alchemy_") and effect.source_actor_id == actor.actor_id:
+                    # Alchemical effects use an absolute clock for their
+                    # duration, while persistence retains a source-relative
+                    # anchor for strict save validation.  Rebase that anchor
+                    # as the source starts another turn.
+                    effect = replace(effect, expires_at_source_start=starts[actor.actor_id] + 1)
                 retained.append(effect)
         state.active_effects = retained
+        from .bard_compositions import _clear_hymn_temporary_hp
+        for effect in expired:
+            _clear_hymn_temporary_hp(state, effect)
         state.active_item_effects = [
             effect for effect in state.active_item_effects
             if not (
@@ -12277,6 +13988,7 @@ class Encounter:
         """
         now = state.world_time_seconds
         retained: list[ActiveSpellEffect] = []
+        expired: list[ActiveSpellEffect] = []
         for effect in state.active_effects:
             deadline = effect.expires_at_world_time
             if deadline is None:
@@ -12289,6 +14001,7 @@ class Encounter:
             if deadline > now:
                 retained.append(replace(effect, expires_at_world_time=deadline))
                 continue
+            expired.append(effect)
             if effect.kind == "guidance":
                 immunity_deadline = deadline + 600
                 state.guidance_immunity_deadlines[effect.target_actor_id] = max(
@@ -12299,6 +14012,9 @@ class Encounter:
                 # still render the combat-round field.
                 state.guidance_immunities[effect.target_actor_id] = state.round_number + 600
         state.active_effects = retained
+        from .bard_compositions import _clear_hymn_temporary_hp
+        for effect in expired:
+            _clear_hymn_temporary_hp(state, effect)
         state.active_item_effects = [
             effect for effect in state.active_item_effects
             if effect.expires_at_world_time is None or effect.expires_at_world_time > now
@@ -12318,6 +14034,11 @@ class Encounter:
             raise ValueError("elapsed time must be a positive integer")
         state.world_time_seconds += elapsed_seconds
         Encounter._expire_elapsed_spell_effects(state)
+        state.persistent_effects[:] = [
+            effect for effect in state.persistent_effects
+            if effect.expires_at_world_time is None
+            or effect.expires_at_world_time > state.world_time_seconds
+        ]
         Encounter._expire_person_of_interest_grants(state)
 
         # Turn-bound defenses have no useful meaning between fights. Their
@@ -12412,16 +14133,23 @@ class Encounter:
         ends[actor.actor_id] = ends.get(actor.actor_id, 0) + 1
         # A sustained effect remains through the source's next turn and ends
         # at that turn's end unless Sustain moved this owner-end boundary.
-        state.active_effects = [
-            effect for effect in state.active_effects
-            if not (
+        retained_effects = []
+        expired_effects = []
+        for effect in state.active_effects:
+            if (
                 effect.source_actor_id == actor.actor_id
                 and effect.sustain_expires_at_source_end
                 and effect.sustain_expires_at_source_end <= ends[actor.actor_id]
-            )
-        ]
+            ):
+                expired_effects.append(effect)
+            else:
+                retained_effects.append(effect)
+        state.active_effects = retained_effects
+        from .bard_compositions import _clear_hymn_temporary_hp
+        for effect in expired_effects:
+            _clear_hymn_temporary_hp(state, effect)
         actor.finisher_used_this_turn = False
-        actor.reach_spell_pending = False
+        clear_pending_spellshape(actor)
         if (
             actor.panache
             and actor.panache_expires_at_end is not None
@@ -12524,19 +14252,32 @@ class Encounter:
 
     @staticmethod
     def _mutagen_modifiers(state: EncounterState, actor: CreatureState, statistic: str, *, attack_traits: frozenset[str] = frozenset()) -> tuple[Modifier, ...]:
-        """The selected two mutagens' literal benefits and drawbacks."""
-        kinds = {effect.kind for effect in state.active_effects if effect.target_actor_id == actor.actor_id}
+        """Project the finite selected mutagens' literal benefits and drawbacks."""
+        from .alchemy_content import FORMULAS_BY_ID, MutagenFacts
+
+        effects = tuple(effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind.startswith("alchemy_") and effect.kind.endswith("_mutagen_lesser"))
         modifiers: list[Modifier] = []
-        if "alchemy_bestial_mutagen_lesser" in kinds:
-            if statistic == "athletics" or (statistic == "attack" and "unarmed" in attack_traits):
-                modifiers.append(Modifier(1, "item", "Bestial Mutagen"))
-            if statistic in {"reflex", "acrobatics", "stealth"}:
-                modifiers.append(Modifier(-2, "untyped", "Bestial Mutagen drawback"))
-        if "alchemy_cognitive_mutagen_lesser" in kinds:
-            if statistic in {"arcana", "crafting", "lore", "occultism", "society", "recall_knowledge"} or statistic.endswith("_lore"):
-                modifiers.append(Modifier(1, "item", "Cognitive Mutagen"))
-            if statistic in {"athletics", "acrobatics"} or (statistic == "attack" and "unarmed" not in attack_traits):
-                modifiers.append(Modifier(-2, "untyped", "Cognitive Mutagen drawback"))
+        for effect in effects:
+            formula = FORMULAS_BY_ID.get(effect.kind.removeprefix("alchemy_"))
+            if formula is None or not isinstance(formula.facts, MutagenFacts):
+                continue
+            name = formula.name.removesuffix(" (lesser)")
+            if effect.kind == "alchemy_bestial_mutagen_lesser":
+                if statistic == "athletics" or (statistic == "attack" and "unarmed" in attack_traits):
+                    modifiers.append(Modifier(1, "item", name))
+                if statistic in {"reflex", "acrobatics", "stealth"}:
+                    modifiers.append(Modifier(-2, "untyped", f"{name} drawback"))
+            elif effect.kind == "alchemy_cognitive_mutagen_lesser":
+                if statistic in {"arcana", "crafting", "lore", "occultism", "society", "recall_knowledge"} or statistic.endswith("_lore"):
+                    modifiers.append(Modifier(1, "item", name))
+                if statistic in {"athletics", "acrobatics"} or (statistic == "attack" and "unarmed" not in attack_traits):
+                    modifiers.append(Modifier(-2, "untyped", f"{name} drawback"))
+            elif effect.kind == "alchemy_juggernaut_mutagen_lesser":
+                for bonus in formula.facts.save_bonuses:
+                    if bonus.statistic == statistic:
+                        modifiers.append(Modifier(bonus.bonus, "item", name))
+                if statistic in {"will", "perception", "initiative"}:
+                    modifiers.append(Modifier(-2, "untyped", f"{name} drawback"))
         return tuple(modifiers)
 
     def _skill_dc(self, state: EncounterState, actor_id: str, statistic: str) -> int:
@@ -12564,6 +14305,25 @@ class Encounter:
                 *self._blood_magic_save_modifiers(state, actor),
             )
         return 10 + base + combine_modifiers(modifiers)
+
+    @classmethod
+    def _initiative_modifier_for_state(
+        cls, state: EncounterState, actor: CreatureState, definition, statistic: str,
+        *, weather_perception_penalty: int = 0,
+    ) -> int:
+        modifier = cls._initiative_modifier_for_definition(
+            definition, statistic, weather_perception_penalty=weather_perception_penalty
+        )
+        if any(
+            effect.kind == "alchemy_juggernaut_mutagen_lesser"
+            and effect.target_actor_id == actor.actor_id
+            and effect.source_actor_id in state.creatures
+            and effect.expires_at_source_start > state.actor_start_counts.get(effect.source_actor_id, 0)
+            and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
+            for effect in state.active_effects
+        ):
+            modifier -= 2
+        return modifier
 
     @staticmethod
     def _initiative_modifier_for_definition(definition, statistic: str, *, weather_perception_penalty: int = 0) -> int:
@@ -12594,8 +14354,20 @@ class Encounter:
         conditions.extend(
             ConditionValue(effect.kind, effect.value, effect.effect_id)
             for effect in state.active_effects
-            if effect.target_actor_id == actor.actor_id and effect.kind in {"enfeebled", "guidance"}
+            if effect.target_actor_id == actor.actor_id
             and effect.kind == "enfeebled"
+        )
+        conditions.extend(
+            ConditionValue("speed_bonus", effect.value, effect.effect_id)
+            for effect in state.active_effects
+            if effect.target_actor_id == actor.actor_id
+            and effect.kind == "alchemy_cheetahs_elixir_lesser"
+        )
+        conditions.extend(
+            ConditionValue("speed_penalty", effect.value, effect.effect_id)
+            for effect in state.active_effects
+            if effect.target_actor_id == actor.actor_id
+            and effect.kind == "alchemy_glue_bomb_lesser"
         )
         from .alchemy_content import FORMULAS_BY_ID
         for effect in state.giant_centipede_venom_afflictions:
@@ -13157,7 +14929,7 @@ class Encounter:
             actor.stunned_until_start = 0
             actor.stunned_source_actor_id = None
         abilities = set(get_definition(actor.definition_id).abilities)
-        actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & abilities) or "Nimble Dodge" in get_definition(actor.definition_id).feats or "investigator_on_the_case" in abilities
+        actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & abilities) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(get_definition(actor.definition_id).feats)) or "investigator_on_the_case" in abilities
         commanded = next((effect for effect in state.condition_effects if effect.kind == "commanded" and effect.target_actor_id == actor.actor_id), None)
         if commanded is not None:
             actor.actions_remaining = max(0, actor.actions_remaining - commanded.value)
@@ -13274,6 +15046,7 @@ class Encounter:
             creature.must_leave_occupied = False
             state.taking_cover.discard(creature.actor_id)
             state.raised_shields.pop(creature.actor_id, None)
+            state.martial_stances.pop(creature.actor_id, None)
             state.active_effects[:] = [
                 effect for effect in state.active_effects
                 if not (effect.kind == "life_link" and effect.source_actor_id == creature.actor_id)
@@ -13318,6 +15091,10 @@ class Encounter:
         )
         active_teams.update(affected_living)
         if len(active_teams) <= 1 and not affected_living:
+            # A victory can occur exactly on an absolute effect deadline. Clear
+            # elapsed effects before the terminal state becomes saveable so the
+            # persistence validator never receives a stale combat effect.
+            self._expire_elapsed_spell_effects(state)
             state.in_progress = False
             state.winner_team = next(iter(active_teams), None)
             for creature in state.creatures.values():
@@ -13326,6 +15103,8 @@ class Encounter:
                 creature.actions_remaining = 0
                 creature.reaction_available = False
                 self._refresh_barbarian_state(state, creature, encounter_ended=True)
+            state.martial_stances.clear()
+            state.martial_stance_used_rounds.clear()
 
     def _effective_ac(
         self,
@@ -13353,6 +15132,9 @@ class Encounter:
         if nimble_dodge:
             modifiers.append(Modifier(2, "circumstance", "Nimble Dodge"))
         if state is not None:
+            from .martial_defense import ac_modifiers as martial_defense_ac_modifiers
+
+            modifiers.extend(martial_defense_ac_modifiers(state, creature, definition))
             shield = self._raised_shield_instance(state, creature)
             if shield is not None:
                 profile = self._shield_profile(shield)
@@ -13469,9 +15251,8 @@ class Encounter:
             raise _Unsupported(f"This target has no admitted {statistic.title()} save modifier.")
         modifiers: list[Modifier] = [Modifier(base, "untyped", f"printed {statistic.title()} save")]
         modifiers.extend(self._resilient_save_modifiers(state, target))
-        if statistic == "fortitude":
-            alchemy_context = "poison" if spell_id == "giant_centipede_venom" else None
-            modifiers.extend(self._alchemy_fortitude_save_modifiers(state, target, alchemy_context))
+        alchemy_context = "poison" if spell_id == "giant_centipede_venom" else "fear" if spell_id == "fear" else None
+        modifiers.extend(self._alchemy_save_modifiers(state, target, statistic, against=alchemy_context))
         if continuation.guidance_bonus:
             modifiers.append(Modifier(continuation.guidance_bonus, "status", "Guidance"))
         if continuation.divine_grace_used:
@@ -13517,28 +15298,35 @@ class Encounter:
         return tuple(modifiers)
 
     @staticmethod
-    def _alchemy_fortitude_save_modifiers(
-        state: EncounterState, target: CreatureState, against: str | None,
+    def _alchemy_save_modifiers(
+        state: EncounterState, target: CreatureState, statistic: str, *, against: str | None,
     ) -> tuple[Modifier, ...]:
-        """Project the finite elixir item bonuses onto the recipient's save."""
-        if against not in {"poison", "disease"}:
-            return ()
-        applicable = {
-            "alchemy_elixir_of_life_minor": {"poison", "disease"},
-            "alchemy_antidote_lesser": {"poison"},
-            "alchemy_antiplague_lesser": {"disease"},
-        }
+        """Project the finite alchemical elixir save bonuses onto one save."""
+        from .alchemy_content import ElixirFacts, FORMULAS_BY_ID
+
+        modifiers: list[Modifier] = []
         labels = {
-            "alchemy_elixir_of_life_minor": "Minor Elixir of Life",
-            "alchemy_antidote_lesser": "Antidote (lesser)",
-            "alchemy_antiplague_lesser": "Antiplague (lesser)",
+            "elixir_of_life_minor": "Minor Elixir of Life",
+            "antidote_lesser": "Antidote (lesser)",
+            "antiplague_lesser": "Antiplague (lesser)",
         }
-        return tuple(
-            Modifier(effect.value, "item", labels[effect.kind])
-            for effect in state.active_effects
-            if effect.target_actor_id == target.actor_id
-            and against in applicable.get(effect.kind, set())
-        )
+        for effect in state.active_effects:
+            if effect.target_actor_id != target.actor_id or not effect.kind.startswith("alchemy_"):
+                continue
+            formula = FORMULAS_BY_ID.get(effect.kind.removeprefix("alchemy_"))
+            if formula is None or not isinstance(formula.facts, ElixirFacts):
+                continue
+            label = labels.get(formula.formula_id, formula.name)
+            for bonus in formula.facts.save_bonuses:
+                if bonus.statistic != statistic:
+                    continue
+                if bonus.against == "all":
+                    modifiers.append(Modifier(bonus.bonus, "item", label))
+                elif against == bonus.against or (
+                    bonus.against == "poison_or_disease" and against in {"poison", "disease"}
+                ):
+                    modifiers.append(Modifier(bonus.bonus, "item", label))
+        return tuple(modifiers)
 
     @staticmethod
     def _blood_magic_save_modifiers(
@@ -14084,7 +15872,7 @@ class Encounter:
                 )]
             actor.actions_remaining = 3
             abilities = set(get_definition(actor.definition_id).abilities)
-            actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & abilities) or "Nimble Dodge" in get_definition(actor.definition_id).feats or "investigator_on_the_case" in abilities
+            actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & abilities) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(get_definition(actor.definition_id).feats)) or "investigator_on_the_case" in abilities
             events.append(Event("turn_started", actor.actor_id, None, f"{actor.label} regains 3 actions and 1 reaction."))
             return events
 
@@ -14149,7 +15937,7 @@ class Encounter:
             ):
                 raise _Rejected("The raised shield or reaction is no longer available.")
             if command.option_id == "block":
-                target.reach_spell_pending = False
+                clear_pending_spellshape(target)
                 record = (
                     self._apply_magic_shield_block(state, target, damage)
                     if magic else self._apply_shield_block(state, target, resolution, damage, shield)
@@ -14174,6 +15962,8 @@ class Encounter:
             )]
 
         if pending.kind == "family_action":
+            if pending.procedure_id == "w4_offensive:exacting_strike":
+                return self._resolve_w4_exacting_press_choice(state, dice, pending, command)
             return self._run_family_choice(state, dice, pending, command)
 
         if pending.kind == "nimble_dodge":
@@ -14187,7 +15977,7 @@ class Encounter:
             continuation.nimble_dodge_decided = True
             if command.option_id == "use":
                 target.reaction_available = False
-                target.reach_spell_pending = False
+                clear_pending_spellshape(target)
                 continuation.nimble_dodge_used = True
                 event = Event(
                     "nimble_dodge_used",
@@ -14218,6 +16008,115 @@ class Encounter:
                     state, dice, attacker, target, attack, continuation,
                     parent=continuation.parent_continuation,
                 )]
+            return events
+
+        if pending.kind == "youre_next":
+            attacker = state.creatures.get(pending.actor_id or "")
+            if attacker is None or pending.owner_actor_id != attacker.actor_id:
+                raise _Rejected("The pending You're Next choice is incomplete.")
+            state.pending_choice = pending
+            try:
+                self._validate_pending_context()
+            except ValueError as error:
+                raise _Rejected("You're Next is no longer available.") from error
+            finally:
+                state.pending_choice = None
+            if command.option_id == "decline":
+                return self._finish_after_youre_next(
+                    state, dice, attacker,
+                    [Event("youre_next_declined", attacker.actor_id, None, f"{attacker.label} declines You're Next.")],
+                )
+            if not command.option_id.startswith("target:"):
+                raise _Rejected("Choose an eligible You're Next target or decline.")
+            target_id = command.option_id.removeprefix("target:")
+            if target_id not in pending.target_ids:
+                raise _Rejected("That You're Next target is no longer eligible.")
+            attacker.reaction_available = False
+            from .skill_actions import Demoralize
+
+            events = [Event(
+                "youre_next_used", attacker.actor_id, target_id,
+                f"{attacker.label} uses You're Next against {state.creatures[target_id].label}; the Demoralize gains +2 circumstance.",
+            )]
+            events.extend(self._run_family_action(
+                state, dice, attacker,
+                Demoralize(target_id=target_id, youre_next_reaction=True),
+                youre_next_trigger=True,
+            ))
+            if state.pending_choice is not None:
+                raise _Rejected("You're Next must resolve its bounded Demoralize check without another choice.")
+            return self._finish_after_youre_next(state, dice, attacker, events)
+
+        if pending.kind == "reactive_shield":
+            target = state.creatures.get(pending.target_id or "")
+            attacker = state.creatures.get(pending.actor_id or "")
+            continuation = pending.continuation
+            if target is None or attacker is None or continuation is None:
+                raise _Rejected("The pending Reactive Shield choice is incomplete.")
+            attack = self._find_attack(state, attacker, continuation.attack_id)
+            if (
+                target.actor_id != pending.owner_actor_id
+                or attack is None
+                or "melee" not in attack.traits
+                or "ranged" in attack.traits
+                or not self._reactive_shield_available(state, attacker, target)
+            ):
+                raise _Rejected("Reactive Shield is no longer available.")
+            if command.option_id == "use":
+                target.reaction_available = False
+                clear_pending_spellshape(target)
+                shield = self._held_shield_instance(state, target)
+                if shield is None:
+                    raise _Rejected("Reactive Shield requires the same intact held shield.")
+                state.raised_shields[target.actor_id] = RaisedShieldState(
+                    shield.instance_id,
+                    state.actor_start_counts.get(target.actor_id, 0) + 1,
+                )
+                event = Event(
+                    "reactive_shield_used",
+                    target.actor_id,
+                    attacker.actor_id,
+                    f"{target.label} uses Reactive Shield; the shield's +2 circumstance AC applies to this attack.",
+                )
+            elif command.option_id == "decline":
+                event = Event(
+                    "reactive_shield_declined",
+                    target.actor_id,
+                    attacker.actor_id,
+                    f"{target.label} declines Reactive Shield; the reaction remains available.",
+                )
+            else:
+                raise _Rejected("Choose whether to use Reactive Shield.")
+            check = pending.check
+            if check is None:
+                raise _Rejected("The pending Reactive Shield attack check is incomplete.")
+            if command.option_id == "use":
+                check = replace(
+                    resolve_check(
+                        check.die,
+                        check.modifier,
+                        self._attack_dc(state, attacker, target, attack),
+                        attack_id=check.attack_id,
+                        attack_count=check.attack_count,
+                        map_penalty=check.map_penalty,
+                        traits=check.traits,
+                    ),
+                    modifier_breakdown=check.modifier_breakdown,
+                    dice=check.dice,
+                )
+            events = [event]
+            events.extend(self._resolve_attack_result(
+                state, dice, attacker, target, attack, check,
+                damage_type=pending.damage_type or attack.damage_type,
+                nonlethal=pending.nonlethal,
+                damage_bonus_dice=pending.damage_bonus_dice,
+                gravity_weapon_bonus=pending.gravity_weapon_bonus,
+                attack_target_off_guard=pending.attack_target_off_guard,
+                is_reaction=pending.is_reaction,
+                continuation=continuation.parent_continuation,
+                item_id=pending.item_id,
+                bomber_only_primary_splash=pending.damage_context == "bomber_only_primary",
+            ))
             return events
 
         if pending.kind == "concealment_hero_reroll":
@@ -14347,7 +16246,7 @@ class Encounter:
                     if not reactor.reaction_available or reactor.unconscious or reactor.dead:
                         raise _Rejected("Retributive Strike is no longer available.")
                     reactor.reaction_available = False
-                    reactor.reach_spell_pending = False
+                    clear_pending_spellshape(reactor)
                     resolution = replace(resolution, justice_protected=True)
                     choice_event = Event(
                         "retributive_strike_protection",
@@ -14954,6 +16853,7 @@ class Encounter:
                 damage_type=pending.damage_type or attack.damage_type,
                 nonlethal=pending.nonlethal,
                 damage_bonus_dice=pending.damage_bonus_dice,
+                gravity_weapon_bonus=pending.gravity_weapon_bonus,
                 attack_target_off_guard=pending.attack_target_off_guard,
                 is_reaction=pending.is_reaction,
                 continuation=(
@@ -14962,10 +16862,20 @@ class Encounter:
                         pending.continuation is not None
                         and pending.continuation.hunter_aim_intent is not None
                     )
-                    else pending.continuation
+            else pending.continuation
                 ),
                 item_id=pending.item_id,
                 bomber_only_primary_splash=pending.damage_context == "bomber_only_primary",
+            ))
+            if state.pending_choice is None:
+                actor.gravity_weapon_bonus_attack_id = None
+            from .skill_actions import consume_overextending_feint_on_attack
+
+            state.overextending_feint_effects = list(consume_overextending_feint_on_attack(
+                tuple(state.overextending_feint_effects),
+                attacker_id=actor.actor_id,
+                target_id=target.actor_id,
+                actor_end_counts=state.actor_end_counts,
             ))
             return events
 
@@ -15094,7 +17004,7 @@ class Encounter:
             else:
                 actor.actions_remaining = 3
                 definition = get_definition(actor.definition_id)
-                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & set(definition.abilities)) or "Nimble Dodge" in definition.feats or "investigator_on_the_case" in definition.abilities
+                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & set(definition.abilities)) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(definition.feats)) or "investigator_on_the_case" in definition.abilities
                 events.append(Event("turn_started", actor.actor_id, None, f"{actor.label} regains 3 actions and 1 reaction."))
             return events
 
@@ -15122,7 +17032,7 @@ class Encounter:
             else:
                 actor.actions_remaining = 3
                 definition = get_definition(actor.definition_id)
-                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & set(definition.abilities)) or "Nimble Dodge" in definition.feats or "investigator_on_the_case" in definition.abilities
+                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & set(definition.abilities)) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(definition.feats)) or "investigator_on_the_case" in definition.abilities
                 events.append(Event("turn_started", actor.actor_id, None, f"{actor.label} regains 3 actions and 1 reaction."))
             return events
 
@@ -15259,8 +17169,8 @@ class Encounter:
             definition = get_definition(actor.definition_id)
             if actor.health_mode is HealthMode.PC and actor.hero_points > 0 and actor.actor_id not in decided:
                 initiative_skill = state.initiative_skills.get(actor.actor_id, "perception")
-                initiative_modifier = self._initiative_modifier_for_definition(
-                    definition, initiative_skill,
+                initiative_modifier = self._initiative_modifier_for_state(
+                    state, actor, definition, initiative_skill,
                     weather_perception_penalty=(
                         0 if "storm_born" in definition.abilities
                         else get_setup(state.setup_id).weather_perception_circumstance_penalty
@@ -15433,10 +17343,19 @@ class Encounter:
         if state.initiative_order:
             active = state.creatures[state.initiative_order[0]]
             state.actor_start_counts[active.actor_id] = max(1, state.actor_start_counts.get(active.actor_id, 0))
+            state.active_effects = [
+                replace(
+                    effect,
+                    expires_at_source_start=state.actor_start_counts.get(effect.source_actor_id, 0) + 1,
+                )
+                if effect.kind.startswith("alchemy_") and effect.source_actor_id in state.creatures
+                else effect
+                for effect in state.active_effects
+            ]
             for creature in state.creatures.values():
                 if not creature.defeated:
                     definition = get_definition(creature.definition_id)
-                    creature.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & set(definition.abilities)) or "Nimble Dodge" in definition.feats or "investigator_on_the_case" in definition.abilities
+                    creature.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & set(definition.abilities)) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(definition.feats)) or "investigator_on_the_case" in definition.abilities
             active.actions_remaining = 3
 
     def _apply_initiative_tie_order(self, state, index: int) -> None:
@@ -15514,7 +17433,8 @@ class Encounter:
         return None
 
     def _run_family_action(
-        self, state, dice, actor, command: FamilyCommand, *, quick_tempered_trigger: bool = False
+        self, state, dice, actor, command: FamilyCommand, *, quick_tempered_trigger: bool = False,
+        youre_next_trigger: bool = False,
     ) -> list[Event]:
         if type(command).__module__.endswith(".skill_actions"):
             from . import skill_actions
@@ -15543,6 +17463,7 @@ class Encounter:
             self, state, dice, actor, get_definition(actor.definition_id),
             command.family_id, command=command,
             quick_tempered_trigger=quick_tempered_trigger,
+            youre_next_trigger=youre_next_trigger,
         )
         result = handler.handle_action(context)
         events = self._family_result_events(result, command.family_id)

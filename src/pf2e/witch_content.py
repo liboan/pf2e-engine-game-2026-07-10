@@ -40,6 +40,50 @@ FAITHS_FLAMEKEEPER_WITCH = CreatureDefinition(
     ),
 )
 
+
+# This legal daily alternative preserves the selected Witch's five-cantrip
+# capacity while exposing the W1 Daze option through the ordinary catalog.
+FAITHS_FLAMEKEEPER_WITCH_DAZE = replace(
+    FAITHS_FLAMEKEEPER_WITCH,
+    definition_id="faiths_flamekeeper_witch_level_1_daze_prepared",
+    name="Level 1 Faith's Flamekeeper Witch (Daze prepared)",
+    prepared_spells=tuple(
+        replace(spell, slot_id="witch_daze", spell_id="daze")
+        if spell.slot_id == "witch_light" else spell
+        for spell in FAITHS_FLAMEKEEPER_WITCH.prepared_spells
+    ),
+    sheet_notes=(
+        *FAITHS_FLAMEKEEPER_WITCH.sheet_notes,
+        "Daze replaces Sigil in this alternate familiar's ten known divine cantrips and replaces Light in one ordinary prepared cantrip slot. Daze is an admitted divine two-action, 60-foot, basic Will-save mental cantrip; only a critical failure also causes stunned 1.",
+        "Source: https://2e.aonprd.com/Spells.aspx?ID=1482.",
+    ),
+)
+
+
+# The selected familiar already knows the four source-legal spells in this
+# package.  This alternate only changes daily preparation: Void Warp offers
+# basic Fortitude damage and critical-failure weakness, while Fear and
+# Enfeeble supply distinct Will and Fortitude timed suppression effects.
+FAITHS_FLAMEKEEPER_WITCH_SUPPRESSION_SPELLS = replace(
+    FAITHS_FLAMEKEEPER_WITCH,
+    definition_id="faiths_flamekeeper_witch_level_1_suppression_spells_prepared",
+    name="Level 1 Faith's Flamekeeper Witch (suppression spells prepared)",
+    prepared_spells=tuple(
+        replace(spell, slot_id="witch_void_warp", spell_id="void_warp")
+        if spell.slot_id == "witch_light" else
+        replace(spell, slot_id="witch_fear", spell_id="fear")
+        if spell.slot_id == "witch_command" else
+        replace(spell, slot_id="witch_enfeeble", spell_id="enfeeble")
+        if spell.slot_id == "witch_heal" else spell
+        for spell in FAITHS_FLAMEKEEPER_WITCH.prepared_spells
+    ),
+    sheet_notes=(
+        *FAITHS_FLAMEKEEPER_WITCH.sheet_notes,
+        "This daily hostile/control alternate preserves the familiar's ten known cantrips and six rank-1 spells, preparing known Void Warp, Fear, and Enfeeble instead of Light, Command, and Heal.",
+        "Sources: Void Warp https://2e.aonprd.com/Spells.aspx?ID=1745; Fear https://2e.aonprd.com/Spells.aspx?ID=1524; Enfeeble https://2e.aonprd.com/Spells.aspx?ID=1513.",
+    ),
+)
+
 FLAMEKEEPER_FOX = CreatureDefinition(
     definition_id="faiths_flamekeeper_fox", name="Flamekeeper Fox Familiar", hp=7, ac=15, perception=5, land_speed_ft=40,
     attacks=(), kind="familiar", health_mode=HealthMode.PC, vision="low_light", size="tiny", initiative_exempt=True, familiar_owner_actor_id="witch",
@@ -62,6 +106,16 @@ COMMAND_TARGET = CreatureDefinition(
     attacks=(AttackDefinition("club", "Club", 5, 5, frozenset({"attack", "melee"}), "bludgeoning", (6,), 2),),
     health_mode=HealthMode.ORDINARY, abilities=("common_speaker",), languages=("Common",),
     saves=(("fortitude", "trained", 4), ("reflex", "trained", 4), ("will", "trained", 3)),
+)
+
+# A distinct healthy ordinary fixture keeps the W2 three-spell suppression
+# encounter short enough to complete after its actual Void Warp finale, while
+# preserving the accepted 14-HP Command target used by existing W1 fixtures.
+SUPPRESSION_TARGET = replace(
+    COMMAND_TARGET,
+    definition_id="flamekeeper_suppression_target",
+    name="Common-speaking Suppression Target",
+    hp=10,
 )
 
 FLAMEKEEPER_COMMAND_KNOWLEDGE = replace(
@@ -89,5 +143,28 @@ FAITHS_FLAMEKEEPER_NEXT_SETUP = EncounterSetup(
         CreaturePlacement("fox", FLAMEKEEPER_FOX.definition_id, "Flamekeeper Fox", "blue", Position(1, 2)),
         CreaturePlacement("ally", FAITHS_FLAMEKEEPER_WITCH.definition_id, "Witch Ally", "blue", Position(2, 2)),
         CreaturePlacement("next_enemy", COMMAND_TARGET.definition_id, "Next Command Target", "red", Position(5, 2)),
+    ),
+)
+
+FAITHS_FLAMEKEEPER_DAZE_SETUP = EncounterSetup(
+    "faiths_flamekeeper_daze_vs_common_speaker",
+    "Faith's Flamekeeper Witch Daze versus Common Speaker",
+    15,
+    5,
+    (
+        CreaturePlacement("witch", FAITHS_FLAMEKEEPER_WITCH_DAZE.definition_id, "Flamekeeper Witch", "blue", Position(1, 2)),
+        CreaturePlacement("enemy", COMMAND_TARGET.definition_id, "Common Speaker", "red", Position(9, 2)),
+    ),
+)
+
+
+FAITHS_FLAMEKEEPER_SUPPRESSION_SPELLS_SETUP = EncounterSetup(
+    "faiths_flamekeeper_suppression_spells_vs_common_speaker",
+    "Faith's Flamekeeper Witch suppression spells versus Common Speaker",
+    15,
+    5,
+    (
+        CreaturePlacement("witch", FAITHS_FLAMEKEEPER_WITCH_SUPPRESSION_SPELLS.definition_id, "Flamekeeper Witch", "blue", Position(1, 2)),
+        CreaturePlacement("enemy", SUPPRESSION_TARGET.definition_id, "Common Speaker", "red", Position(5, 2)),
     ),
 )

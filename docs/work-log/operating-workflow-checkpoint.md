@@ -1,3 +1,7 @@
+# Historical operating workflow evidence
+
+This record describes earlier execution. Current instructions are in [the Content W1 working model](../plan/04-delivery-and-checks.md); historical native-only communication and routing here are superseded.
+
 # Operating workflow checkpoint
 
 ## Outcome

@@ -106,7 +106,7 @@ def rage(
 
 def test_all_six_instinct_builds_have_valid_fixed_level_one_choices_and_stats():
     assert set(BARBARIAN_SAMPLE_CHARACTERS) == {
-        "animal", "dragon", "fury", "giant", "spirit", "superstition"
+        "animal", "dragon", "fury", "giant", "spirit", "superstition", "raging_thrower"
     }
     for character in BARBARIAN_SAMPLE_CHARACTERS.values():
         validate_barbarian_state(character.barbarian_state)
@@ -165,11 +165,13 @@ def test_bear_and_dragon_runtime_definitions_keep_the_reviewed_legal_sheets():
         definition,
         *DRAGON_BARBARIAN_DEFINITIONS,
         *ANIMAL_BARBARIAN_DEFINITIONS,
+        BARBARIAN_SAMPLE_CHARACTERS["raging_thrower"].definition,
     )
     assert tuple(BARBARIAN_INITIAL_STATES) == (
         definition.definition_id,
         *DRAGON_BARBARIAN_INITIAL_STATES,
         *ANIMAL_BARBARIAN_INITIAL_STATES,
+        BARBARIAN_SAMPLE_CHARACTERS["raging_thrower"].definition.definition_id,
     )
     fist = next(attack for attack in definition.attacks if attack.attack_id == "fist")
     assert {"agile", "finesse", "nonlethal", "unarmed"} <= fist.traits

@@ -5,7 +5,6 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-docs/archive/
 /docs/work-log/agent-runs.json
 
 # Ephemeral local validation captures and raw agent-session exports.
@@ -15,3 +14,16 @@ docs/archive/
 
 # Generated model-catalog provenance, which can embed local workspace paths.
 /.codex/model-catalogs/*.provenance.json
+
+# Local Python environments and generated analysis/test output.
+venv/
+env/
+.tox/
+.nox/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.DS_Store

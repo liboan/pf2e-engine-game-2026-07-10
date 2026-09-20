@@ -219,6 +219,10 @@ class Stride:
 @dataclass(frozen=True)
 class Step:
     destination: Position
+    # Tiger Stance may spend the Step's two-square horizontal allowance.  The
+    # legacy destination-only constructor remains the ordinary one-square
+    # Step, while a supplied path makes every traversed square explicit.
+    path: tuple[Position, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -259,6 +263,10 @@ class ActivateAlchemy:
 
     item_id: str
     target_id: str | None = None
+    # Juggernaut Mutagen asks the recipient to choose between an existing
+    # temporary-HP pool and its new pool.  Keep this optional and appended so
+    # legacy command construction remains valid.
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -300,6 +308,9 @@ class Cast:
     # Finite printed attack-profile choice for cantrips such as Ignition and
     # Gouging Claw. ``None`` is only valid for spells without such a choice.
     spell_mode: str | None = None
+    # Hymn of Healing may replace an existing temporary-HP pool.  Keep the
+    # choice explicit and appended so legacy Cast construction remains valid.
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -323,6 +334,7 @@ class Sustain:
     orb_id: str
     point: Position | None = None
     attachment_actor_id: str | None = None
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -411,6 +423,29 @@ class ReachSpell(FamilyCommand):
     """Ready the selected caster's next eligible ranged or touch spell."""
 
     family_id = "casting"
+
+
+@dataclass(frozen=True)
+class WidenSpell(FamilyCommand):
+    """Ready the selected caster's next eligible burst, cone, or line spell."""
+
+    family_id = "casting"
+
+
+@dataclass(frozen=True)
+class EnergyAblation(FamilyCommand):
+    """Shape the next qualifying elemental spell for matching resistance."""
+
+    family_id = "casting"
+    energy_type: str
+
+
+@dataclass(frozen=True)
+class Cackle(FamilyCommand):
+    """Extend the acting Witch's current Stoke the Heart."""
+
+    family_id = "minions"
+    effect_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -684,6 +719,7 @@ class EffectView:
     value: int
     expires_at_source_start: int
     expires_at_world_time: int | None = None
+    effect_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -722,6 +758,8 @@ class CreatureState:
     spontaneous_slots: list["SpontaneousSlotState"] = field(default_factory=list)
     focus_points: int = 0
     focus_capacity: int = 0
+    gravity_weapon_used_round: int = 0
+    gravity_weapon_bonus_attack_id: str | None = None
     flourish_used_round: int = 0
     # Composition's once-per-turn limit belongs to the source turn, not to an
     # active effect. The marker is persisted because an extended composition
@@ -738,6 +776,12 @@ class CreatureState:
     # Reach Spell is a distinct one-spell spellshape marker.  The cast keeps
     # its committed range separately on ActionContinuation.
     reach_spell_pending: bool = False
+    # Widen Spell uses the same immediate-cast lifecycle while carrying its
+    # committed area length only on the cast continuation.
+    widen_spell_pending: bool = False
+    # Energy Ablation is the same one-successor spellshape lifecycle, with the
+    # selected energy retained until the next qualifying Cast.
+    energy_ablation_pending: str | None = None
     must_leave_occupied: bool = False
     temporary_hp: int = 0
     temporary_hp_source_id: str | None = None
@@ -818,6 +862,8 @@ class CreatureState:
     witch_restored_spirit_used_start: int = 0
     # The hex trait permits at most one Cast-a-hex action in a Witch turn.
     witch_hex_cast_start: int = 0
+    # Cackle is a focus hex and can be used at most once per Witch turn.
+    witch_cackle_used_start: int = 0
     # A minion receives one two-action allotment per owner turn.
     minion_commanded_start: int = 0
     # Literal turn-begins trigger gate for the selected Patron's Puppet.
@@ -878,6 +924,7 @@ class PendingChoice:
     damage_type: str | None = None
     nonlethal: bool = False
     damage_bonus_dice: int = 0
+    gravity_weapon_bonus: bool = False
     attack_actions_cost: int = 1
     attack_count_cost: int = 1
     ranged_penalty: int = 0
@@ -930,6 +977,7 @@ class ActionContinuation:
     damage_type: str | None = None
     nonlethal: bool = False
     damage_bonus_dice: int = 0
+    gravity_weapon_bonus: bool = False
     attack_actions_cost: int = 1
     attack_count_cost: int = 1
     attack_penalty: int = 0
@@ -955,7 +1003,11 @@ class ActionContinuation:
     spell_save_degree: int | None = None
     target_ids: tuple[str, ...] = ()
     spell_area_direction: Position | None = None
+    # A positive length is the immutable widened Breathe Fire cone committed
+    # by Widen Spell; it is never recomputed from a transient marker.
+    widen_spell_area_length_ft: int | None = None
     spell_mode: str | None = None
+    temporary_hp_choice: str | None = None
     # Hunter's Aim is a Ranger-procedure-only attack intent.  It remains
     # typed through reaction and saved-decision continuations.
     hunter_aim_intent: "HunterAimIntent | None" = None
@@ -968,6 +1020,8 @@ class ActionContinuation:
     attack_target_off_guard: bool = False
     nimble_dodge_decided: bool = False
     nimble_dodge_used: bool = False
+    reactive_shield_decided: bool = False
+    overextending_feint_penalty: int = 0
     guidance_checked: bool = False
     # Divine Grace is an optional Champion reaction before a spell save.  Its
     # two markers distinguish declining the reaction from consuming it, so a
@@ -1078,6 +1132,8 @@ class DamageResolution:
     life_link_source_actor_id: str | None = None
     life_link_transfer: int = 0
     bomber_only_primary_splash: bool = False
+    # Exact consumed alchemical item provenance for a saved bomb rider.
+    item_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1098,6 +1154,14 @@ class ShieldBlockRecord:
 class RaisedShieldState:
     instance_id: str
     expires_at_owner_start: int
+
+
+@dataclass(frozen=True)
+class MartialStanceState:
+    """One finite martial stance currently held by an actor."""
+
+    stance_id: str
+    entered_round: int
 
 
 @dataclass(frozen=True)
@@ -1268,6 +1332,9 @@ class ActiveSpellEffect:
     # each encounter round.  A round marker belongs to the literal link, not
     # the target, so save/load cannot accidentally replay its reduction.
     life_link_used_round: int = 0
+    # Glue Bomb's printed removal option counts one-action Interacts across
+    # turns and actors; other effects leave this at zero.
+    glue_removal_actions: int = 0
 
 
 @dataclass(frozen=True)
@@ -1380,6 +1447,11 @@ class EncounterState:
     ground_items: dict[Position, list[str]] = field(default_factory=dict)
     item_instances: dict[str, ItemInstance] = field(default_factory=dict)
     raised_shields: dict[str, RaisedShieldState] = field(default_factory=dict)
+    # Stances retain their own lifecycle rather than being flattened into a
+    # shield, spell, or generic condition effect.  The companion round map
+    # enforces the printed one-stance-action-per-round limit after dismissal.
+    martial_stances: dict[str, MartialStanceState] = field(default_factory=dict)
+    martial_stance_used_rounds: dict[str, int] = field(default_factory=dict)
     initiative_tie_groups: list[tuple[str, ...]] = field(default_factory=list)
     initiative_tie_orders: dict[int, list[str]] = field(default_factory=dict)
     initiative_tie_group_index: int = 0
@@ -1387,6 +1459,7 @@ class EncounterState:
     actor_start_counts: dict[str, int] = field(default_factory=dict)
     actor_end_counts: dict[str, int] = field(default_factory=dict)
     feint_off_guard_effects: list["FeintOffGuardEffect"] = field(default_factory=list)
+    overextending_feint_effects: list["OverextendingFeintEffect"] = field(default_factory=list)
     # Tumble Behind is deliberately a distinct typed, attacker-relative
     # one-attack exposure; it does not reuse Feint's melee-only contract.
     tumble_behind_exposures: list["TumbleBehindExposure"] = field(default_factory=list)
@@ -1455,6 +1528,7 @@ class FamilyProcedureContext:
     pending: PendingChoice | None = None
     choice: Choose | None = None
     quick_tempered_trigger: bool = False
+    youre_next_trigger: bool = False
 
     @property
     def rage_source_id(self) -> str | None:

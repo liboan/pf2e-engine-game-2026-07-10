@@ -52,6 +52,21 @@ def start_paired_strikes(
             return FamilyProcedureResult(unsupported="Flurry of Blows was called with inconsistent activity rules.")
         if "flurry_of_blows" not in context.definition.abilities:
             return FamilyProcedureResult(unsupported="Flurry of Blows is not admitted for this creature.")
+    elif activity_id == "ranger:twin_takedown":
+        if not (is_flourish and same_target and not ranged_only and require_hunted_prey and not requires_unarmed_or_monk_weapon):
+            return FamilyProcedureResult(unsupported="Twin Takedown was called with inconsistent activity rules.")
+        if "twin_takedown" not in context.definition.abilities:
+            return FamilyProcedureResult(unsupported="Twin Takedown is not admitted for this creature.")
+    elif activity_id == "fighter:double_slice":
+        if not (not is_flourish and same_target and not ranged_only and not require_hunted_prey and not requires_unarmed_or_monk_weapon):
+            return FamilyProcedureResult(unsupported="Double Slice was called with inconsistent activity rules.")
+        if "double_slice" not in context.definition.abilities:
+            return FamilyProcedureResult(unsupported="Double Slice is not admitted for this creature.")
+    elif activity_id == "rogue:twin_feint":
+        if not (not is_flourish and same_target and not ranged_only and not require_hunted_prey and not requires_unarmed_or_monk_weapon):
+            return FamilyProcedureResult(unsupported="Twin Feint was called with inconsistent activity rules.")
+        if "twin_feint" not in context.definition.abilities:
+            return FamilyProcedureResult(unsupported="Twin Feint is not admitted for this creature.")
     else:
         return FamilyProcedureResult(unsupported=f"Paired activity {activity_id!r} is not admitted.")
 
@@ -67,6 +82,18 @@ def start_paired_strikes(
     )
     if reason is not None:
         return FamilyProcedureResult(rejection=reason)
+    first_attack = context.encounter._select_attack(context.state, context.actor, first_selection.attack_id)
+    if activity_id in {"ranger:twin_takedown", "fighter:double_slice", "rogue:twin_feint"}:
+        if first_attack is None or "melee" not in first_attack.traits:
+            return FamilyProcedureResult(rejection="This paired activity requires a melee first Strike.")
+        if (
+            first_attack.item_id is None
+            or first_attack.item_id not in context.actor.held_items
+            or first_attack.hands_required != 1
+        ):
+            return FamilyProcedureResult(
+                rejection="This paired activity requires a wielded one-handed melee weapon in its first hand."
+            )
     hook = getattr(context.encounter, "_resolve_subordinate_strike", None)
     if not callable(hook):
         return FamilyProcedureResult(
@@ -76,7 +103,12 @@ def start_paired_strikes(
     actor = context.actor
     require_permitted = getattr(context.encounter, "_require_action_permitted", None)
     if callable(require_permitted):
-        require_permitted(context.state, actor, activity_id.rsplit(":", 1)[-1], frozenset({"flourish"}))
+        require_permitted(
+            context.state,
+            actor,
+            activity_id.rsplit(":", 1)[-1],
+            frozenset({"flourish"}) if is_flourish else frozenset({"attack"}),
+        )
     # The paired activity pays once; each subordinate Strike increments MAP
     # and pays its ordinary incidental costs in the core single-Strike hook.
     actor.actions_remaining -= action_cost
@@ -190,6 +222,8 @@ def after_subordinate_strike(
         )
         return FamilyProcedureResult(events=events)
     if resolved_count == 2 and continuation.stage == "second_resolved":
+        if continuation.activity_id == "fighter:double_slice":
+            context.actor.strikes_this_turn = continuation.initial_attack_count + 2
         completed = replace(continuation, stage="done")
         final_events = list(events)
         final_events.append(
@@ -222,7 +256,7 @@ def validate_pending(context: FamilyProcedureContext, *, activity_id: str) -> No
         or pending.continuation.kind != "paired_strike"
         or continuation.activity_id != activity_id
         or continuation.owner_actor_id != context.actor.actor_id
-        or continuation.paid_actions != 1
+        or continuation.paid_actions != {"fighter:double_slice": 2, "rogue:twin_feint": 2}.get(activity_id, 1)
         or continuation.stage != "choose_second"
         or continuation.next_index != 1
         or len(continuation.selections) != 1
@@ -322,6 +356,21 @@ def second_strike_options(
         first_attack_id = first.attack_id
         ranged_only = False
         monk_weapons_only = True
+    elif activity_id == "ranger:twin_takedown":
+        targets = (first.target_id,)
+        first_attack_id = None
+        ranged_only = False
+        monk_weapons_only = False
+    elif activity_id == "fighter:double_slice":
+        targets = (first.target_id,)
+        first_attack_id = None
+        ranged_only = False
+        monk_weapons_only = False
+    elif activity_id == "rogue:twin_feint":
+        targets = (first.target_id,)
+        first_attack_id = None
+        ranged_only = False
+        monk_weapons_only = False
     else:
         return ()
 
@@ -350,6 +399,23 @@ def second_strike_options(
                     continue
             elif distance > attack.reach_ft:
                 continue
+            if activity_id in {"ranger:twin_takedown", "fighter:double_slice", "rogue:twin_feint"}:
+                if "melee" not in attack.traits or attack.attack_id == first.attack_id:
+                    continue
+                first_attack = next(
+                    (candidate for candidate in context.definition.attacks if candidate.attack_id == first.attack_id),
+                    None,
+                )
+                if (
+                    attack.item_id is None
+                    or attack.item_id not in actor.held_items
+                    or attack.hands_required != 1
+                    or first_attack is None
+                    or attack.item_id == first_attack.item_id
+                ):
+                    continue
+                if activity_id == "ranger:twin_takedown" and attack.attack_id == first.attack_id:
+                    continue
             if attack.free_hands_required and max(0, 2 - len(actor.held_items)) < attack.free_hands_required:
                 continue
             if monk_weapons_only:

@@ -30,7 +30,7 @@ from .space import grid_distance_feet
 # targeted spell's dim-light flat-check continuation has the same live and
 # saved validation boundary.
 CONCEALMENT_TARGETED_SPELL_IDS = frozenset({
-    "divine_lance", "heal", "soothe", "fear", "void_warp", "guidance", "stabilize",
+    "divine_lance", "daze", "heal", "soothe", "fear", "void_warp", "guidance", "stabilize",
     "runic_weapon", "runic_body", "force_bolt", "frostbite", "enfeeble",
     "telekinetic_projectile", "ignition", "gouging_claw", "tangle_vine",
     "tempest_surge",
@@ -84,6 +84,16 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 "https://2e.aonprd.com/Spells.aspx?ID=1896",
             ),
             SpellDefinition(
+                "gravity_weapon", "Gravity Weapon", (1,),
+                frozenset({"concentrate", "focus", "manipulate", "primal"}), 0, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1863",
+            ),
+            SpellDefinition(
+                "hymn_of_healing", "Hymn of Healing", (2,),
+                frozenset({"composition", "concentrate", "focus", "healing", "manipulate", "vitality"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1768",
+            ),
+            SpellDefinition(
                 "tempest_surge", "Tempest Surge", (2,),
                 frozenset({"air", "concentrate", "druid", "electricity", "focus", "manipulate", "uncommon"}), 30, False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1860",
@@ -124,6 +134,15 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 60,
                 True,
                 "https://2e.aonprd.com/Spells.aspx?ID=1498",
+            ),
+            SpellDefinition(
+                "daze",
+                "Daze",
+                (2,),
+                frozenset({"cantrip", "concentrate", "manipulate", "mental", "nonlethal"}),
+                60,
+                True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1482",
             ),
             SpellDefinition(
                 "void_warp",
@@ -348,6 +367,16 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 frozenset({"focus", "witch"}), None, False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1882",
             ),
+            SpellDefinition(
+                "weapon_surge", "Weapon Surge", (1,),
+                frozenset({"cleric", "focus", "manipulate", "sanctified"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1852",
+            ),
+            SpellDefinition(
+                "cackle", "Cackle", (0,),
+                frozenset({"concentrate", "focus", "free", "hex", "witch"}), None, False,
+                "https://app.demiplane.com/nexus/pathfinder2e/spells/cackle-rm",
+            ),
         )
     }
 )
@@ -463,6 +492,26 @@ def basic_save_damage(total: int, degree: DegreeOfSuccess) -> int:
     if degree is DegreeOfSuccess.FAILURE:
         return total
     return total * 2
+
+
+def basic_save_damage_result(raw: DamageResult, degree: DegreeOfSuccess) -> DamageResult:
+    """Apply a basic save to one ordinary spell damage component.
+
+    The admitted single-target spell resolvers all roll one typed component
+    before their target saves.  Keeping the damage-result adjustment here
+    gives those resolvers one literal record of the basic-save outcome while
+    leaving multi-recipient and mixed-component effects explicitly owned by
+    their distinct procedures.
+    """
+    if not isinstance(raw, DamageResult) or len(raw.components) != 1:
+        raise ValueError("basic-save spell damage requires exactly one damage component")
+    total = basic_save_damage(raw.total, degree)
+    return replace(
+        raw,
+        components=(replace(raw.components[0], amount=total),),
+        total=total,
+        adjustment=f"basic_save:{degree.name.lower()}",
+    )
 
 
 def void_warp_effect(

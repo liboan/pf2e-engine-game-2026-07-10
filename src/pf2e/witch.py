@@ -7,15 +7,19 @@ and release a physical item.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from .model import ActionContinuation, Event, FamilyCommand, FamilyProcedureContext, FamilyProcedureResult, Position
+from .model import ActionContinuation, Cackle, Event, FamilyCommand, FamilyProcedureContext, FamilyProcedureResult, Position
 from .space import grid_distance_feet, in_bounds, step_cost
 
 
 _CANTRIPS = frozenset({
     "divine_lance", "void_warp", "shield", "guidance", "stabilize", "light",
     "vitality_lash", "forbidding_ward", "sigil", "detect_magic",
+})
+_DAZE_CANTRIPS = (_CANTRIPS - {"sigil"}) | {"daze"}
+_DAZE_FAMILIAR_SPELL_DEFINITIONS = frozenset({
+    "faiths_flamekeeper_witch_level_1_daze_prepared",
 })
 _RANK_ONE = frozenset({
     "heal", "fear", "enfeeble", "runic_weapon", "runic_body", "command",
@@ -41,7 +45,7 @@ def preparation_choices(definition, slot) -> tuple[str, ...]:
     if "faiths_flamekeeper" not in definition.abilities:
         return ()
     if slot.cantrip:
-        return tuple(sorted(_CANTRIPS))
+        return tuple(sorted(_cantrip_choices(definition)))
     if slot.rank == 1:
         return tuple(sorted(_rank_one_choices(definition)))
     return ()
@@ -50,10 +54,20 @@ def preparation_choices(definition, slot) -> tuple[str, ...]:
 def prepared_slot_rejection(actor, definition, slot, spell_id: str) -> str | None:
     if "faiths_flamekeeper" not in definition.abilities:
         return None
-    allowed = _CANTRIPS if slot.cantrip else _rank_one_choices(definition) if slot.rank == 1 else frozenset()
+    allowed = _cantrip_choices(definition) if slot.cantrip else _rank_one_choices(definition) if slot.rank == 1 else frozenset()
     if spell_id not in allowed:
         return "The spell is outside this Witch's finite divine preparation choices."
     return None
+
+
+def _cantrip_choices(definition) -> frozenset[str]:
+    """Return the selected familiar's ten-spell cantrip book.
+
+    Daze is a source-legal learned-spell replacement for Sigil on the one
+    W1 alternate sheet; it does not expand the established Witch's starting
+    familiar beyond its ten known divine cantrips.
+    """
+    return _DAZE_CANTRIPS if definition.definition_id in _DAZE_FAMILIAR_SPELL_DEFINITIONS else _CANTRIPS
 
 
 @dataclass(frozen=True)
@@ -108,6 +122,8 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
         return _command(context, command.familiar_id, command.actions, puppet=True)
     if isinstance(command, RestoreSpirit):
         return FamilyProcedureResult(rejection="Restored Spirit is chosen only in its saved before-or-after hex trigger window.")
+    if isinstance(command, Cackle):
+        return _cackle(context, command)
     return FamilyProcedureResult(unsupported="That minion action is not admitted.")
 
 
@@ -117,6 +133,48 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
 
 def validate_pending(context: FamilyProcedureContext) -> None:
     raise ValueError("the selected Witch has no saved minion choice")
+
+
+def _cackle(context: FamilyProcedureContext, command: Cackle) -> FamilyProcedureResult:
+    if "cackle" not in context.definition.abilities or "Cackle" not in context.definition.feats:
+        return FamilyProcedureResult(rejection=f"{context.actor.label} has no admitted Cackle feat.")
+    context.encounter._require_action_permitted(
+        context.state, context.actor, "cackle", frozenset({"auditory", "concentrate"})
+    )
+    start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+    if context.actor.witch_hex_cast_start == start:
+        return FamilyProcedureResult(rejection="A Witch can Cast only one hex each turn.")
+    if context.actor.witch_cackle_used_start == start:
+        return FamilyProcedureResult(rejection="Cackle can be used only once per Witch turn.")
+    if context.actor.focus_points < 1:
+        return FamilyProcedureResult(rejection="Cackle requires 1 Focus Point.")
+    effect = next(
+        (
+            effect for effect in context.state.active_effects
+            if effect.kind == "stoke_the_heart"
+            and effect.source_actor_id == context.actor.actor_id
+            and (command.effect_id is None or effect.effect_id == command.effect_id)
+        ),
+        None,
+    )
+    if effect is None:
+        return FamilyProcedureResult(rejection="Cackle requires the Witch's active Stoke the Heart.")
+    if effect.sustain_expires_at_source_end <= context.state.actor_end_counts.get(context.actor.actor_id, 0):
+        return FamilyProcedureResult(rejection="That Stoke the Heart has already expired.")
+    context.actor.focus_points -= 1
+    context.actor.witch_hex_cast_start = start
+    context.actor.witch_cackle_used_start = start
+    context.state.active_effects[context.state.active_effects.index(effect)] = replace(
+        effect,
+        sustain_expires_at_source_end=context.state.actor_end_counts.get(context.actor.actor_id, 0) + 2,
+    )
+    events = (Event(
+        "cackle", context.actor.actor_id, effect.target_actor_id,
+        f"{context.actor.label} Cackles, extending Stoke the Heart on {context.state.creatures[effect.target_actor_id].label}.",
+    ),)
+    return FamilyProcedureResult(tuple(context.encounter._offer_restored_spirit_choice(
+        context.state, context.actor, list(events), dice=context.dice,
+    )))
 
 
 def _familiar(context: FamilyProcedureContext, familiar_id: str):

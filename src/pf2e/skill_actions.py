@@ -30,6 +30,7 @@ from .content import get_definition
 from .model import (
     ActionContinuation,
     ActiveConditionEffect,
+    ActiveSpellEffect,
     ChoiceOption,
     Choose,
     EffectExpiration,
@@ -141,6 +142,64 @@ class FeintOffGuardEffect:
             raise ValueError("only an any-attacker Feint exposure may omit its attacker ID")
         if self.consume_on_next_attack != (self.scope is FeintAttackScope.NEXT_MELEE_ATTACK):
             raise ValueError("only a next-melee-attack exposure is consumed on attack")
+
+
+@dataclass(frozen=True)
+class OverextendingFeintEffect:
+    """Rogue's typed attack penalty from Overextending Feint."""
+
+    effect_id: str
+    source_actor_id: str
+    target_actor_id: str
+    expiration: EffectExpiration
+    all_attacks: bool
+
+    def __post_init__(self) -> None:
+        if not self.effect_id or not self.source_actor_id or not self.target_actor_id:
+            raise ValueError("Overextending Feint needs stable source and target actors")
+        if self.source_actor_id == self.target_actor_id:
+            raise ValueError("Overextending Feint needs distinct actors")
+        if self.expiration.anchor_actor_id != self.target_actor_id or self.expiration.boundary != "end":
+            raise ValueError("Overextending Feint expires at the feinted target's turn end")
+        if self.expiration.occurrence < 1 or type(self.all_attacks) is not bool:
+            raise ValueError("Overextending Feint has invalid expiry or scope")
+
+
+def overextending_feint_penalty(
+    effects: tuple[OverextendingFeintEffect, ...],
+    *, attacker_id: str,
+    target_id: str,
+    actor_end_counts: dict[str, int],
+) -> int:
+    """Return the -2 penalty when the attacker is the feinted creature."""
+
+    for effect in effects:
+        if (
+            effect.source_actor_id == target_id
+            and effect.target_actor_id == attacker_id
+            and actor_end_counts.get(attacker_id, 0) < effect.expiration.occurrence
+        ):
+            return -2
+    return 0
+
+
+def consume_overextending_feint_on_attack(
+    effects: tuple[OverextendingFeintEffect, ...],
+    *, attacker_id: str, target_id: str, actor_end_counts: dict[str, int],
+) -> tuple[OverextendingFeintEffect, ...]:
+    """Consume a successful (non-critical) Overextending Feint on one attack."""
+
+    consumed = {
+        effect.effect_id
+        for effect in effects
+        if (
+            not effect.all_attacks
+            and effect.source_actor_id == target_id
+            and effect.target_actor_id == attacker_id
+            and actor_end_counts.get(attacker_id, 0) < effect.expiration.occurrence
+        )
+    }
+    return tuple(effect for effect in effects if effect.effect_id not in consumed)
 
 
 @dataclass(frozen=True)
@@ -311,10 +370,13 @@ class Trip(FamilyCommand):
     target_id: str
     maneuver_item_id: str | None = None
     use_assurance: bool = False
+    maneuver_attack_id: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.use_assurance) is not bool:
             raise TypeError("use_assurance must be a boolean")
+        if self.maneuver_item_id is not None and self.maneuver_attack_id is not None:
+            raise TypeError("Trip cannot select both a maneuver item and an unarmed attack")
 
 
 @dataclass(frozen=True)
@@ -372,12 +434,14 @@ class Demoralize(FamilyCommand):
     target_id: str
     spoken_language: str | None = None
     use_intimidating_glare: bool = False
+    youre_next_reaction: bool = False
 
 
 @dataclass(frozen=True)
 class Feint(FamilyCommand):
     family_id: ClassVar[str] = "martial"
     target_id: str
+    use_overextending: bool = False
 
 
 @dataclass(frozen=True)
@@ -653,8 +717,14 @@ def _skill_dc(context: FamilyProcedureContext, actor, statistic: str, attribute:
     return context.skill_dc(actor.actor_id, statistic)
 
 
-def _active_effect(context: FamilyProcedureContext, effect_id: str) -> ActiveConditionEffect | None:
-    return next((effect for effect in context.state.condition_effects if effect.effect_id == effect_id), None)
+def _active_effect(context: FamilyProcedureContext, effect_id: str) -> ActiveConditionEffect | ActiveSpellEffect | None:
+    return next(
+        (
+            effect for effect in (*context.state.condition_effects, *context.state.active_effects)
+            if effect.effect_id == effect_id
+        ),
+        None,
+    )
 
 
 def _source_held_effects(context: FamilyProcedureContext, source_id: str, target_id: str) -> tuple[ActiveConditionEffect, ...]:
@@ -673,7 +743,7 @@ def _expiry_after_actor_end(context: FamilyProcedureContext, actor_id: str, *, t
     )
 
 
-def _add_condition_effect(
+def add_timed_condition_effect(
     context: FamilyProcedureContext,
     *,
     effect_id: str,
@@ -684,14 +754,51 @@ def _add_condition_effect(
     expiration: EffectExpiration,
     dc: int | None = None,
 ) -> None:
+    """Replace one source-owned, actor-relative condition effect.
+
+    Demoralize and the martial Intimidating Strike family both create a
+    frightened condition with an explicit source and end-of-turn boundary.
+    Keeping the small state mutation here avoids duplicating the replacement
+    and persistence-safe ID rules while leaving each action's trigger and
+    immunity contract in its owning module.
+    """
     context.state.condition_effects = [effect for effect in context.state.condition_effects if effect.effect_id != effect_id]
     context.add_condition_effect(
         effect_id, kind, source_id, target_id, value, expiration=expiration, dc=dc,
     )
 
 
-def _maneuver_weapon(context: FamilyProcedureContext, item_id: str | None, action_trait: str):
-    """Resolve a held weapon profile by exact item id and printed action trait."""
+def _maneuver_weapon(
+    context: FamilyProcedureContext,
+    item_id: str | None,
+    action_trait: str,
+    attack_id: str | None = None,
+):
+    """Resolve a held weapon or a live unarmed maneuver profile."""
+
+    if item_id is not None and attack_id is not None:
+        raise ValueError("A maneuver cannot select both an item and an unarmed attack.")
+    if attack_id is not None:
+        profiles = tuple(
+            attack for attack in context.definition.attacks
+            if attack.attack_id == attack_id and "unarmed" in attack.traits
+        )
+        if len(profiles) != 1:
+            raise ValueError("The selected unarmed maneuver attack is not admitted.")
+        profile = profiles[0]
+        if not context.encounter._attack_usable(context.state, context.actor, profile):
+            raise ValueError("The selected unarmed maneuver attack is not currently usable.")
+        if action_trait not in profile.traits:
+            raise ValueError(f"{profile.name} does not have the {action_trait} trait.")
+        target_id = getattr(context.command, "target_id", None)
+        if context.pending is not None:
+            target_id = context.pending.target_id
+        target = context.state.creatures.get(target_id or "")
+        if attack_id == "wolf_jaws" and (
+            target is None or not context.encounter._is_flanked(context.state, context.actor, target)
+        ):
+            raise ValueError("Wolf Jaws gains the Trip trait only while actually flanking the target.")
+        return profile
 
     if item_id is None:
         return None
@@ -793,9 +900,10 @@ def _check_maneuver(
     action_trait: str,
     item_id: str | None,
     *,
+    attack_id: str | None = None,
     already_holding_target: bool = False,
 ):
-    profile = _maneuver_weapon(context, item_id, action_trait)
+    profile = _maneuver_weapon(context, item_id, action_trait, attack_id)
     source = _definition(context.actor)
     target_definition = _definition(target)
     if not maneuver_target_size_allowed(source.size, target_definition.size):
@@ -1163,7 +1271,8 @@ def _start_skill_action_check(
 ) -> FamilyProcedureResult:
     """Commit a named action once, then preserve the check through choices."""
 
-    if context.actor.actions_remaining < 1:
+    reaction_action = isinstance(command, Demoralize) and command.youre_next_reaction
+    if not reaction_action and context.actor.actions_remaining < 1:
         return FamilyProcedureResult(rejection=f"{_action_id(command).title()} requires one action.")
     use_assurance = getattr(command, "use_assurance", False)
     if type(use_assurance) is not bool:
@@ -1221,7 +1330,7 @@ def _start_skill_action_check(
     ) else 0
     if commit_attack_count:
         saved = replace(saved, attack_count_committed=True)
-    context.commit_family_action(actions=1, attacks=(
+    context.commit_family_action(actions=0 if reaction_action else 1, attacks=(
         commit_attack_count or (1 if use_assurance and "attack" in traits else 0)
     ))
     if isinstance(command, (Trip, Grapple)):
@@ -1291,6 +1400,8 @@ def _offer_hero_point_or_finish(
     command: FamilyCommand,
     saved_check,
 ) -> FamilyProcedureResult:
+    if isinstance(command, Demoralize) and command.youre_next_reaction:
+        return _finish_checked_action(context, command, saved_check)
     if context.actor.health_mode.value == "pc" and context.actor.hero_points > 0:
         action_id = _action_id(command)
         # Keep the already resolved check's committed MAP and targeting
@@ -1388,15 +1499,19 @@ def _finish_quick_jump(
     speed = effective_speed_ft(
         context.actor, context.definition, _conditions_for_target(context, context.actor)
     )
+    from .martial_defense import crane_stance_leap_bonus
+
+    leap_bonus = crane_stance_leap_bonus(context.state, context.actor.actor_id)
     # Quick Jump changes only Long Jump's action cost and run-up requirement.
     # It retains Long Jump's check-result distance and failed-check horizontal
-    # Leap, rather than using an invented degree-to-distance table.
+    # Leap, rather than using an invented degree-to-distance table. Crane
+    # Stance's printed horizontal Leap increase applies to either result.
     # A normal horizontal Leap is 10 feet at Speed 15--25 and 15 feet at
     # Speed 30 or greater.  Vertical Long/High Jump terrain remains outside
     # this deliberately horizontal movement slice.
-    normal_leap = 15 if speed >= 30 else 10
+    normal_leap = (15 if speed >= 30 else 10) + leap_bonus
     if check.degree >= DegreeOfSuccess.SUCCESS:
-        maximum = min((check.total // 5) * 5, speed)
+        maximum = min((check.total // 5) * 5 + leap_bonus, speed)
     else:
         maximum = normal_leap
     events = [Event(
@@ -1576,7 +1691,10 @@ def _complete_action_unless_paused(context: FamilyProcedureContext, events: list
 def _finish_trip(context: FamilyProcedureContext, command: Trip, check_context) -> FamilyProcedureResult:
     try:
         target = _target(context, command.target_id)
-        profile = _check_maneuver(context, target, "trip", command.maneuver_item_id)
+        profile = _check_maneuver(
+            context, target, "trip", command.maneuver_item_id,
+            attack_id=command.maneuver_attack_id,
+        )
     except NotImplementedError as error:
         return FamilyProcedureResult(unsupported=str(error))
     except ValueError as error:
@@ -1586,7 +1704,10 @@ def _finish_trip(context: FamilyProcedureContext, command: Trip, check_context) 
     if outcome.target_falls_prone:
         target.prone = True
         events.append(Event("condition_applied", context.actor.actor_id, target.actor_id, f"{target.label} falls prone.", check=outcome.check))
-    if outcome.user_falls_prone and profile is not None:
+    # Only a physical maneuver weapon can be dropped to convert the printed
+    # critical failure.  Unarmed Wolf Jaws still uses the ordinary Trip
+    # critical-failure outcome: the user falls prone without a saved choice.
+    if outcome.user_falls_prone and profile is not None and profile.item_id is not None:
         continuation = ActionContinuation(
             kind="family_action",
             actor_id=context.actor.actor_id,
@@ -1653,7 +1774,7 @@ def _finish_grapple(context: FamilyProcedureContext, command: Grapple, check_con
         events.append(Event("condition_removed", context.actor.actor_id, target.actor_id, f"{context.actor.label} releases their Grapple on {target.label} after failing to maintain it."))
     if outcome.target_condition is not None:
         effect_id = f"grapple:{context.actor.actor_id}:{target.actor_id}"
-        _add_condition_effect(
+        add_timed_condition_effect(
             context,
             effect_id=effect_id,
             kind=outcome.target_condition,
@@ -1718,7 +1839,7 @@ def _escape(context: FamilyProcedureContext, command: Escape) -> FamilyProcedure
         return FamilyProcedureResult(rejection="A critical failure bars Escape until the start of your next turn.")
     effect = _active_effect(context, command.impediment_id)
     if effect is None or effect.target_actor_id != context.actor.actor_id or (
-        effect.kind not in {"grabbed", "immobilized", "restrained"}
+        effect.kind not in {"grabbed", "immobilized", "restrained", "alchemy_glue_bomb_lesser"}
         and not (effect.kind == "speed_penalty" and effect.effect_id.startswith("tangle_vine:"))
     ):
         return FamilyProcedureResult(rejection="Escape must select a current grabbed, immobilized, restrained, or Tangle Vine effect on the acting creature.")
@@ -1727,8 +1848,11 @@ def _escape(context: FamilyProcedureContext, command: Escape) -> FamilyProcedure
     source = context.state.creatures[effect.source_actor_id]
     if command.check_method not in {"athletics", "acrobatics", "unarmed_attack"}:
         return FamilyProcedureResult(rejection="Escape check_method must be athletics, acrobatics, or unarmed_attack.")
-    if effect.dc is not None:
-        dc = effect.dc
+    effect_dc = getattr(effect, "dc", None)
+    if effect_dc is not None:
+        dc = effect_dc
+    elif effect.kind == "alchemy_glue_bomb_lesser" and effect.effect_id.startswith("glue_bomb:"):
+        dc = 17
     elif effect.kind in {"grabbed", "restrained"} and effect.effect_id.startswith("grapple:"):
         try:
             dc = _skill_dc(context, source, "athletics", "strength")
@@ -1763,6 +1887,11 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
     events = [_event_check("escape", context.actor, source, outcome.check)]
     if outcome.free_of_selected_impediment:
         linked_vine = effect.effect_id.startswith("tangle_vine:")
+        linked_glue = effect.effect_id.startswith("glue_bomb:")
+        glue_base_id = (
+            effect.effect_id.removesuffix(":immobilized")
+            if linked_glue else None
+        )
         removed_effects = tuple(
             current for current in context.state.condition_effects
             if (
@@ -1771,10 +1900,19 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
                     linked_vine
                     and current.effect_id.rsplit(":", 1)[0] == effect.effect_id.rsplit(":", 1)[0]
                 )
+                or (
+                    linked_glue
+                    and current.effect_id == f"{glue_base_id}:immobilized"
+                )
             )
         )
         removed_ids = {current.effect_id for current in removed_effects}
         context.state.condition_effects = [current for current in context.state.condition_effects if current.effect_id not in removed_ids]
+        if linked_glue:
+            context.state.active_effects = [
+                current for current in context.state.active_effects
+                if current.effect_id != glue_base_id
+            ]
         events.append(Event("condition_removed", context.actor.actor_id, source.actor_id, f"{context.actor.label} escapes the selected effect imposed by {source.label}.", check=outcome.check))
     if outcome.retry_blocked_until_next_turn:
         # Core persists this action-only lockout separately from conditions so
@@ -1830,16 +1968,19 @@ def _escape_stride_destinations(context: FamilyProcedureContext):
 
 
 def _demoralize(context: FamilyProcedureContext, command: Demoralize) -> FamilyProcedureResult:
-    if context.actor.actions_remaining < DEMORALIZE.action_cost:
+    if command.youre_next_reaction and not context.youre_next_trigger:
+        return FamilyProcedureResult(rejection="You're Next requires its post-defeat reaction trigger.")
+    if not command.youre_next_reaction and context.actor.actions_remaining < DEMORALIZE.action_cost:
         return FamilyProcedureResult(rejection="Demoralize requires one action.")
-    if context.actor.must_leave_occupied:
+    if not command.youre_next_reaction and context.actor.must_leave_occupied:
         return FamilyProcedureResult(rejection="Move out of the occupied ally's space before taking another action.")
     try:
         target = _target(context, command.target_id)
     except ValueError as error:
         return FamilyProcedureResult(rejection=str(error))
-    if grid_distance_feet(context.actor.position, target.position) > DEMORALIZE.range_ft:
-        return FamilyProcedureResult(rejection="Demoralize requires a target within 30 feet.")
+    max_range = 60 if command.youre_next_reaction else DEMORALIZE.range_ft
+    if grid_distance_feet(context.actor.position, target.position) > max_range:
+        return FamilyProcedureResult(rejection=f"Demoralize requires a target within {max_range} feet.")
     if target.unconscious:
         return FamilyProcedureResult(rejection="Demoralize requires an aware target.")
     if command.use_intimidating_glare:
@@ -1900,6 +2041,7 @@ def _demoralize(context: FamilyProcedureContext, command: Demoralize) -> FamilyP
         dc,
         traits,
         extra_modifiers=(
+            *((Modifier(2, "circumstance", "You're Next"),) if command.youre_next_reaction else ()),
             *stylish_combatant_modifiers(context.definition),
             *(() if understood or command.use_intimidating_glare else (
                 Modifier(-4, "circumstance", "Demoralize language barrier"),
@@ -1932,7 +2074,7 @@ def _finish_demoralize(context: FamilyProcedureContext, command: Demoralize, che
     events = [_event_check("demoralize", context.actor, target, outcome.check)]
     if outcome.apply_frightened:
         current_round_end = context.state.actor_end_counts.get(target.actor_id, 0)
-        _add_condition_effect(
+        add_timed_condition_effect(
             context,
             effect_id=f"demoralize:{context.actor.actor_id}:{target.actor_id}:{context.state.round_number}:{current_round_end}",
             kind="frightened",
@@ -1959,6 +2101,8 @@ def _finish_demoralize(context: FamilyProcedureContext, command: Demoralize, che
         else:
             text = f"{context.actor.label}'s temporary Panache is extended."
         events.append(Event(panache_event, context.actor.actor_id, None, text, check=check_context.result))
+    if command.youre_next_reaction:
+        return FamilyProcedureResult(events=tuple(events))
     return _complete_action_unless_paused(context, events)
 
 
@@ -2022,7 +2166,13 @@ def _feint_step_options(destinations: tuple[Position, ...]) -> tuple[ChoiceOptio
     )
 
 
-def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context) -> FamilyProcedureResult:
+def _finish_feint(
+    context: FamilyProcedureContext,
+    command: Feint,
+    check_context,
+    *,
+    offer_overextending: bool = True,
+) -> FamilyProcedureResult:
     if check_context.result is None:
         return FamilyProcedureResult(rejection="The saved Feint check has not been resolved.")
     try:
@@ -2030,6 +2180,8 @@ def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context
     except ValueError as error:
         return FamilyProcedureResult(rejection=str(error))
 
+    if command.use_overextending and "Overextending Feint" not in context.definition.feats:
+        return FamilyProcedureResult(rejection="Overextending Feint is not admitted for this creature.")
     store = getattr(context.state, "feint_off_guard_effects", None)
     if check_context.result.degree is not DegreeOfSuccess.FAILURE and store is None:
         return FamilyProcedureResult(
@@ -2045,6 +2197,53 @@ def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context
         wielding_agile_or_finesse_melee_weapon=_wielding_agile_or_finesse_melee_weapon(context),
     )
     events = [_event_check("feint", context.actor, target, outcome.check)]
+    if (
+        offer_overextending
+        and not command.use_overextending
+        and "Overextending Feint" in context.definition.feats
+        and outcome.check.degree >= DegreeOfSuccess.SUCCESS
+    ):
+        continuation = ActionContinuation(
+            kind="family_action",
+            actor_id=context.actor.actor_id,
+            target_id=target.actor_id,
+            stage="feint_overextending_choice",
+        )
+        context.present_choice(
+            "skill_actions:feint:overextending",
+            context.actor.actor_id,
+            f"{context.actor.label} may replace the successful Feint with Overextending Feint.",
+            (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            ),
+            continuation,
+            target_id=target.actor_id,
+            saved_check=check_context,
+            family_command=command,
+        )
+        events.append(Event(
+            "choice_offered", context.actor.actor_id, target.actor_id,
+            "Choose ordinary Feint or Overextending Feint.", check=outcome.check,
+        ))
+        return FamilyProcedureResult(events=tuple(events))
+    if command.use_overextending and outcome.check.degree >= DegreeOfSuccess.SUCCESS:
+        effect_id = f"overextending_feint:{context.actor.actor_id}:{target.actor_id}:{context.state.round_number}:{len(context.state.overextending_feint_effects) + 1}"
+        context.state.overextending_feint_effects.append(OverextendingFeintEffect(
+            effect_id,
+            context.actor.actor_id,
+            target.actor_id,
+            EffectExpiration(target.actor_id, "end", context.state.actor_end_counts.get(target.actor_id, 0) + 1),
+            outcome.check.degree is DegreeOfSuccess.CRITICAL_SUCCESS,
+        ))
+        events.append(Event(
+            "overextending_feint",
+            context.actor.actor_id,
+            target.actor_id,
+            f"{target.label} takes a -2 circumstance penalty to {'all attacks' if outcome.check.degree is DegreeOfSuccess.CRITICAL_SUCCESS else 'their next attack'} against {context.actor.label}.",
+            check=outcome.check,
+        ))
+        return _complete_action_unless_paused(context, events)
     for effect in outcome.off_guard_effects:
         store.append(effect)
         if effect.target_actor_id == context.actor.actor_id:
@@ -2096,9 +2295,12 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
         except ValueError as error:
             return FamilyProcedureResult(rejection=str(error))
         from .skill_content import QUICK_JUMP
+        from .martial_defense import crane_stance_leap_bonus
 
         return _start_skill_action_check(
-            context, command, "athletics", 15, QUICK_JUMP.traits
+            context, command, "athletics",
+            15 - crane_stance_leap_bonus(context.state, context.actor.actor_id),
+            QUICK_JUMP.traits,
         )
     if isinstance(command, TumbleThrough):
         if context.actor.actions_remaining < TUMBLE_THROUGH.action_cost:
@@ -2154,7 +2356,10 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
             return FamilyProcedureResult(rejection="Trip requires one action.")
         try:
             target = _target(context, command.target_id)
-            _check_maneuver(context, target, "trip", command.maneuver_item_id)
+            _check_maneuver(
+                context, target, "trip", command.maneuver_item_id,
+                attack_id=command.maneuver_attack_id,
+            )
             dc = _save_dc(context, target, "reflex")
         except NotImplementedError as error:
             return FamilyProcedureResult(unsupported=str(error))
@@ -2229,6 +2434,30 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
             return FamilyProcedureResult(rejection="Choose whether to keep or reroll the concealment check.")
         events.extend(_finish_skill_targeting(context, command, saved, continuation, check))
         return FamilyProcedureResult(events=tuple(events))
+    if pending.procedure_id == "skill_actions:feint:overextending":
+        command = pending.family_command
+        saved = pending.saved_check
+        if (
+            not isinstance(command, Feint)
+            or saved is None
+            or saved.result is None
+            or continuation.stage != "feint_overextending_choice"
+            or pending.target_id != command.target_id
+            or "Overextending Feint" not in context.definition.feats
+            or saved.result.degree < DegreeOfSuccess.SUCCESS
+            or pending.options != (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            )
+        ):
+            return FamilyProcedureResult(rejection="The saved Overextending Feint choice is incomplete.")
+        if choice.option_id == "ordinary":
+            selected = replace(command, use_overextending=False)
+        elif choice.option_id == "overextending":
+            selected = replace(command, use_overextending=True)
+        else:
+            return FamilyProcedureResult(rejection="Choose ordinary Feint or Overextending Feint.")
+        return _finish_feint(context, selected, saved, offer_overextending=False)
     if pending.procedure_id == "skill_actions:feint:scoundrel_step":
         command = pending.family_command
         saved = pending.saved_check
@@ -2337,7 +2566,7 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
             message = f"{context.actor.label} falls prone from {target.label}'s Grapple response."
             events = [Event("condition_applied", target.actor_id, context.actor.actor_id, message, check=pending.saved_check.result)]
         elif choice.option_id == "grab_user":
-            _add_condition_effect(
+            add_timed_condition_effect(
                 context,
                 effect_id=f"grapple:{target.actor_id}:{context.actor.actor_id}",
                 kind="grabbed",
@@ -2452,6 +2681,29 @@ def validate_pending(context: FamilyProcedureContext) -> None:
             or pending.options != _feint_step_options(destinations)
         ):
             raise ValueError("save has an invalid Scoundrel Step continuation")
+        return
+    if pending.procedure_id == "skill_actions:feint:overextending":
+        command = pending.family_command
+        continuation = pending.continuation
+        saved = pending.saved_check
+        if (
+            not isinstance(command, Feint)
+            or continuation is None
+            or continuation.stage != "feint_overextending_choice"
+            or pending.family_id != "martial"
+            or pending.actor_id != context.actor.actor_id
+            or pending.owner_actor_id != context.actor.actor_id
+            or pending.target_id != command.target_id
+            or saved is None
+            or saved.result is None
+            or saved.result.degree < DegreeOfSuccess.SUCCESS
+            or "Overextending Feint" not in context.definition.feats
+            or pending.options != (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            )
+        ):
+            raise ValueError("save has an invalid Overextending Feint choice")
         return
     if pending.procedure_id.endswith(":guidance") or pending.procedure_id.endswith(":hero_point"):
         command = pending.family_command

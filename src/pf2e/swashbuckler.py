@@ -130,17 +130,27 @@ def apply_bravado_result(
         actor.panache_expires_at_end = None
         return "panache_refreshed" if was_panache else "panache_gained"
     if degree is DegreeOfSuccess.FAILURE:
-        if not actor.panache:
-            actor.panache = True
-            actor.panache_expires_at_end = current_end_count + 2
-            return "panache_gained_temporarily"
-        if actor.panache_expires_at_end is not None:
-            actor.panache_expires_at_end = max(
-                actor.panache_expires_at_end,
-                current_end_count + 2,
+        if not actor.panache or actor.panache_expires_at_end is not None:
+            return apply_temporary_panache(
+                actor, current_end_count=current_end_count
             )
-            return "panache_extended"
     return None
+
+
+def apply_temporary_panache(
+    actor: CreatureState, *, current_end_count: int
+) -> str:
+    """Grant the finite through-next-turn panache used by defensive feats."""
+    if not actor.panache:
+        actor.panache = True
+        actor.panache_expires_at_end = current_end_count + 2
+        return "panache_gained_temporarily"
+    if actor.panache_expires_at_end is not None:
+        actor.panache_expires_at_end = max(
+            actor.panache_expires_at_end, current_end_count + 2
+        )
+        return "panache_extended"
+    return "panache_preserved"
 
 
 def precise_strike_damage_term(
@@ -213,9 +223,12 @@ def confident_finisher_failure_damage(
 
 
 def effective_speed_ft(actor: CreatureState, definition: CreatureDefinition, conditions=()) -> int:
-    """Return land Speed after Panache and non-stacking circumstance penalties."""
+    """Return land Speed after same-type status bonuses and penalties."""
 
-    base = definition.land_speed_ft + (5 if is_swashbuckler(definition) and actor.panache else 0)
+    status_bonuses = [effect.value for effect in conditions if effect.kind == "speed_bonus"]
+    if is_swashbuckler(definition) and actor.panache:
+        status_bonuses.append(5)
+    base = definition.land_speed_ft + max(status_bonuses, default=0)
     penalties = [effect.value for effect in conditions if effect.kind == "speed_penalty"]
     return max(0, base - (max(penalties) if penalties else 0))
 

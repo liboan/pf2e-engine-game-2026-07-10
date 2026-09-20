@@ -33,6 +33,16 @@ def _owner_module(context: FamilyProcedureContext):
                 raise
             return None
         return barbarian
+    if context.pending is not None and context.pending.procedure_id in {
+        "ranger:twin_takedown", "fighter:double_slice", "rogue:twin_feint"
+    }:
+        try:
+            from . import w4_offensive
+        except ModuleNotFoundError as error:
+            if error.name != f"{__package__}.w4_offensive":
+                raise
+            return None
+        return w4_offensive
     if module_name == "fighter":
         try:
             from . import fighter
@@ -41,6 +51,14 @@ def _owner_module(context: FamilyProcedureContext):
                 raise
             return None
         return fighter
+    if module_name == "w4_offensive":
+        try:
+            from . import w4_offensive
+        except ModuleNotFoundError as error:
+            if error.name != f"{__package__}.w4_offensive":
+                raise
+            return None
+        return w4_offensive
     if module_name == "ranger":
         try:
             from . import ranger
@@ -57,6 +75,22 @@ def _owner_module(context: FamilyProcedureContext):
                 raise
             return None
         return monk
+    if module_name == "martial_defense":
+        try:
+            from . import martial_defense
+        except ModuleNotFoundError as error:
+            if error.name != f"{__package__}.martial_defense":
+                raise
+            return None
+        return martial_defense
+    if module_name == "monk_stances":
+        try:
+            from . import monk_stances
+        except ModuleNotFoundError as error:
+            if error.name != f"{__package__}.monk_stances":
+                raise
+            return None
+        return monk_stances
     if module_name == "skill_actions":
         try:
             from . import skill_actions
