@@ -22,7 +22,7 @@ All sixteen selected L1/L2 representatives and eleven Barbarian builds remain wi
 
 | Exact lineage title | Exact task ID / model | Cwd / current branch | W3 ownership / actionable peers | Checkpoint / next action |
 |---|---|---|---|---|
-| PF2e Content W1 — Coordination | `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high | d438 / codex/pf2e-content-w2-w3-delivery | guidance/scope/acceptance/publication; integration lead | W3 accepted; publish and verify accepted delivery |
+| PF2e Content W1 — Coordination | `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high | d438 / codex/pf2e-content-w2-w3-delivery | guidance/scope/acceptance/publication; integration lead | W3 accepted and published; idle |
 | PF2e Content W1 — Spells and integration | `01a0bc8d-f040-7c81-b59c-7edb1c1b0487` / Terra high | d4ce / codex/content-w3-spellshape-preparation | cross-class caster feats + integration; spell reviewer, other owners | accepted final head 832d44b6816c; idle |
 | PF2e Content W1 — Combat feats | `01a0bc8e-3447-7b60-bbe6-d561d824d0f8` / Terra high | c57e / codex/content-w3-strike-riders | Strike-result/rider feats; feat/item reviewer, integration lead | family independently accepted and integrated; retain repair ownership |
 | PF2e Content W1 — Finite items pilot | `01a0bc8e-a45d-76b2-9f72-30c02d579e07` / Luna high | 99a6 / codex/content-w3-items | finite bomb-condition family; feat/item reviewer, integration lead | family independently accepted and integrated after lifecycle/immunity repairs; retain repair ownership |
@@ -32,4 +32,4 @@ All sixteen selected L1/L2 representatives and eleven Barbarian builds remain wi
 
 Coordinator accepted W3 and paused `pf2e-content-w1-execution`; older coordinators/heartbeats remain paused. No follow-on wave is authorized by this closure. Cost monitoring remains in audit task `01a0a8e5-7dec-7030-8679-120b66f70e44`; no new metrics framework or invented usage.
 
-The accepted W3 head was merged without conflict into `codex/pf2e-content-w2-w3-delivery`, retaining coordinator guidance and accepted W2 ancestry. No open PR and no existing remote delivery branch were found before publication. Authorized non-force origin push and exact remote/local/clean verification follow closure documentation; publication outcome is recorded in ACTIVE.
+The accepted W3 head was merged without conflict into `codex/pf2e-content-w2-w3-delivery`, retaining coordinator guidance and accepted W2 ancestry. No open PR and no existing remote delivery branch were found before publication. Non-force origin publication succeeded at `77aa8bc94e25cb835e7f115d4f16bc379060ff3f`; remote/local heads matched, both accepted waves were verified ancestors and the checkout was clean. A documentation-only publication receipt follows on the same branch. [ACTIVE](../ACTIVE.md) records publication status.

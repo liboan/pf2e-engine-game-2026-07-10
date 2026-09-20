@@ -26,7 +26,7 @@ W3 is accepted and closed. The retained team delivered Widen Spell for Wizard/Dr
 
 Independent reviewers accepted all families and final assembled continuous play, save/resume and terminal interactions. The final integrated gate passed **1,457 tests**; accepted setup/creature counts are **105/83**, staged **24/12**, save version **18**. Same owners repaired reviewed semantics, item lifecycle and immunity without replacement tasks. Exact commits, performance evidence, retained identities and supported limits are in [W3 acceptance](../work-log/archive/content-w3-accepted.md).
 
-The coordinator paused the W3 heartbeat and is completing the explicitly authorized W2/W3 publication to `codex/pf2e-content-w2-w3-delivery`; [ACTIVE](../work-log/ACTIVE.md) records publication verification. No force-push, main merge, unrelated overwrite or new PR requirement. No follow-on wave is authorized. The [working model](04-delivery-and-checks.md) preserves broader coherent ownership, proactive simplification, strict acceptance, direct peer routing and end-turn requirements for future authorized work.
+The coordinator paused the W3 heartbeat and completed the explicitly authorized W2/W3 publication to `codex/pf2e-content-w2-w3-delivery`; [ACTIVE](../work-log/ACTIVE.md) records publication verification. No force-push, main merge, unrelated overwrite or new PR requirement. No follow-on wave is authorized. The [working model](04-delivery-and-checks.md) preserves broader coherent ownership, proactive simplification, strict acceptance, direct peer routing and end-turn requirements for future authorized work.
 
 ## Goal and approved scope
 
