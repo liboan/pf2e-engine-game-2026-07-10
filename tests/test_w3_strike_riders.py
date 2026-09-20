@@ -116,6 +116,21 @@ def test_brutish_shove_rejects_sideways_and_critical_failure_has_no_failure_effe
     assert not any(effect.effect_id.startswith("brutish_shove:") for effect in critical_failure._state.condition_effects)
 
 
+def test_brutish_shove_failure_effect_needs_no_open_shove_destination() -> None:
+    game = Encounter.start(
+        get_setup("staged_fighter_level_2_brutish_shove"), rolls=(20, 1, 12, 1, 12, 1),
+    )
+    _settle(game)
+    assert game.execute(Strike("dog", "greatsword")).status is ResultStatus.PAUSED
+    _settle(game)
+    # A Press failure-effect choice is legal without declaring an optional
+    # automatic Shove square, even though the Strike succeeds.
+    assert game.execute(BrutishShove("dog", "greatsword", failure_effect=True)).status is ResultStatus.PAUSED
+    _settle(game)
+    assert any(effect.effect_id.startswith("brutish_shove:") for effect in game._state.condition_effects)
+    assert game._state.creatures["dog"].position == Position(2, 1)
+
+
 def test_brutish_shove_records_the_actual_greatsword_sheet_and_selected_failure_effect_on_larger_hit(
     monkeypatch,
 ) -> None:

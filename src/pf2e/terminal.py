@@ -2681,32 +2681,31 @@ def run_terminal(
                 if strike_inputs is not None:
                     attack_id, target_id, damage_type, nonlethal = strike_inputs
                     target = game._state.creatures.get(target_id)
-                    if target is None:
-                        continue
-                    destinations = tuple(
-                        Position(target.position.x + dx, target.position.y + dy)
-                        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
-                        if 0 <= target.position.x + dx < game._state.map_width
-                        and 0 <= target.position.y + dy < game._state.map_height
-                        and game._state.creatures.get(target_id) is not None
-                        and not any(other.actor_id != target_id and other.position == Position(target.position.x + dx, target.position.y + dy) and not other.defeated for other in game._state.creatures.values())
-                    )
-                    if not destinations:
-                        output_fn("No open horizontal destination is available for Brutish Shove.")
-                        continue
-                    destination_index = _choose_index("Brutish Shove destination:", tuple(f"({point.x}, {point.y})" for point in destinations), input_fn, output_fn)
-                    if destination_index is None:
+                    actor = game._state.creatures.get(engine_options.actor_id or "")
+                    if target is None or actor is None:
                         continue
                     failure_effect = _choose_index("On a hit, use failure effect?", ("Automatic Shove", "Failure effect: off-guard"), input_fn, output_fn)
                     if failure_effect is None:
                         continue
+                    destination = None
                     follow = False
                     if failure_effect == 0:
+                        dx = (target.position.x > actor.position.x) - (target.position.x < actor.position.x)
+                        dy = (target.position.y > actor.position.y) - (target.position.y < actor.position.y)
+                        candidate = Position(target.position.x + dx, target.position.y + dy)
+                        if (
+                            0 <= candidate.x < game._state.map_width
+                            and 0 <= candidate.y < game._state.map_height
+                            and not any(other.actor_id != target_id and other.position == candidate and not other.defeated for other in game._state.creatures.values())
+                        ):
+                            destination = candidate
+                        else:
+                            output_fn("No open away destination is available; the Strike remains legal but cannot Shove.")
                         follow_choice = _choose_index("Follow the target?", ("Do not follow", "Follow without reactions"), input_fn, output_fn)
                         if follow_choice is None:
                             continue
-                        follow = follow_choice == 1
-                    _run_command(game, BrutishShove(target_id, attack_id, destinations[destination_index], follow, failure_effect == 1, damage_type, nonlethal), output_fn)
+                        follow = follow_choice == 1 and destination is not None
+                    _run_command(game, BrutishShove(target_id, attack_id, destination, follow, failure_effect == 1, damage_type, nonlethal), output_fn)
             elif action_id == "dueling_parry":
                 from pf2e.content import get_definition
 

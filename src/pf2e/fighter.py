@@ -92,14 +92,15 @@ class BrutishShove(FamilyCommand):
     """Make Brutish Shove's one-action press Strike.
 
     Player Core p. 141 / AoN feat 4779.  ``shove_destination`` is the
-    player's supported horizontal Shove direction; ``failure_effect`` records
-    the printed choice to use the failure effect after a successful Strike.
+    player's supported horizontal Shove direction when an automatic Shove is
+    selected; it can be omitted when declining that optional rider.
+    ``failure_effect`` records the printed Press choice after a success.
     """
 
     family_id = "martial"
     target_id: str
     attack_id: str
-    shove_destination: Position
+    shove_destination: Position | None = None
     follow: bool = False
     failure_effect: bool = False
     damage_type: str | None = None
@@ -248,7 +249,7 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | No
             "brutish_shove" not in context.definition.abilities
             or context.actor.actions_remaining < 1
             or context.actor.strikes_this_turn < 1
-            or not isinstance(command.shove_destination, Position)
+            or (command.shove_destination is not None and not isinstance(command.shove_destination, Position))
             or type(command.follow) is not bool
             or type(command.failure_effect) is not bool
         ):

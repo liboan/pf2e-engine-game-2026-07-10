@@ -5578,7 +5578,10 @@ class Encounter:
             if attack.hands_required < 2:
                 return FamilyProcedureResult(rejection="Brutish Shove requires a two-handed melee weapon.")
             sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
-            if sizes.get(get_definition(target.definition_id).size, 99) <= sizes.get(context.definition.size, -1):
+            if (
+                command.shove_destination is not None
+                and sizes.get(get_definition(target.definition_id).size, 99) <= sizes.get(context.definition.size, -1)
+            ):
                 destination = command.shove_destination
                 away_x = (target.position.x > context.actor.position.x) - (target.position.x < context.actor.position.x)
                 away_y = (target.position.y > context.actor.position.y) - (target.position.y < context.actor.position.y)
@@ -5594,7 +5597,11 @@ class Encounter:
             actor_id=context.actor.actor_id,
             target_id=command.target_id,
             attack_id=command.attack_id,
-            path=((command.shove_destination,) if isinstance(command, BrutishShove) else ()),
+            path=(
+                (command.shove_destination,)
+                if isinstance(command, BrutishShove) and command.shove_destination is not None
+                else ()
+            ),
             mode=("failure_effect" if isinstance(command, BrutishShove) and command.failure_effect else ("follow" if isinstance(command, BrutishShove) and command.follow else None)),
         )
         events = self._start_strike(
@@ -5647,7 +5654,11 @@ class Encounter:
         if parent.kind != "brutish_shove" or not hit or parent.mode == "failure_effect":
             return events
         if not parent.path:
-            raise _Rejected("Brutish Shove lost its committed destination.")
+            events.append(Event(
+                "brutish_shove_not_used", actor.actor_id, target.actor_id,
+                f"{actor.label} does not use Brutish Shove's optional automatic Shove.",
+            ))
+            return events
         origin, destination = target.position, parent.path[0]
         away_x = (origin.x > actor.position.x) - (origin.x < actor.position.x)
         away_y = (origin.y > actor.position.y) - (origin.y < actor.position.y)
