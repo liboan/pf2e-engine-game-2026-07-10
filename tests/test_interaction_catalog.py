@@ -8,9 +8,11 @@ from pf2e.content import (
     ANGELIC_FIRST_CAST_SETUP,
     BRAGGART_SWASHBUCKLER_SETUP,
     BATTLE_MAGIC_WIZARD_SETUP,
+    BATTLE_MAGIC_WIZARD_DAZE_SETUP,
     STORM_DRUID_SETUP,
     LIFE_ORACLE_NUDGE_SETUP,
     FAITHS_FLAMEKEEPER_SETUP,
+    FAITHS_FLAMEKEEPER_DAZE_SETUP,
     MAESTRO_BARD_ANTHEM_SETUP,
     MAESTRO_BARD_FEAR_SETUP,
     MAESTRO_BARD_COUNTER_SETUP,
@@ -116,6 +118,10 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     l2_ranger_ids = {RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id}
     l2_reach_ids = {setup.setup_id for setup in L2_REACH_SETUPS}
     l2_expanded_ids = set(L2_MARTIAL_SETUPS) | {setup.setup_id for setup in L2_PREPARED_SETUPS}
+    content_w1_spell_ids = {
+        BATTLE_MAGIC_WIZARD_DAZE_SETUP.setup_id,
+        FAITHS_FLAMEKEEPER_DAZE_SETUP.setup_id,
+    }
     remaining_l2_ids = (
         set(INVESTIGATOR_SETUPS)
         | set(L2_DIVINE_SETUPS)
@@ -140,7 +146,7 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert (
         s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids
             | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
-            | l2_expanded_ids | remaining_l2_ids
+            | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
         ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):
