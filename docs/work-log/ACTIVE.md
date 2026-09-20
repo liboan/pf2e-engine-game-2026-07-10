@@ -1,6 +1,6 @@
 # Content W3 recovery
 
-Status: **W3 authorized; common guidance baseline being committed before retained-team dispatch.** W2 is accepted and preserved in [its final record](archive/content-w2-accepted.md). [W3 scope](../plan/06-class-and-content-expansion.md#content-w3-shared-mechanics-with-broader-feat-adoption), [working model](../plan/04-delivery-and-checks.md).
+Status: **W3 dispatched to the five retained tasks from committed common baseline `af415fa752421d5acf47f86e7d1e0d5e2afb9778`.** W2 is accepted and preserved in [its final record](archive/content-w2-accepted.md). [W3 scope](../plan/06-class-and-content-expansion.md#content-w3-shared-mechanics-with-broader-feat-adoption), [working model](../plan/04-delivery-and-checks.md).
 
 ## Baseline and acceptance boundary
 
@@ -8,7 +8,7 @@ Coordinator starts clean at W2 closure `5bf3d288e621ff50ca8e668e33554dee4e14290b
 
 W3 is materially broader: cross-class caster feats and preparation/spellshape behavior, a new martial strike-rider feat family with an existing adopter, and a finite bomb-condition family sharing supported effect behavior. Owners briefly source-check candidate examples from the plan, select multiple actual adopters, and implement without another approval. Existing supported boundaries and all W2 quality/routing/model requirements persist.
 
-Each task retains its exact W1 lineage title, model and sole checkout. Before W3 edits, preserve old refs/review tests/uncommitted work and create a W3 assignment branch at the exact common accepted-W2-plus-guidance commit in dispatch. Preserve detached HEAD with a branch first. No destructive reset, replacement task, nested worktree or new shared mutable checkout. No per-family coordinator CC or routine repair relays.
+All five substantive W3 dispatches carried exact baseline, working-model path, scope, peer IDs, corrected routing and end-turn requirements, with retained model/high overrides. Each task retains its exact W1 lineage title, model and sole checkout. Before W3 edits, preserve old refs/review tests/uncommitted work and create a W3 assignment branch at the exact common accepted-W2-plus-guidance commit in dispatch. Preserve detached HEAD with a branch first. No destructive reset, replacement task, nested worktree or new shared mutable checkout. No per-family coordinator CC or routine repair relays.
 
 ## Retained assignments
 
@@ -16,17 +16,19 @@ Cwd entries expand to `/Users/andrewlee/.codex/worktrees/<directory>/pf2e-engine
 
 | Exact lineage title | Exact task ID / model | Cwd / pre-W3 branch or head | W3 ownership / actionable peers | Checkpoint / next action |
 |---|---|---|---|---|
-| PF2e Content W1 — Coordination | `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high | d438 / codex/pf2e-content-w1-coordination | guidance/scope/acceptance/publication; integration lead | W2 accepted; commit W3 guidance then dispatch |
-| PF2e Content W1 — Spells and integration | `01a0bc8d-f040-7c81-b59c-7edb1c1b0487` / Terra high | d4ce / codex/content-w2-assembled | cross-class caster feats + integration; spell reviewer, other owners | W2 accepted; larger family assessment/implementation from common baseline |
+| PF2e Content W1 — Coordination | `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high | d438 / codex/pf2e-content-w1-coordination | guidance/scope/acceptance/publication; integration lead | W3 guidance committed and five assignments dispatched; end while owners/reviewers execute |
+| PF2e Content W1 — Spells and integration | `01a0bc8d-f040-7c81-b59c-7edb1c1b0487` / Terra high | d4ce / codex/content-w3-spellshape-preparation | cross-class caster feats + integration; spell reviewer, other owners | W2 accepted; larger family assessment/implementation from common baseline |
 | PF2e Content W1 — Combat feats | `01a0bc8e-3447-7b60-bbe6-d561d824d0f8` / Terra high | c57e / codex/content-w2-martial-defense | Strike-result/rider feats; feat/item reviewer, integration lead | W2 accepted; larger family assessment/implementation |
 | PF2e Content W1 — Finite items pilot | `01a0bc8e-a45d-76b2-9f72-30c02d579e07` / Luna high | 99a6 / codex/content-w2-items | finite bomb-condition family; feat/item reviewer, integration lead | W2 accepted; candidate check and actual rider adopters |
-| PF2e Content W1 — Spell and integration review | `01a0bc8d-0a0d-7952-b0a1-3a1506d1eaf5` / Sol high | dbbb / codex/content-w2-assembled-review-verified | caster family and assembled review; integration lead | retain tests; useful bounded prep then end until concrete delivery |
+| PF2e Content W1 — Spell and integration review | `01a0bc8d-0a0d-7952-b0a1-3a1506d1eaf5` / Sol high | dbbb / codex/content-w3-caster-assembled-review | caster family and assembled review; integration lead | retain tests; useful bounded prep then end until concrete delivery |
 | PF2e Content W1 — Feat and item review | `01a0bc8d-49aa-7072-a253-35fc9635cce1` / Sol high | 7404 / detached386e0e8 | independent martial/bomb reviews; respective owner, integration lead | preserve HEAD/tests; useful bounded prep then end until delivery |
+
+At 2026-09-20 06:59 UTC, the one dispatch metadata snapshot confirmed caster owner and caster reviewer at `af415fa` in their retained checkouts/W3 branches. Other three task checkout advances had not yet appeared in that snapshot; they are explicitly required before edits and will be checked at a later meaningful/fallback checkpoint, without a readiness ping. No W3 public test is yet claimed.
 
 ## Routing, closure and publication
 
 Only message the task whose next action changes. Owner ↔ assigned reviewer handles routine delivery/repair. Reviewer sends accepted commits/tests to integration lead; owner does not duplicate acceptance. Integration lead sends coordinator assembled acceptance or a decision it cannot resolve. Earlier coordinator contact only for scope/priority/shared-contract/unresolved blocking decisions needing its action. END when only peer work remains; no waits/sleep/status/transcript loops, acknowledgements or duplicate review requests. Central recovery changes at meaningful milestones.
 
-Existing `pf2e-content-w1-execution` heartbeat resumes for W3 as the sole five-minute fallback; pause at W3 acceptance/user pause. Older coordinators/heartbeats stay paused. Cost monitoring stays with audit task `01a0a8e5-7dec-7030-8679-120b66f70e44`; local usage ledger absent, no guessed usage/new metrics framework. W3 is a new reused-task assignment, not cumulative W1/W2 lifetime.
+Existing `pf2e-content-w1-execution` heartbeat is **ACTIVE for W3** as the sole five-minute fallback; pause at W3 acceptance/user pause. Older coordinators/heartbeats stay paused. Cost monitoring stays with audit task `01a0a8e5-7dec-7030-8679-120b66f70e44`; local usage ledger absent, no guessed usage/new metrics framework. W3 is a new reused-task assignment, not cumulative W1/W2 lifetime.
 
-**Publication is explicitly authorized and required after W3 acceptance.** Commit/push accepted W2+W3 implementation, guidance, tests and integration fixes to an appropriate codex/ delivery branch. Inspect existing PR/branch workflow, retain other work; no force-push or main merge. Verify W2 `a58424b` and final accepted W3 head are ancestors, exact origin/local delivery heads match, and checkout is clean. Record applicable PR link; no new PR requirement. Publication remains pending until W3 passes all gates.
+**Publication is explicitly authorized and required after W3 acceptance.** Commit/push accepted W2+W3 implementation, guidance, tests and integration fixes to an appropriate codex/ delivery branch. Inspect existing PR/branch workflow, retain other work; no force-push or main merge. Verify W2 `a58424b` and final accepted W3 head are ancestors, exact origin/local delivery heads match, and checkout is clean. Record applicable PR link; no new PR requirement. Publication remains pending until W3 passes all gates. Initial `gh pr list --state open` on September20 found no open PR for this repository; recheck the intended delivery branch before push. Coordinator intends an appropriate codex/ delivery branch preserving existing refs; no new PR is required.
