@@ -141,6 +141,11 @@ def _cackle(context: FamilyProcedureContext, command: Cackle) -> FamilyProcedure
     context.encounter._require_action_permitted(
         context.state, context.actor, "cackle", frozenset({"auditory", "concentrate"})
     )
+    start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+    if context.actor.witch_cackle_used_start == start:
+        return FamilyProcedureResult(rejection="Cackle can be used only once per Witch turn.")
+    if context.actor.focus_points < 1:
+        return FamilyProcedureResult(rejection="Cackle requires 1 Focus Point.")
     effect = next(
         (
             effect for effect in context.state.active_effects
@@ -154,6 +159,8 @@ def _cackle(context: FamilyProcedureContext, command: Cackle) -> FamilyProcedure
         return FamilyProcedureResult(rejection="Cackle requires the Witch's active Stoke the Heart.")
     if effect.sustain_expires_at_source_end <= context.state.actor_end_counts.get(context.actor.actor_id, 0):
         return FamilyProcedureResult(rejection="That Stoke the Heart has already expired.")
+    context.actor.focus_points -= 1
+    context.actor.witch_cackle_used_start = start
     context.state.active_effects[context.state.active_effects.index(effect)] = replace(
         effect,
         sustain_expires_at_source_end=context.state.actor_end_counts.get(context.actor.actor_id, 0) + 2,

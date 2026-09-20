@@ -4343,6 +4343,8 @@ class Encounter:
         can_cackle = (
             "cackle" in definition.abilities
             and "Cackle" in definition.feats
+            and actor.focus_points > 0
+            and actor.witch_cackle_used_start != state.actor_start_counts.get(actor.actor_id, 0)
             and any(
                 effect.kind == "stoke_the_heart" and effect.source_actor_id == actor.actor_id
                 for effect in state.active_effects
@@ -4672,7 +4674,7 @@ class Encounter:
             spell = SPELLS.get(spell_id)
             if spell is None:
                 continue
-            if spell_id in {"lingering_composition", "counter_performance"}:
+            if spell_id in {"lingering_composition", "counter_performance", "cackle"}:
                 # This focus spellshape is a dedicated free action, not a
                 # creature-targeted Cast entry. Counter Performance is a
                 # saved reaction offered only by its eligible trigger.
@@ -10638,8 +10640,8 @@ class Encounter:
 
     def _resolve_breathe_fire(self, state, dice, caster, continuation):
         """Apply one shared Breathe Fire roll through each listed Reflex save."""
-        if continuation.spell_source_kind != "prepared" or continuation.spell_actions != 2:
-            raise _Rejected("Breathe Fire requires a prepared two-action rank-1 slot.")
+        if continuation.spell_source_kind not in {"prepared", "spontaneous"} or continuation.spell_actions != 2:
+            raise _Rejected("Breathe Fire requires a two-action rank-1 prepared or spontaneous cast.")
         if continuation.spell_damage is None:
             continuation.spell_damage = resolve_damage(
                 DamagePacket("Breathe Fire", "fire", 6, 2, 0), dice.draw
@@ -12264,33 +12266,6 @@ class Encounter:
                             enfeebled_on_failure=0):
         if not isinstance(damage, DamageResult) or damage.total < 0:
             raise _Rejected("Spell damage must be a valid rolled damage result.")
-        if (
-            continuation is not None
-            and continuation.sorcerous_potency
-            and "dangerous_sorcery" in get_definition(caster.definition_id).abilities
-        ):
-            if damage.adjustment and damage.adjustment.startswith("basic_save:"):
-                degree_name = damage.adjustment.rsplit(":", 1)[-1]
-                multiplier = 2 if degree_name == "critical_failure" else 0 if degree_name == "critical_success" else 1
-            else:
-                multiplier = 2 if attacker_critical else 1
-            bonus = continuation.sorcerous_potency * multiplier
-            if bonus:
-                damage = replace(
-                    damage,
-                    components=(*damage.components, DamageComponent(
-                        source="dangerous_sorcery",
-                        damage_type=damage_type,
-                        dice_sides=0,
-                        rolls=(),
-                        modifier=continuation.sorcerous_potency,
-                        amount=bonus,
-                        tags=frozenset({"status"}),
-                        dice=(),
-                    )),
-                    total=damage.total + bonus,
-                    rolled_total=damage.rolled_total + continuation.sorcerous_potency,
-                )
         resolution = DamageResolution(
             source_kind="spell",
             group=DamageGroup(
@@ -12319,6 +12294,14 @@ class Encounter:
         if command.item_id not in actor.held_items:
             raise _Rejected(f"{command.item_id!r} is not held and cannot be released.")
         actor.held_items.remove(command.item_id)
+        state.active_effects[:] = [
+            effect for effect in state.active_effects
+            if not (
+                effect.kind == "weapon_surge"
+                and effect.source_actor_id == actor.actor_id
+                and effect.effect_id.split(":")[2:3] == [command.item_id]
+            )
+        ]
         raised = state.raised_shields.get(actor.actor_id)
         if raised is not None and raised.instance_id == command.item_id:
             state.raised_shields.pop(actor.actor_id, None)

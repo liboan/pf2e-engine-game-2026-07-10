@@ -549,6 +549,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "witch_patron_used_start": creature.witch_patron_used_start,
                 "witch_restored_spirit_used_start": creature.witch_restored_spirit_used_start,
                 "witch_hex_cast_start": creature.witch_hex_cast_start,
+                "witch_cackle_used_start": creature.witch_cackle_used_start,
                 "minion_commanded_start": creature.minion_commanded_start,
                 "witch_turn_activity_start": creature.witch_turn_activity_start,
             }
@@ -1247,6 +1248,7 @@ def _state_from_data(data: Any) -> EncounterState:
         witch_patron_used_start = raw.get("witch_patron_used_start", 0)
         witch_restored_spirit_used_start = raw.get("witch_restored_spirit_used_start", 0)
         witch_hex_cast_start = raw.get("witch_hex_cast_start", 0)
+        witch_cackle_used_start = raw.get("witch_cackle_used_start", 0)
         minion_commanded_start = raw.get("minion_commanded_start", 0)
         witch_turn_activity_start = raw.get("witch_turn_activity_start", 0)
         if (
@@ -1317,6 +1319,7 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(witch_restored_spirit_used_start) is not int
             or witch_restored_spirit_used_start < 0
             or type(witch_hex_cast_start) is not int or witch_hex_cast_start < 0
+            or type(witch_cackle_used_start) is not int or witch_cackle_used_start < 0
             or type(minion_commanded_start) is not int or minion_commanded_start < 0
             or type(witch_turn_activity_start) is not int or witch_turn_activity_start < 0
         ):
@@ -1531,6 +1534,7 @@ def _state_from_data(data: Any) -> EncounterState:
             witch_patron_used_start=witch_patron_used_start,
             witch_restored_spirit_used_start=witch_restored_spirit_used_start,
             witch_hex_cast_start=witch_hex_cast_start,
+            witch_cackle_used_start=witch_cackle_used_start,
             minion_commanded_start=minion_commanded_start,
             witch_turn_activity_start=witch_turn_activity_start,
         )

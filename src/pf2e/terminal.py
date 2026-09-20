@@ -103,7 +103,7 @@ _ACTION_LABELS = {
     "lingering_composition": "Lingering Composition",
     "reach_spell": "Reach Spell",
     "widen_spell": "Widen Spell",
-    "energy_ablation": "Energy Ablation (Fire)",
+    "energy_ablation": "Energy Ablation",
     "cackle": "Cackle",
     "sustain_light": "Sustain Light",
     "dismiss_light": "Dismiss Light",
@@ -3197,7 +3197,10 @@ def run_terminal(
 
                 _run_command(game, widen_spell_command(), output_fn)
             elif action_id == "energy_ablation":
-                _run_command(game, EnergyAblation("fire"), output_fn)
+                energy_types = ("acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void")
+                selected = _choose_index("Energy type number:", energy_types, input_fn, output_fn)
+                if selected is not None:
+                    _run_command(game, EnergyAblation(energy_types[selected]), output_fn)
             elif action_id == "cackle":
                 _run_command(game, Cackle(), output_fn)
             elif action_id == "end_turn":

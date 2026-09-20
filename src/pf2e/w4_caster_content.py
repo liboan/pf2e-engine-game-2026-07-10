@@ -4,9 +4,9 @@ Sources checked 2026-09-20:
 
 * https://2e.aonprd.com/Feats.aspx?ID=5026 (Energy Ablation)
 * https://2e.aonprd.com/Feats.aspx?ID=4644 (Domain Initiate)
-* https://2e.aonprd.com/Spells.aspx?ID=1755 (Weapon Surge)
-* https://2e.aonprd.com/Feats.aspx?ID=1819 (Dangerous Sorcery)
-* https://2e.aonprd.com/Feats.aspx?ID=1867 (Cackle)
+* https://2e.aonprd.com/Spells.aspx?ID=1852 (Weapon Surge)
+* https://2e.aonprd.com/Feats.aspx?ID=4715 (Widen Spell)
+* https://app.demiplane.com/nexus/pathfinder2e/spells/cackle-rm (Cackle)
 
 Each entry is an alternate character sheet. The base W1-W3 sheets remain
 unchanged, and no class-wide feat-selection system is implied.
@@ -57,32 +57,42 @@ def build_w4_caster_content(warpriest: CreatureDefinition):
         focus_points=1,
         focus_capacity=1,
         abilities=(*warpriest.abilities, "domain_initiate", "weapon_surge"),
-        feats=(*warpriest.feats, "Domain Initiate"),
+        skills=tuple(entry for entry in warpriest.skills if entry[0] not in {"crafting", "society"}),
+        feats=("Natural Ambition", "Assurance (Athletics)", "Domain Initiate"),
         sheet_notes=(*warpriest.sheet_notes,
             "Domain Initiate selects Iomedae's finite zeal domain and grants Weapon Surge as the initial domain focus spell; this alternate does not claim other domain choices.",
-            "Sources: https://2e.aonprd.com/Feats.aspx?ID=4644; https://2e.aonprd.com/Spells.aspx?ID=1755.",
+            "Natural Ambition replaces Natural Skill, so this alternate does not retain Crafting or Society from that ancestry feat.",
+            "Sources: https://2e.aonprd.com/Feats.aspx?ID=4644; https://2e.aonprd.com/Spells.aspx?ID=1852; https://2e.aonprd.com/Feats.aspx?ID=4479.",
         ),
     )
     sorcerer = replace(
         ANGELIC_SORCERER_STAGED,
-        definition_id="sorcerer_angelic_level_1_dangerous_sorcery",
-        name="Level 1 Angelic Sorcerer (Dangerous Sorcery)",
-        abilities=(*ANGELIC_SORCERER_STAGED.abilities, "dangerous_sorcery"),
-        feats=(*ANGELIC_SORCERER_STAGED.feats, "Dangerous Sorcery"),
+        definition_id="sorcerer_angelic_level_1_widen_spell",
+        name="Level 1 Angelic Sorcerer (Widen Spell)",
+        skills=tuple(entry for entry in ANGELIC_SORCERER_STAGED.skills if entry[0] not in {"crafting", "survival"}),
+        spontaneous_spells=(*ANGELIC_SORCERER_STAGED.spontaneous_spells, SpontaneousSpellDefinition("breathe_fire", 1)),
+        abilities=(*ANGELIC_SORCERER_STAGED.abilities, "widen_spell"),
+        feats=("Natural Ambition", "Assurance (Athletics)", "Widen Spell"),
         sheet_notes=(*ANGELIC_SORCERER_STAGED.sheet_notes,
-            "Dangerous Sorcery adds a status bonus equal to spell level to damage from finite rank-1 damaging spell casts with no duration.",
-            "Source: https://2e.aonprd.com/Feats.aspx?ID=1819.",
+            "Natural Ambition replaces Natural Skill, so this alternate does not retain Crafting or Survival from that ancestry feat.",
+            "Widen Spell is the legal level-1 Sorcerer feat and uses the existing finite Breathe Fire cone spellshape path.",
+            "Sources: https://2e.aonprd.com/Feats.aspx?ID=4715; https://2e.aonprd.com/Spells.aspx?ID=1457; https://2e.aonprd.com/Feats.aspx?ID=4479.",
         ),
     )
     witch = replace(
         FAITHS_FLAMEKEEPER_WITCH,
         definition_id="faiths_flamekeeper_witch_level_1_cackle",
         name="Level 1 Faith's Flamekeeper Witch (Cackle)",
+        skills=tuple(entry for entry in FAITHS_FLAMEKEEPER_WITCH.skills if entry[0] not in {"crafting", "society"}),
+        focus_spells=(*FAITHS_FLAMEKEEPER_WITCH.focus_spells, SpontaneousSpellDefinition("cackle", 1)),
+        focus_points=2,
+        focus_capacity=2,
         abilities=(*FAITHS_FLAMEKEEPER_WITCH.abilities, "cackle"),
-        feats=(*FAITHS_FLAMEKEEPER_WITCH.feats, "Cackle"),
+        feats=("Fleet", "Natural Ambition", "Assurance (Nature)", "Cackle"),
         sheet_notes=(*FAITHS_FLAMEKEEPER_WITCH.sheet_notes,
-            "Cackle is a free action that extends the Witch's active Stoke the Heart through the next two source turns, reusing the existing bounded sustained-hex state.",
-            "Source: https://2e.aonprd.com/Feats.aspx?ID=1867.",
+            "Natural Ambition replaces Natural Skill, so this alternate does not retain Crafting or Society from that ancestry feat.",
+            "Cackle is a Focus 1 free-action hex that spends one Focus Point and extends the Witch's active Stoke the Heart through the next two source turns.",
+            "Source: https://app.demiplane.com/nexus/pathfinder2e/spells/cackle-rm.",
         ),
     )
     definitions = (wizard, cleric, sorcerer, witch)
@@ -98,8 +108,8 @@ def build_w4_caster_content(warpriest: CreatureDefinition):
              CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(2, 2))),
         ),
         EncounterSetup(
-            "w4_dangerous_sorcery_vs_guard_dog", "W4 Dangerous Sorcery Sorcerer", 7, 5,
-            (CreaturePlacement("sorcerer", sorcerer.definition_id, "Dangerous Sorcery Sorcerer", "blue", Position(1, 2)),
+            "w4_widen_sorcery_vs_guard_dog", "W4 Widen Spell Sorcerer", 7, 5,
+            (CreaturePlacement("sorcerer", sorcerer.definition_id, "Widen Spell Sorcerer", "blue", Position(1, 2)),
              CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(4, 2))),
         ),
         EncounterSetup(

@@ -41,6 +41,15 @@ from .space import grid_distance_feet, in_bounds
 from .widen_spell import widened_cone_length
 
 
+# Energy Ablation keys off an actual damage packet, not merely a spell trait:
+# Shield carries the force trait but deals no damage. Keep this finite list
+# aligned with the admitted rank-one resolution paths.
+_ENERGY_ABLATION_DAMAGE_SPELLS = frozenset({
+    "force_bolt", "force_barrage", "breathe_fire", "caustic_blast", "electric_arc",
+    "ignition", "frostbite", "void_warp", "vitality_lash", "tempest_surge", "harm",
+})
+
+
 def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedureResult:
     """Validate, select, and commit one cast in the active encounter draft.
 
@@ -77,13 +86,10 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     sigil = spell.spell_id == "sigil"
     weapon_surge = spell.spell_id == "weapon_surge"
     energy_ablation_type = context.actor.energy_ablation_pending
+    energy_ablation_qualifies = spell.spell_id in _ENERGY_ABLATION_DAMAGE_SPELLS
     if energy_ablation_type is not None:
         if energy_ablation_type not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}:
             return FamilyProcedureResult(rejection="Energy Ablation has an invalid energy choice.")
-        if energy_ablation_type not in spell.traits:
-            return FamilyProcedureResult(
-                rejection=f"{spell.name} does not deal the selected {energy_ablation_type} energy type."
-            )
     if spell.spell_id == "counter_performance":
         return FamilyProcedureResult(
             rejection="Counter Performance is available only as its saved reaction to an auditory or visual effect."
@@ -646,16 +652,17 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         clear_pending_spellshape(context.actor)
     elif energy_ablation_type is not None:
         context.actor.energy_ablation_pending = None
-        start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
-        context.state.active_effects.append(ActiveSpellEffect(
-            effect_id=f"energy_ablation:{context.actor.actor_id}:{energy_ablation_type}:{context.state.next_choice_id}",
-            kind="energy_ablation",
-            source_actor_id=context.actor.actor_id,
-            target_actor_id=context.actor.actor_id,
-            value=1,
-            expires_at_source_start=start + 2,
-            expires_at_world_time=context.state.world_time_seconds + 12,
-        ))
+        if energy_ablation_qualifies:
+            start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+            context.state.active_effects.append(ActiveSpellEffect(
+                effect_id=f"energy_ablation:{context.actor.actor_id}:{energy_ablation_type}:{context.state.next_choice_id}",
+                kind="energy_ablation",
+                source_actor_id=context.actor.actor_id,
+                target_actor_id=context.actor.actor_id,
+                value=1,
+                expires_at_source_start=start + 2,
+                expires_at_world_time=context.state.world_time_seconds + 12,
+            ))
     if command.use_arcane_bond:
         context.actor.arcane_bond_recast_until_start = 0
         context.actor.arcane_bond_eligible_slots.discard(permission.selection.resource_id or "")
@@ -680,14 +687,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         reach_spell_effective_range_ft=committed_reach_spell_range_ft,
         include_self=command.include_self,
         spell_source_kind=source_kind,
-        sorcerous_potency=(
-            1 if source_kind == "spontaneous" and spell.spell_id == "heal" else
-            1 if "dangerous_sorcery" in context.definition.abilities and spell.spell_id in {
-                "divine_lance", "force_bolt", "electric_arc", "breathe_fire", "frostbite",
-                "ignition", "gouging_claw", "void_warp", "vitality_lash", "caustic_blast",
-                "tempest_surge", "telekinetic_projectile", "daze", "harm",
-            } else 0
-        ),
+        sorcerous_potency=1 if source_kind == "spontaneous" and spell.spell_id == "heal" else 0,
         movement_kind="manipulate" if "manipulate" in traits else None,
         must_disrupt_on_critical="manipulate" in traits,
         spell_target_item_id=command.item_id if runic_weapon or telekinetic_projectile or sigil or weapon_surge else None,

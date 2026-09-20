@@ -851,6 +851,8 @@ class CreatureState:
     witch_restored_spirit_used_start: int = 0
     # The hex trait permits at most one Cast-a-hex action in a Witch turn.
     witch_hex_cast_start: int = 0
+    # Cackle is a focus hex and can be used at most once per Witch turn.
+    witch_cackle_used_start: int = 0
     # A minion receives one two-action allotment per owner turn.
     minion_commanded_start: int = 0
     # Literal turn-begins trigger gate for the selected Patron's Puppet.
