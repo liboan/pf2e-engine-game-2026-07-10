@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from pf2e.model import Position
+from pf2e.model import Cackle, EnergyAblation, Position
 
 if TYPE_CHECKING:
     from pf2e.encounter import Encounter
@@ -98,6 +98,8 @@ _ACTION_LABELS = {
     "lingering_composition": "Lingering Composition",
     "reach_spell": "Reach Spell",
     "widen_spell": "Widen Spell",
+    "energy_ablation": "Energy Ablation (Fire)",
+    "cackle": "Cackle",
     "sustain_light": "Sustain Light",
     "dismiss_light": "Dismiss Light",
     "dismiss_life_link": "Dismiss Life Link",
@@ -3152,6 +3154,10 @@ def run_terminal(
                 from pf2e.widen_spell_terminal import command as widen_spell_command
 
                 _run_command(game, widen_spell_command(), output_fn)
+            elif action_id == "energy_ablation":
+                _run_command(game, EnergyAblation("fire"), output_fn)
+            elif action_id == "cackle":
+                _run_command(game, Cackle(), output_fn)
             elif action_id == "end_turn":
                 _run_command(game, EndTurn(), output_fn)
             elif action_id == "refocus":

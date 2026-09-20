@@ -492,6 +492,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "lingering_composition_pending": creature.lingering_composition_pending,
                 "reach_spell_pending": creature.reach_spell_pending,
                 "widen_spell_pending": creature.widen_spell_pending,
+                "energy_ablation_pending": creature.energy_ablation_pending,
                 "must_leave_occupied": creature.must_leave_occupied,
                 "temporary_hp": creature.temporary_hp,
                 "temporary_hp_source_id": creature.temporary_hp_source_id,
@@ -1099,6 +1100,9 @@ def _state_from_data(data: Any) -> EncounterState:
         widen_spell_pending = raw.get("widen_spell_pending", False)
         if type(widen_spell_pending) is not bool:
             raise ValueError(f"saved actor {actor_id!r} has invalid Widen Spell state")
+        energy_ablation_pending = raw.get("energy_ablation_pending")
+        if energy_ablation_pending is not None and energy_ablation_pending not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Energy Ablation state")
         must_leave_occupied = _required_bool(raw, "must_leave_occupied")
         temporary_hp = _required_int(raw, "temporary_hp")
         temporary_hp_source_id = raw.get("temporary_hp_source_id")
@@ -1470,6 +1474,7 @@ def _state_from_data(data: Any) -> EncounterState:
             lingering_composition_pending=lingering_composition_pending,
             reach_spell_pending=reach_spell_pending,
             widen_spell_pending=widen_spell_pending,
+            energy_ablation_pending=energy_ablation_pending,
             must_leave_occupied=must_leave_occupied,
             temporary_hp=temporary_hp,
             temporary_hp_source_id=temporary_hp_source_id,
@@ -1983,7 +1988,7 @@ def _state_from_data(data: Any) -> EncounterState:
     ):
         raise ValueError("save has invalid Lingering Composition spellshape state")
     for creature in creatures.values():
-        if creature.reach_spell_pending and creature.widen_spell_pending:
+        if sum(bool(marker) for marker in (creature.reach_spell_pending, creature.widen_spell_pending, creature.energy_ablation_pending is not None)) > 1:
             raise ValueError("save has overlapping spellshape markers")
         if creature.reach_spell_pending:
             definition = get_definition(creature.definition_id)
@@ -2013,6 +2018,17 @@ def _state_from_data(data: Any) -> EncounterState:
                 or not 0 <= creature.actions_remaining <= 2
             ):
                 raise ValueError("save has invalid Widen Spell spellshape state")
+        if creature.energy_ablation_pending is not None:
+            definition = get_definition(creature.definition_id)
+            if (
+                "energy_ablation" not in definition.abilities
+                or "Energy Ablation" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                or creature.actions_remaining < 0
+            ):
+                raise ValueError("save has invalid Energy Ablation spellshape state")
     weakness_raw = data.get("investigator_weakness_bonuses", [])
     if not isinstance(weakness_raw, list):
         raise ValueError("save has invalid Investigator Known Weaknesses bonuses")
@@ -2201,14 +2217,14 @@ def _state_from_data(data: Any) -> EncounterState:
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
             or type(row[12]) is not int or row[12] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
                 and row[6] is not None
             )
             or (
@@ -2601,6 +2617,26 @@ def _state_from_data(data: Any) -> EncounterState:
             anthem_pairs.add((row[2], row[3]))
         if row[1] == "sure_strike":
             sure_strike_sources.add(row[2])
+        if row[1] == "energy_ablation":
+            energy = row[0].split(":", 3)[2] if row[0].count(":") >= 2 else ""
+            definition = get_definition(creatures[row[2]].definition_id)
+            if (
+                row[2] != row[3] or row[4] != 1 or row[5] != starts_raw[row[2]] + 2
+                or type(row[6]) is not int or not world_time_seconds < row[6] <= world_time_seconds + 12
+                or energy not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}
+                or "energy_ablation" not in definition.abilities
+            ):
+                raise ValueError("save has invalid Energy Ablation effect")
+        if row[1] == "weapon_surge":
+            definition = get_definition(creatures[row[2]].definition_id)
+            if (
+                row[2] != row[3] or row[4] != 1 or row[5] != starts_raw[row[2]] + 1
+                or type(row[6]) is not int or not world_time_seconds < row[6] <= world_time_seconds + 6
+                or "weapon_surge" not in definition.abilities
+                or row[0].count(":") < 3
+                or row[0].split(":", 3)[2] not in creatures[row[2]].held_items
+            ):
+                raise ValueError("save has invalid Weapon Surge effect")
         if row[1] == "soothe":
             soothe_pairs.add((row[2], row[3]))
         if row[1] == "protection":

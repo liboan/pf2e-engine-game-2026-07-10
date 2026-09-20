@@ -106,6 +106,7 @@ from .l2_martial_content import build_l2_martial_content
 from .l2_prepared_content import L2_PREPARED_DEFINITIONS, L2_PREPARED_SETUPS
 from .l2_divine_content import build_l2_divine_content
 from .w3_caster_content import W3_CASTER_DEFINITIONS, W3_CASTER_SETUPS
+from .w4_caster_content import build_w4_caster_content
 
 
 # The Witch's L2 class-local sheet is deliberately held in staging until its
@@ -643,6 +644,11 @@ WARPRIEST_C_SURE_STRIKE = replace(
     ),
 )
 
+W4_CASTER_DEFINITIONS, W4_CASTER_SETUPS = build_w4_caster_content(WARPRIEST_C)
+W4_CASTER_DEFINITION_MAP = {
+    definition.definition_id: definition for definition in W4_CASTER_DEFINITIONS
+}
+
 # Soothe is a shared rank-1 spell for the future Bard and Life Oracle slices.
 # This remains a staged occult prepared-caster fixture: it exercises the spell
 # once without admitting either future class or changing the accepted
@@ -1093,6 +1099,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         RANGER_PRECISION_LEVEL_2.definition_id: RANGER_PRECISION_LEVEL_2,
         **{definition.definition_id: definition for definition in L2_REACH_DEFINITIONS},
         **{definition.definition_id: definition for definition in W3_CASTER_DEFINITIONS},
+        **W4_CASTER_DEFINITION_MAP,
         **L2_MARTIAL_DEFINITIONS,
         **L2_DIVINE_DEFINITIONS,
         **{
@@ -1489,6 +1496,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id: RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
         **{setup.setup_id: setup for setup in L2_REACH_SETUPS},
         **{setup.setup_id: setup for setup in W3_CASTER_SETUPS},
+        **{setup.setup_id: setup for setup in W4_CASTER_SETUPS},
         **L2_MARTIAL_SETUPS,
         **L2_DIVINE_SETUPS,
         **{

@@ -425,6 +425,22 @@ class WidenSpell(FamilyCommand):
 
 
 @dataclass(frozen=True)
+class EnergyAblation(FamilyCommand):
+    """Shape the next qualifying elemental spell for matching resistance."""
+
+    family_id = "casting"
+    energy_type: str
+
+
+@dataclass(frozen=True)
+class Cackle(FamilyCommand):
+    """Extend the acting Witch's current Stoke the Heart."""
+
+    family_id = "minions"
+    effect_id: str | None = None
+
+
+@dataclass(frozen=True)
 class LayOnHands(FamilyCommand):
     """One-action living-target devotion healing."""
 
@@ -752,6 +768,9 @@ class CreatureState:
     # Widen Spell uses the same immediate-cast lifecycle while carrying its
     # committed area length only on the cast continuation.
     widen_spell_pending: bool = False
+    # Energy Ablation is the same one-successor spellshape lifecycle, with the
+    # selected energy retained until the next qualifying Cast.
+    energy_ablation_pending: str | None = None
     must_leave_occupied: bool = False
     temporary_hp: int = 0
     temporary_hp_source_id: str | None = None

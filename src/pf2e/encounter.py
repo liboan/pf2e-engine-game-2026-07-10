@@ -63,6 +63,7 @@ from .model import (
     LingeringComposition,
     ReachSpell,
     WidenSpell,
+    EnergyAblation,
     Sustain,
     Dismiss,
     Command,
@@ -4180,6 +4181,24 @@ class Encounter:
                 state, actor, "widen_spell", frozenset({"manipulate", "spellshape"})
             )
         )
+        can_energy_ablation = (
+            can_act
+            and actions >= 1
+            and not actor.must_leave_occupied
+            and not has_pending_spellshape(actor)
+            and "energy_ablation" in definition.abilities
+            and "Energy Ablation" in definition.feats
+            and self._action_permitted(state, actor, "energy_ablation", frozenset({"spellshape"}))
+        )
+        can_cackle = (
+            "cackle" in definition.abilities
+            and "Cackle" in definition.feats
+            and any(
+                effect.kind == "stoke_the_heart" and effect.source_actor_id == actor.actor_id
+                for effect in state.active_effects
+            )
+            and self._action_permitted(state, actor, "cackle", frozenset({"auditory", "concentrate"}))
+        )
         from .martial_defense import crane_stance_is_active, dueling_parry_requirements_met
 
         can_dueling_parry = (
@@ -4368,6 +4387,8 @@ class Encounter:
             can_hunters_aim = False
             can_reach_spell = False
             can_widen_spell = False
+            can_energy_ablation = False
+            can_cackle = False
             can_dueling_parry = False
             can_crane_stance = False
             can_dismiss_crane_stance = False
@@ -4417,6 +4438,8 @@ class Encounter:
                 ("hunter_aim", can_hunters_aim),
                 ("reach_spell", can_reach_spell),
                 ("widen_spell", can_widen_spell),
+                ("energy_ablation", can_energy_ablation),
+                ("cackle", can_cackle),
                 ("interact", bool(interact_options)),
                 ("release", can_release),
                 ("stand", can_stand),
@@ -4554,7 +4577,7 @@ class Encounter:
                         traits=tuple(sorted(spell_traits(spell_id, actions))),
                     ))
                     continue
-                if spell_id in {"angelic_halo", "courageous_anthem", "shield", "detect_magic"}:
+                if spell_id in {"angelic_halo", "courageous_anthem", "shield", "detect_magic", "weapon_surge"}:
                     target_options.append(SpellTargetOption(
                         actions, (),
                         traits=tuple(sorted(spell_traits(spell_id, actions))),
@@ -4765,7 +4788,7 @@ class Encounter:
         # A spellshape is spent by the next Cast; every other action (including
         # a free action or End Turn) invalidates its pending marker.
         # Rejected commands remain atomic because this is the draft state.
-        if has_pending_spellshape(actor) and not isinstance(command, (Cast, ReachSpell, WidenSpell)):
+        if has_pending_spellshape(actor) and not isinstance(command, (Cast, ReachSpell, WidenSpell, EnergyAblation)):
             clear_pending_spellshape(actor)
         lingering = actor.lingering_composition_pending
         fleeing = self._active_fleeing_effect(state, actor)
@@ -6087,6 +6110,8 @@ class Encounter:
         )
         if item_modifier is not None:
             modifiers = (*modifiers, item_modifier)
+        if self._weapon_surge_applies(state, actor, attack, context.item_id):
+            modifiers = (*modifiers, Modifier(1, "status", "Weapon Surge"))
         if context.hunter_aim_intent is not None:
             from .ranger import hunter_aim_attack_bonus
 
@@ -6239,8 +6264,11 @@ class Encounter:
         bomber_only_primary_splash=False,
     ) -> list[Event]:
         events = [self._attack_event(actor, target, check)]
+        weapon_surge = self._weapon_surge_applies(state, actor, attack, item_id)
         finisher = bool(continuation is not None and continuation.finisher)
         if check.degree not in (DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS):
+            if weapon_surge:
+                self._consume_weapon_surge(state, actor)
             if (
                 check.degree is DegreeOfSuccess.CRITICAL_FAILURE
                 and attack.attack_id == "dagger"
@@ -6356,7 +6384,10 @@ class Encounter:
             strategic_strike=investigator_strategic_strike,
             use_intelligence=investigator_use_intelligence,
             finisher=finisher,
+            weapon_surge=weapon_surge,
         )
+        if weapon_surge:
+            self._consume_weapon_surge(state, actor)
         bomb_facts = self._admitted_bomber_bomb_facts(
             attack.item_id,
             character_level=get_definition(actor.definition_id).level,
@@ -6576,6 +6607,25 @@ class Encounter:
             position=target.position,
         )
 
+    @staticmethod
+    def _weapon_surge_applies(state, actor, attack, item_id) -> bool:
+        selected_item = item_id or attack.item_id
+        if selected_item is None:
+            return False
+        return any(
+            effect.kind == "weapon_surge"
+            and effect.source_actor_id == actor.actor_id
+            and effect.effect_id.split(":")[2:3] == [selected_item]
+            for effect in state.active_effects
+        )
+
+    @staticmethod
+    def _consume_weapon_surge(state, actor) -> None:
+        state.active_effects[:] = [
+            effect for effect in state.active_effects
+            if not (effect.kind == "weapon_surge" and effect.source_actor_id == actor.actor_id)
+        ]
+
     def _roll_attack_damage(
         self,
         state,
@@ -6592,6 +6642,7 @@ class Encounter:
         strategic_strike=False,
         use_intelligence=False,
         finisher=False,
+        weapon_surge=False,
     ):
         modifier = self._damage_modifier(state, actor, attack)
         weapon_dice = attack.damage_dice
@@ -6616,6 +6667,13 @@ class Encounter:
                 else frozenset()
             ),
         )]
+        if weapon_surge:
+            terms.append(DamageTerm(
+                source="weapon_surge",
+                damage_type="spirit",
+                dice=(6,),
+                tags=frozenset({"sanctified"}),
+            ))
         if strategic_strike:
             term = strategic_strike_damage_term(
                 attack,
@@ -7063,8 +7121,21 @@ class Encounter:
             if effect.kind == "frostbite_weakness" and effect.target_actor_id == target.actor_id
         )
         bomber_immunities = self._bomber_bomb_damage_immunities(state, target, resolution)
+        energy_ablation = tuple(
+            DamageDefense(
+                "resistance",
+                effect.effect_id.split(":", 2)[2],
+                effect.value,
+                source=effect.effect_id,
+            )
+            for effect in state.active_effects
+            if effect.kind == "energy_ablation"
+            and effect.target_actor_id == target.actor_id
+            and len(effect.effect_id.split(":", 2)) == 3
+        )
         base_defenses, paired_parent = self._paired_base_defenses(
-            resolution, (*get_definition(target.definition_id).damage_defenses, *frostbite_weakness, *bomber_immunities)
+            resolution,
+            (*get_definition(target.definition_id).damage_defenses, *frostbite_weakness, *bomber_immunities, *energy_ablation),
         )
         defenses = self._justice_damage_defenses(state, resolution, base_defenses)
         try:
@@ -9386,6 +9457,27 @@ class Encounter:
                 caster.actor_id,
                 f"{caster.label} raises a magical shield; +1 circumstance AC until their next turn starts.",
             )], dice=dice)
+        if spell_id == "weapon_surge":
+            item_id = continuation.spell_target_item_id
+            if item_id is None or item_id not in caster.held_items:
+                return [Event("action_stopped", caster.actor_id, None, "Weapon Surge's target weapon is no longer held.")]
+            start = state.actor_start_counts.get(caster.actor_id, 0)
+            state.active_effects[:] = [
+                effect for effect in state.active_effects
+                if not (effect.kind == "weapon_surge" and effect.source_actor_id == caster.actor_id)
+            ]
+            state.active_effects.append(ActiveSpellEffect(
+                effect_id=f"weapon_surge:{caster.actor_id}:{item_id}:{state.next_choice_id}",
+                kind="weapon_surge", source_actor_id=caster.actor_id,
+                target_actor_id=caster.actor_id, value=1,
+                expires_at_source_start=start + 1,
+                expires_at_world_time=state.world_time_seconds + 6,
+            ))
+            continuation.stage = "done"
+            return self._complete_action(state, caster, [Event(
+                "weapon_surge", caster.actor_id, None,
+                f"{caster.label} imbues {item_id}; its next Strike gains +1 status and 1d6 spirit damage.",
+            )], dice=dice)
         if spell_id == "light":
             return self._resolve_light(state, dice, caster, continuation)
         if spell_id == "sigil":
@@ -11654,6 +11746,33 @@ class Encounter:
                             enfeebled_on_failure=0):
         if not isinstance(damage, DamageResult) or damage.total < 0:
             raise _Rejected("Spell damage must be a valid rolled damage result.")
+        if (
+            continuation is not None
+            and continuation.sorcerous_potency
+            and "dangerous_sorcery" in get_definition(caster.definition_id).abilities
+        ):
+            if damage.adjustment and damage.adjustment.startswith("basic_save:"):
+                degree_name = damage.adjustment.rsplit(":", 1)[-1]
+                multiplier = 2 if degree_name == "critical_failure" else 0 if degree_name == "critical_success" else 1
+            else:
+                multiplier = 2 if attacker_critical else 1
+            bonus = continuation.sorcerous_potency * multiplier
+            if bonus:
+                damage = replace(
+                    damage,
+                    components=(*damage.components, DamageComponent(
+                        source="dangerous_sorcery",
+                        damage_type=damage_type,
+                        dice_sides=0,
+                        rolls=(),
+                        modifier=continuation.sorcerous_potency,
+                        amount=bonus,
+                        tags=frozenset({"status"}),
+                        dice=(),
+                    )),
+                    total=damage.total + bonus,
+                    rolled_total=damage.rolled_total + continuation.sorcerous_potency,
+                )
         resolution = DamageResolution(
             source_kind="spell",
             group=DamageGroup(

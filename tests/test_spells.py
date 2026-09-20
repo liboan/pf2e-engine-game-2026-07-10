@@ -64,6 +64,7 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
         "forbidding_ward",
         "sigil",
         "detect_magic",
+        "weapon_surge",
     }
     with pytest.raises(TypeError):
         SPELLS["new"] = SPELLS["heal"]  # type: ignore[index]

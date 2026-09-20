@@ -357,6 +357,11 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 frozenset({"focus", "witch"}), None, False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1882",
             ),
+            SpellDefinition(
+                "weapon_surge", "Weapon Surge", (1,),
+                frozenset({"cleric", "focus", "manipulate", "sanctified"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1755",
+            ),
         )
     }
 )
