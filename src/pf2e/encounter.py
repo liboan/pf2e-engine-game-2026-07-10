@@ -5252,7 +5252,29 @@ class Encounter:
             vicious_swing=True,
         )
 
-    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
+    def _start_intimidating_strike(self, context, command):
+        """Commit Intimidating Strike to the ordinary melee Strike pipeline."""
+        from .fighter import IntimidatingStrike
+
+        if not isinstance(command, IntimidatingStrike):
+            return FamilyProcedureResult(rejection="Intimidating Strike needs its fighter command.")
+        parent = ActionContinuation(
+            kind="intimidating_strike",
+            actor_id=context.actor.actor_id,
+            target_id=command.target_id,
+            attack_id=command.attack_id,
+        )
+        events = self._start_strike(
+            context.state, context.dice, context.actor,
+            command.target_id, command.attack_id, command.item_id,
+            command.damage_type, command.nonlethal,
+            actions_cost=2, attack_count_cost=1, vicious_swing=False,
+            melee_required=True,
+            parent=parent,
+        )
+        return FamilyProcedureResult(events=tuple(events))
+
+    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
         if not isinstance(target_id, str):
             raise _Rejected("Strike target id must be text.")
         if actions_cost > actor.actions_remaining:
@@ -5278,6 +5300,8 @@ class Encounter:
                     raise _Rejected(f"Attack {attack_id!r} requires its listed item to be held.")
                 raise _Rejected(f"Attack {attack_id!r} is not currently available.")
             raise _Unsupported(f"Attack {attack_id!r} is not supported in S1 or for this creature.")
+        if melee_required and "melee" not in attack.traits:
+            raise _Rejected("Intimidating Strike requires a melee Strike.")
         if hunter_aim_intent is not None:
             from .ranger import validate_hunter_aim_intent
 

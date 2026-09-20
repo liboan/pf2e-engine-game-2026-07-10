@@ -2592,6 +2592,36 @@ def run_terminal(
                         ),
                         output_fn,
                     )
+            elif action_id == "intimidating_strike":
+                from pf2e.content import get_definition
+
+                acting_actor = game._state.creatures.get(engine_options.actor_id or "")
+                melee_attack_ids = {
+                    attack.attack_id
+                    for attack in get_definition(acting_actor.definition_id).attacks
+                    if "melee" in attack.traits
+                } if acting_actor is not None else set()
+                strike_inputs = _choose_strike_inputs(
+                    tuple(
+                        option for option in engine_options.strikes
+                        if option.attack_id in melee_attack_ids
+                    ),
+                    inspection,
+                    input_fn,
+                    output_fn,
+                )
+                if strike_inputs is not None:
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    _run_command(
+                        game,
+                        IntimidatingStrike(
+                            target_id=target_id,
+                            attack_id=attack_id,
+                            damage_type=damage_type,
+                            nonlethal=nonlethal,
+                        ),
+                        output_fn,
+                    )
             elif action_id == "flurry_of_blows":
                 strike_inputs = _choose_strike_inputs(
                     tuple(

@@ -8,12 +8,13 @@ from pf2e.fighter import sudden_charge_is_legal
 from pf2e.l2_martial_content import build_l2_martial_content
 from pf2e.monk import FlurryOfBlows, stunning_blows_is_eligible
 from pf2e.encounter import Encounter
-from pf2e.model import CreaturePlacement, EncounterSetup, PairedStrikeSelection, Position, ResultStatus, Stride
+from pf2e.model import AttackDefinition, CreaturePlacement, EncounterSetup, PairedStrikeSelection, Position, ResultStatus, Stride
 from pf2e.paired_strikes import _decode_selection
 from pf2e.ranger_monk_content import MONK
 from pf2e.fighter import SuddenCharge
 from pf2e.terminal import run_terminal
 from terminal_test_helpers import BoundedInput, BoundedTranscript
+from dataclasses import replace
 from types import MappingProxyType
 
 import pytest
@@ -98,6 +99,116 @@ def test_sudden_charge_requires_two_real_movement_legs_and_an_all_or_nothing_opt
         target_id="dog", attack_id=None,
     )
 
+
+def test_intimidating_strike_requires_the_admitted_grant_and_two_actions() -> None:
+    assert intimidating_strike_is_legal(abilities=("intimidating_strike",), actions_remaining=2)
+    assert not intimidating_strike_is_legal(abilities=(), actions_remaining=3)
+    assert not intimidating_strike_is_legal(abilities=("intimidating_strike",), actions_remaining=1)
+
+
+def test_intimidating_strike_rejects_a_ranged_attack_before_committing_costs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pf2e.content import get_setup
+
+    definition = content.CREATURES["fighter_m_level_2_intimidating_strike"]
+    ranged = AttackDefinition(
+        "intimidating_review_bow", "Review Bow", 8, 0,
+        frozenset({"attack", "ranged"}), "piercing", (6,), 0,
+        range_increment_ft=30, max_range_ft=180,
+    )
+    monkeypatch.setattr(
+        content,
+        "CREATURES",
+        MappingProxyType({
+            **content.CREATURES,
+            definition.definition_id: replace(definition, attacks=(*definition.attacks, ranged)),
+        }),
+    )
+    game = Encounter.start(get_setup("staged_fighter_level_2_intimidating_strike"), rolls=(20, 1))
+    _settle_initiative(game)
+    result = game.execute(IntimidatingStrike("dog", "intimidating_review_bow"))
+    assert result.status is ResultStatus.REJECTED
+    fighter = game._state.creatures["fighter"]
+    assert fighter.actions_remaining == 3 and fighter.strikes_this_turn == 0
+
+
+def test_intimidating_strike_respects_the_printed_mindless_mental_immunity() -> None:
+    """AoN feat 4782's mental trait cannot frighten a mindless creature."""
+    from pf2e.model import CreatureState, EncounterState, FamilyProcedureContext
+    from pf2e.opponent_content import SKELETON_GUARD
+
+    fighter = CreatureState("fighter", "fighter_m_level_2_intimidating_strike", "Fighter", "blue", Position(0, 0), 34)
+    skeleton = CreatureState("skeleton", SKELETON_GUARD.definition.definition_id, "Skeleton", "red", Position(1, 0), 4)
+    context = FamilyProcedureContext(
+        encounter=None,
+        state=EncounterState(
+            setup_id="fixture", map_width=2, map_height=1,
+            creatures={"fighter": fighter, "skeleton": skeleton},
+            initiative_order=[], active_index=0,
+        ),
+        dice=None,
+        actor=fighter,
+        definition=MELEE_FIGHTER_M,
+        family_id="martial",
+    )
+    assert intimidating_strike_target_is_immune(context, "skeleton")
+
+
+def test_intimidating_strike_uses_one_melee_attack_then_saves_frightened_result(
+    tmp_path,
+) -> None:
+    """PC1/PC2 feat 368: hit + damage makes frightened 1; crit makes 2."""
+    from pf2e.content import get_setup
+
+    game = Encounter.start(
+        get_setup("staged_fighter_level_2_intimidating_strike"), rolls=(20, 1, 12, 1),
+    )
+    _settle_initiative(game)
+    assert "intimidating_strike" in game.options().available_actions
+    paused = game.execute(IntimidatingStrike("dog", "longsword"))
+    assert paused.status is ResultStatus.PAUSED
+    assert game._state.creatures["fighter"].actions_remaining == 1
+    assert game._state.creatures["fighter"].strikes_this_turn == 1
+    assert game.inspect().choice is not None and game.inspect().choice.kind == "attack_hero_reroll"
+
+    path = tmp_path / "fighter-intimidating-strike.json"
+    game.save(path)
+    game = Encounter.load(path)
+    resolved = _choose(game, "keep")
+    assert resolved.status is ResultStatus.COMPLETED
+    assert any(event.kind == "condition_applied" and "frightened 1" in event.text for event in resolved.events)
+    frightened = [effect for effect in game.inspect().actors[1].condition_effects if effect.kind == "frightened"]
+    assert len(frightened) == 1 and frightened[0].value == 1
+
+    critical = Encounter.start(
+        get_setup("staged_fighter_level_2_intimidating_strike"), rolls=(20, 1, 20, 1),
+    )
+    _settle_initiative(critical)
+    assert critical.execute(IntimidatingStrike("dog", "longsword")).status is ResultStatus.PAUSED
+    result = _choose(critical, "keep")
+    assert result.status is ResultStatus.COMPLETED and critical.inspect().winner_team == "blue"
+    assert any(event.kind == "condition_applied" and "frightened 2" in event.text for event in result.events)
+    dog = next(actor for actor in critical.inspect().actors if actor.actor_id == "dog")
+    assert next(effect.value for effect in dog.condition_effects if effect.kind == "frightened") == 2
+
+
+def test_barbarian_intimidating_strike_is_a_distinct_legal_grant() -> None:
+    from pf2e.content import get_setup
+
+    game = Encounter.start(
+        get_setup("staged_barbarian_level_2_intimidating_strike"), rolls=(20, 1),
+    )
+    # This Bear can receive a Quick-Tempered initiative offer. Declining it
+    # keeps the alternate feat's normal two-action availability observable.
+    for _ in range(8):
+        choice = game.inspect().choice
+        if choice is None:
+            break
+        option = "decline" if any(item.option_id == "decline" for item in choice.options) else "keep"
+        game.choose(choice.choice_id, option, choice.owner_actor_id)
+    assert game.inspect().turn_actor_id == "barbarian"
+    assert "intimidating_strike" in game.options().available_actions
 
 def test_no_escape_and_stunning_blows_remain_narrow_trigger_predicates() -> None:
     assert no_escape_is_eligible(
