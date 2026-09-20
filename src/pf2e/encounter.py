@@ -5287,12 +5287,24 @@ class Encounter:
                     events.append(Event("alchemy_mutagen_failed", actor.actor_id, actor.actor_id, f"{formula.name} fails to counteract the existing mutagen; the consumed item has no effect."))
                     return self._complete_action(state, actor, events, dice=dice)
                 state.active_effects.remove(prior)
+                if prior.kind == "alchemy_juggernaut_mutagen_lesser" and actor.temporary_hp_source_id == prior.effect_id:
+                    # Counteracting the source ends its printed benefit.  A
+                    # keep-existing choice can preserve another pool, but it
+                    # cannot preserve temporary HP granted by the removed
+                    # Juggernaut effect.
+                    actor.temporary_hp = 0
+                    actor.temporary_hp_source_id = None
+                    actor.temporary_hp_expires_at_seconds = None
+                    actor.temporary_hp_expires_at_source_start = 0
             effect_id = f"alchemy:{command.item_id}"
             effect_value = formula.facts.save_bonuses[0].bonus if formula.facts.save_bonuses else 1
             state.active_effects.append(ActiveSpellEffect(effect_id, f"alchemy_{formula.formula_id}", actor.actor_id, actor.actor_id, effect_value, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
             gaining_temporary_hp = (
                 formula.facts.temporary_hp > 0
-                and (actor.temporary_hp == 0 or command.temporary_hp_choice == "gain_new")
+                and (
+                    command.temporary_hp_choice == "gain_new"
+                    or (actor.temporary_hp == 0 and command.temporary_hp_choice is None)
+                )
             )
             if gaining_temporary_hp:
                 actor.temporary_hp = formula.facts.temporary_hp

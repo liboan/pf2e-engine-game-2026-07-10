@@ -4,7 +4,7 @@ from pf2e.alchemist_content import BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
 from pf2e.alchemy_content import FORMULAS_BY_ID, ElixirFacts, MutagenFacts
 from pf2e.content import get_setup
 from pf2e.encounter import Encounter
-from pf2e.model import ActiveSpellEffect, ActivateAlchemy, Choose, EndTurn, QuickAlchemy, ResultStatus
+from pf2e.model import ActiveSpellEffect, ActivateAlchemy, Choose, EndTurn, QuickAlchemy, QuickBomber, ResultStatus
 from pf2e.terminal import build_action_menu
 
 
@@ -126,11 +126,64 @@ def test_juggernaut_gain_choice_replaces_even_a_larger_existing_pool() -> None:
     assert actor.temporary_hp_source_id == "alchemy:alchemist:quick:1"
 
 
+def test_successful_mutagen_replacement_clears_counteracted_juggernaut_temp_hp() -> None:
+    game = _use_item("juggernaut_mutagen_lesser")
+    assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
+    _to_alchemist_turn(game)
+    assert game.execute(QuickAlchemy("create_consumable", "bestial_mutagen_lesser")).status is ResultStatus.COMPLETED
+    item_id = next(
+        item_id for item_id, infused in game._state.infused_alchemy_items.items()
+        if infused.formula_id == "bestial_mutagen_lesser" and item_id in game._state.creatures["alchemist"].held_items
+    )
+    result = game.execute(ActivateAlchemy(item_id, "alchemist"))
+    assert result.status is ResultStatus.COMPLETED
+    actor = game._state.creatures["alchemist"]
+    assert actor.temporary_hp == 0
+    assert actor.temporary_hp_source_id is None
+    assert [effect.kind for effect in game._state.active_effects] == ["alchemy_bestial_mutagen_lesser"]
+
+
+def test_keep_existing_cannot_keep_a_counteracted_juggernaut_pool() -> None:
+    game = _use_item("juggernaut_mutagen_lesser")
+    assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
+    _to_alchemist_turn(game)
+    assert game.execute(QuickAlchemy("create_consumable", "juggernaut_mutagen_lesser")).status is ResultStatus.COMPLETED
+    item_id = next(
+        item_id for item_id, infused in game._state.infused_alchemy_items.items()
+        if infused.formula_id == "juggernaut_mutagen_lesser" and item_id in game._state.creatures["alchemist"].held_items
+    )
+    result = game.execute(ActivateAlchemy(item_id, "alchemist", "keep_existing"))
+    assert result.status is ResultStatus.COMPLETED
+    actor = game._state.creatures["alchemist"]
+    assert actor.temporary_hp == 0
+    assert actor.temporary_hp_source_id is None
+    assert [effect.kind for effect in game._state.active_effects] == ["alchemy_juggernaut_mutagen_lesser"]
+
+
 def test_w2_item_effects_carry_across_a_finished_scene_and_save_load(tmp_path) -> None:
     game = _use_item("cheetahs_elixir_lesser")
-    game._state.creatures["dog"].hp = 0
-    game._state.in_progress = False
-    game._state.winner_team = "blue"
+    # The first Bottled Lightning is already prepared.  Later turns create
+    # additional copies through the public Quick Alchemy route until the
+    # actual fight finishes, so next_encounter receives a real completed scene.
+    for _ in range(4):
+        _settle(game)
+        if not game.inspect().in_progress:
+            break
+        if (
+            game.inspect().turn_actor_id == "alchemist"
+            and game._state.creatures["alchemist"].actions_remaining < 2
+        ):
+            assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
+            _settle(game)
+        if game.inspect().turn_actor_id != "alchemist":
+            assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
+            _settle(game)
+        if game._state.creatures["dog"].hp < 8:
+            assert game.execute(QuickAlchemy("create_consumable", "bottled_lightning_lesser")).status is ResultStatus.COMPLETED
+        result = game.execute(QuickBomber("dog", "bottled_lightning_lesser"))
+        assert result.status in {ResultStatus.COMPLETED, ResultStatus.PAUSED}
+        _settle(game)
+    assert game.inspect().winner_team == "blue"
 
     transitioned = game.next_encounter(get_setup("l2_bomber_item_support_next_vs_guard_dog"))
     assert transitioned.status in {ResultStatus.COMPLETED, ResultStatus.PAUSED}
