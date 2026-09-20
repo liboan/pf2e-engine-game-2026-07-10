@@ -5630,7 +5630,7 @@ class Encounter:
             return []
         if parent.kind == "brutish_shove" and not hit and critical:
             return []
-        if parent.kind == "brutish_shove" and hit:
+        if parent.kind == "brutish_shove" and hit and parent.mode != "failure_effect":
             sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
             if sizes.get(get_definition(target.definition_id).size, 99) > sizes.get(get_definition(actor.definition_id).size, -1):
                 return [Event(

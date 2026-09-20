@@ -11,12 +11,14 @@ its automatic Shove uses Player Core p. 235 (https://2e.aonprd.com/Actions.aspx?
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
+from types import MappingProxyType
 
 from pf2e import EndTurn, Stride, Strike
-from pf2e.content import get_setup
+from pf2e.content import get_definition, get_setup
 from pf2e.encounter import Encounter
 from pf2e.fighter import BrutishShove, CombatGrab, SnaggingStrike
-from pf2e.model import Position, ResultStatus
+from pf2e.model import CreaturePlacement, EncounterSetup, Position, ResultStatus
 
 
 def _settle(game: Encounter) -> None:
@@ -112,3 +114,35 @@ def test_brutish_shove_rejects_sideways_and_critical_failure_has_no_failure_effe
     assert critical_failure.execute(BrutishShove("dog", "greatsword", Position(3, 1))).status is ResultStatus.PAUSED
     _settle(critical_failure)
     assert not any(effect.effect_id.startswith("brutish_shove:") for effect in critical_failure._state.condition_effects)
+
+
+def test_brutish_shove_records_the_actual_greatsword_sheet_and_selected_failure_effect_on_larger_hit(
+    monkeypatch,
+) -> None:
+    import pf2e.content as content
+
+    definition = get_definition("fighter_m_level_2_brutish_shove")
+    assert definition.held_items == ("greatsword",)
+    assert {(attack.attack_id, attack.hands_required) for attack in definition.attacks} >= {("greatsword", 2)}
+    assert ("greatsword", 2) in definition.carried_item_bulk
+    assert not any("Longsword is versatile" in note for note in definition.sheet_notes)
+    assert "Starting money remaining after the listed gear: 5 gp." in definition.sheet_notes
+
+    large_dog = replace(content.GUARD_DOG, definition_id="w3_large_guard_dog", size="large")
+    monkeypatch.setattr(content, "CREATURES", MappingProxyType({**content.CREATURES, large_dog.definition_id: large_dog}))
+    setup = EncounterSetup(
+        "w3_brutish_large_failure_effect", "Brutish Shove larger target failure effect", 5, 3,
+        (
+            CreaturePlacement("fighter", definition.definition_id, "Fighter", "blue", Position(1, 1)),
+            CreaturePlacement("dog", large_dog.definition_id, "Large Guard Dog", "red", Position(2, 1)),
+        ),
+    )
+    monkeypatch.setattr(content, "_STAGED_SETUPS", content._STAGED_SETUPS | {setup.setup_id: setup})
+    game = Encounter.start(setup, rolls=(20, 1, 12, 1, 12, 1))
+    _settle(game)
+    assert game.execute(Strike("dog", "greatsword")).status is ResultStatus.PAUSED
+    _settle(game)
+    assert game.execute(BrutishShove("dog", "greatsword", Position(3, 1), failure_effect=True)).status is ResultStatus.PAUSED
+    _settle(game)
+    assert any(effect.effect_id.startswith("brutish_shove:") for effect in game._state.condition_effects)
+    assert game._state.creatures["dog"].position == Position(2, 1)

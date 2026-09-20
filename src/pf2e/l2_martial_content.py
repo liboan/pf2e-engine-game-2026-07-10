@@ -196,6 +196,18 @@ def build_l2_martial_content(
                 item_id="greatsword", hands_required=2,
             )),
             held_items=("greatsword",),
+            carried_item_bulk=(
+                *(row for row in fighter.carried_item_bulk if row[0] != "longsword"),
+                ("greatsword", 2),
+            ),
+            sheet_notes=tuple(
+                note for note in fighter.sheet_notes
+                if not note.startswith("Longsword is versatile P")
+                and not note.startswith("Starting money remaining after the listed gear:")
+            ) + (
+                "Greatsword is versatile P; choose slashing or piercing for each Strike. It costs 2 gp and has Bulk 2.",
+                "Starting money remaining after the listed gear: 5 gp.",
+            ),
         ),
         definition_id="fighter_m_level_2_brutish_shove",
         name="Level 2 Melee Fighter M (Brutish Shove)",
