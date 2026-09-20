@@ -30,7 +30,7 @@
 - Implement applicable supported PF2e rules accurately. Defer costly bespoke content when it is not needed for the current playable slice. Cite the rules sources used. Do not silently approximate unsupported behavior; state the limit and stop where it affects play.
 - Keep rules behavior in the engine, not in a growing set of one-off scenario exceptions.
 - Use source-informed ordinary tests, then verify continuous local encounters, save/load, and performance as each capability becomes available. Do not claim evidence for a path that was not exercised.
-- Keep durable run records in `docs/work-log/agent-runs.json`. The deterministic usage collector records identified runs from raw metadata, deduplicates per-request `token_usage_record` entries, includes compaction requests, and excludes inherited parent records. Preserve observed model/effort and exact run boundaries; cached input is a subset of input. If a value is unavailable, record `null` with the reason, and distinguish per-run counts from cumulative reused-worker totals.
+- Keep durable run records locally in `docs/work-log/agent-runs.json`; this ignored, local-only ledger may be absent in a fresh clone. When accounting is used, the deterministic usage collector records identified runs from raw metadata, deduplicates per-request `token_usage_record` entries, includes compaction requests, and excludes inherited parent records. Preserve observed model/effort and exact run boundaries; cached input is a subset of input. If a value is unavailable, record `null` with the reason, and distinguish per-run counts from cumulative reused-worker totals.
 
 ## Test and process cadence
 

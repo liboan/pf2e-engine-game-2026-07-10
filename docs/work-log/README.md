@@ -10,7 +10,7 @@ The [integrated plan](../plan/06-class-and-content-expansion.md) explains the se
 
 ## Records
 
-- [Per-run usage and results](agent-runs.json). The verified collector uses local raw request records, including compaction. Older accounting retains its source labels and history; a complete historical recount has not been performed.
+- Per-run usage and results live in the local, Git-ignored `docs/work-log/agent-runs.json`, when available. The verified collector uses local raw request records, including compaction. Fresh clones do not include the historical ledger; accepted milestone totals remain in [ACTIVE](ACTIVE.md). Older accounting retains its source labels and history; a complete historical recount has not been performed.
 - [Operating-workflow verification](operating-workflow-checkpoint.md): consolidated recovery, concise reporting and independently checked usage collection.
 - [Progress through the weapon-identity checkpoint](archive/progress-through-weapon-identity.md). This preserves the prior human-readable history and checkpoint evidence; it is not a current task queue.
 - [Prior class-state snapshot](archive/class-state-before-active-table.md) and [prior runtime queue](archive/runtime-queue-before-active-table.md), retained as historical records.
