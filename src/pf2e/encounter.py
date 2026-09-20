@@ -12411,6 +12411,11 @@ class Encounter:
             raise ValueError("elapsed time must be a positive integer")
         state.world_time_seconds += elapsed_seconds
         Encounter._expire_elapsed_spell_effects(state)
+        state.persistent_effects[:] = [
+            effect for effect in state.persistent_effects
+            if effect.expires_at_world_time is None
+            or effect.expires_at_world_time > state.world_time_seconds
+        ]
         Encounter._expire_person_of_interest_grants(state)
 
         # Turn-bound defenses have no useful meaning between fights. Their

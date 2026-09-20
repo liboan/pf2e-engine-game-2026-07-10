@@ -172,3 +172,37 @@ def test_terminal_creates_and_throws_the_new_fire_formula() -> None:
     assert "Alchemist's Fire (lesser)" in transcript
     assert "creates alchemists fire lesser" in transcript
     assert "uses Quick Bomber to draw alchemists fire lesser" in transcript
+
+
+def test_bomb_persistent_damage_expires_during_rest_before_save_and_next_scene(tmp_path: Path) -> None:
+    game = Encounter.start(
+        get_setup("l2_bomber_far_lobber_vs_guard_dog"),
+        rolls=(20, 1, 15, 1, 20, 3, 20, 1),
+    )
+    _settle(game)
+    assert game.execute(QuickAlchemy("create_consumable", "alchemists_fire_lesser")).status is ResultStatus.COMPLETED
+    fire = game.execute(QuickBomber("dog", "alchemists_fire_lesser"))
+    assert fire.status is ResultStatus.PAUSED
+    choice = fire.inspection.choice
+    assert choice is not None
+    assert game.execute(Choose(choice.choice_id, "keep", choice.owner_actor_id)).status is ResultStatus.COMPLETED
+    frost = game.execute(QuickBomber("dog", "frost_vial_lesser"))
+    assert frost.status is ResultStatus.PAUSED
+    choice = frost.inspection.choice
+    assert choice is not None
+    assert game.execute(Choose(choice.choice_id, "keep", choice.owner_actor_id)).status is ResultStatus.COMPLETED
+    assert game.inspect().winner_team == "blue"
+    assert game._state.persistent_effects
+
+    recovered = game.recover_versatile_vials("alchemist", elapsed_seconds=600)
+    assert recovered.status is ResultStatus.COMPLETED
+    assert game._state.world_time_seconds == 600
+    assert not game._state.persistent_effects
+
+    save_path = tmp_path / "w1-rested-fire.json"
+    game.save(save_path)
+    restored = Encounter.load(save_path)
+    assert not restored._state.persistent_effects
+    next_scene = restored.next_encounter(get_setup("l2_bomber_far_lobber_next_vs_guard_dog"))
+    assert next_scene.status in {ResultStatus.COMPLETED, ResultStatus.PAUSED}
+    assert not restored._state.persistent_effects
