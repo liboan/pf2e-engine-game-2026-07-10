@@ -316,13 +316,13 @@ BATTLE_MAGIC_WIZARD_DAZE_SETUP = EncounterSetup(
     height=5,
     placements=(
         CreaturePlacement("wizard", BATTLE_MAGIC_WIZARD_DAZE.definition_id, "Battle Magic Wizard", "blue", Position(1, 2)),
-        CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(5, 2)),
+        CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(9, 2)),
     ),
 )
 
 
 BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS_SETUP = EncounterSetup(
-    setup_id="battle_magic_wizard_suppression_spells_vs_guard_dog",
+    setup_id="battle_magic_wizard_suppression_spells_vs_common_speaker",
     name="Battle Magic Wizard suppression spells versus Common Speaker",
     width=15,
     height=5,

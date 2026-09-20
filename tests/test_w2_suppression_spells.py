@@ -81,7 +81,7 @@ def test_witch_suppression_package_survives_save_then_finishes_public_encounter(
 
 def test_wizard_learned_command_is_playable_and_saved(tmp_path: Path) -> None:
     game = Encounter.start(
-        get_setup("battle_magic_wizard_suppression_spells_vs_guard_dog"),
+        get_setup("battle_magic_wizard_suppression_spells_vs_common_speaker"),
         rolls=(20, 1, 1),
     )
     _settle(game)
@@ -135,7 +135,7 @@ def test_terminal_casts_wizard_suppression_fear() -> None:
         raise AssertionError(f"unexpected terminal prompt: {prompt!r}")
 
     assert run_terminal(
-        setup=get_setup("battle_magic_wizard_suppression_spells_vs_guard_dog"),
+        setup=get_setup("battle_magic_wizard_suppression_spells_vs_common_speaker"),
         rolls=(20, 1, 1),
         input_fn=BoundedInput(scripted_input, max_calls=30),
         output_fn=output,

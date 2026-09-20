@@ -153,7 +153,7 @@ FAITHS_FLAMEKEEPER_DAZE_SETUP = EncounterSetup(
     5,
     (
         CreaturePlacement("witch", FAITHS_FLAMEKEEPER_WITCH_DAZE.definition_id, "Flamekeeper Witch", "blue", Position(1, 2)),
-        CreaturePlacement("enemy", COMMAND_TARGET.definition_id, "Common Speaker", "red", Position(5, 2)),
+        CreaturePlacement("enemy", COMMAND_TARGET.definition_id, "Common Speaker", "red", Position(9, 2)),
     ),
 )
 
