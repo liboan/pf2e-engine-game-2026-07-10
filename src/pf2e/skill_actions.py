@@ -673,7 +673,7 @@ def _expiry_after_actor_end(context: FamilyProcedureContext, actor_id: str, *, t
     )
 
 
-def _add_condition_effect(
+def add_timed_condition_effect(
     context: FamilyProcedureContext,
     *,
     effect_id: str,
@@ -684,6 +684,14 @@ def _add_condition_effect(
     expiration: EffectExpiration,
     dc: int | None = None,
 ) -> None:
+    """Replace one source-owned, actor-relative condition effect.
+
+    Demoralize and the martial Intimidating Strike family both create a
+    frightened condition with an explicit source and end-of-turn boundary.
+    Keeping the small state mutation here avoids duplicating the replacement
+    and persistence-safe ID rules while leaving each action's trigger and
+    immunity contract in its owning module.
+    """
     context.state.condition_effects = [effect for effect in context.state.condition_effects if effect.effect_id != effect_id]
     context.add_condition_effect(
         effect_id, kind, source_id, target_id, value, expiration=expiration, dc=dc,
@@ -1653,7 +1661,7 @@ def _finish_grapple(context: FamilyProcedureContext, command: Grapple, check_con
         events.append(Event("condition_removed", context.actor.actor_id, target.actor_id, f"{context.actor.label} releases their Grapple on {target.label} after failing to maintain it."))
     if outcome.target_condition is not None:
         effect_id = f"grapple:{context.actor.actor_id}:{target.actor_id}"
-        _add_condition_effect(
+        add_timed_condition_effect(
             context,
             effect_id=effect_id,
             kind=outcome.target_condition,
@@ -1932,7 +1940,7 @@ def _finish_demoralize(context: FamilyProcedureContext, command: Demoralize, che
     events = [_event_check("demoralize", context.actor, target, outcome.check)]
     if outcome.apply_frightened:
         current_round_end = context.state.actor_end_counts.get(target.actor_id, 0)
-        _add_condition_effect(
+        add_timed_condition_effect(
             context,
             effect_id=f"demoralize:{context.actor.actor_id}:{target.actor_id}:{context.state.round_number}:{current_round_end}",
             kind="frightened",
@@ -2337,7 +2345,7 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
             message = f"{context.actor.label} falls prone from {target.label}'s Grapple response."
             events = [Event("condition_applied", target.actor_id, context.actor.actor_id, message, check=pending.saved_check.result)]
         elif choice.option_id == "grab_user":
-            _add_condition_effect(
+            add_timed_condition_effect(
                 context,
                 effect_id=f"grapple:{target.actor_id}:{context.actor.actor_id}",
                 kind="grabbed",

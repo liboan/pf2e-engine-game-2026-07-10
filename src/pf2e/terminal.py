@@ -51,6 +51,7 @@ _ACTION_LABELS = {
     "devise_stratagem": "Devise a Stratagem",
     "known_weaknesses": "Known Weaknesses + Devise",
     "vicious_swing": "Vicious Swing",
+    "intimidating_strike": "Intimidating Strike",
     "sudden_charge": "Sudden Charge",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
@@ -1947,7 +1948,7 @@ def run_terminal(
     from pf2e.investigator import BattleMedicine, DeviseStratagem, PersonOfInterest, RecallKnowledge
     from pf2e.swashbuckler import ConfidentFinisher
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
-    from pf2e.fighter import SuddenCharge
+    from pf2e.fighter import IntimidatingStrike, SuddenCharge
 
     if input_fn is None:
         input_fn = input

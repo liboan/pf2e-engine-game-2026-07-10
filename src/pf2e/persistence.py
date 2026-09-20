@@ -1407,6 +1407,7 @@ def _state_from_data(data: Any) -> EncounterState:
                 if definition_id in {
                     "barbarian_animal_bear_level_2_no_escape",
                     "barbarian_animal_bear_level_2_sudden_charge",
+                    "barbarian_animal_bear_level_2_intimidating_strike",
                 }
                 else None,
             )

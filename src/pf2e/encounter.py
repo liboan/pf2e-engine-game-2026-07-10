@@ -341,6 +341,7 @@ class Encounter:
                 if definition.definition_id in {
                     "barbarian_animal_bear_level_2_no_escape",
                     "barbarian_animal_bear_level_2_sudden_charge",
+                    "barbarian_animal_bear_level_2_intimidating_strike",
                 }
                 else None,
             ),
@@ -1822,10 +1823,21 @@ class Encounter:
                 and pending.attack_actions_cost == 0
                 and pending.attack_count_cost == 1
             )
+            intimidating_strike = (
+                continuation is not None
+                and continuation.kind == "intimidating_strike"
+                and continuation.actor_id == actor.actor_id
+                and continuation.target_id == target.actor_id
+                and continuation.attack_id == attack.attack_id
+                and "intimidating_strike" in get_definition(actor.definition_id).abilities
+                and pending.attack_actions_cost == 2
+                and pending.attack_count_cost == 1
+                and "melee" in attack.traits
+            )
             if (
                 pending.attack_actions_cost not in ((0, 1, 2) if sudden_charge_strike else (1, 2))
                 or pending.attack_count_cost not in (1, 2)
-                or (not hunter_aim and not sudden_charge_strike and pending.attack_count_cost != pending.attack_actions_cost)
+                or (not hunter_aim and not sudden_charge_strike and not intimidating_strike and pending.attack_count_cost != pending.attack_actions_cost)
                 or (hunter_aim and pending.attack_actions_cost != 2)
             ):
                 raise ValueError("save has inconsistent pending Strike costs")
@@ -1858,6 +1870,7 @@ class Encounter:
             if (
                 pending.attack_actions_cost == 2
                 and not hunter_aim
+                and not intimidating_strike
                 and "vicious_swing" not in get_definition(actor.definition_id).abilities
             ):
                 raise ValueError("save has an unsupported pending two-action Strike")
@@ -3944,6 +3957,18 @@ class Encounter:
                 if "melee" in attack.traits and self._strike_targets(actor, state, attack)
             )
         )
+        can_intimidating_strike = (
+            can_act and actions >= 2 and not actor.must_leave_occupied
+            and "intimidating_strike" in definition.abilities
+            and any(
+                "melee" in attack.traits and self._strike_targets(actor, state, attack)
+                and self._action_permitted(
+                    state, actor, "intimidating_strike",
+                    frozenset({"attack", "emotion", "fear", "mental"}),
+                )
+                for attack in usable
+            )
+        )
         can_sudden_charge = (
             can_act and actions >= 2 and not actor.must_leave_occupied
             and "sudden_charge" in definition.abilities
@@ -4178,6 +4203,7 @@ class Encounter:
             can_step = False
             can_strike = False
             can_vicious = False
+            can_intimidating_strike = False
             can_sudden_charge = False
             can_flurry = False
             can_hunt_prey = False
@@ -4216,6 +4242,7 @@ class Encounter:
                 ("devise_stratagem", devise_available),
                 ("known_weaknesses", known_weaknesses_available),
                 ("vicious_swing", can_vicious),
+                ("intimidating_strike", can_intimidating_strike),
                 ("sudden_charge", can_sudden_charge),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
@@ -7115,6 +7142,22 @@ class Encounter:
 
         if outcome.defeated:
             events.append(Event("defeated", attacker.actor_id, target.actor_id, f"{target.label} is defeated."))
+        if (
+            resolution.source_kind == "strike"
+            and resolution.continuation is not None
+            and resolution.continuation.kind == "intimidating_strike"
+        ):
+            from .fighter import apply_intimidating_strike_frightened
+
+            context = FamilyProcedureContext(
+                self, state, dice, attacker, get_definition(attacker.definition_id), "martial"
+            )
+            events.append(apply_intimidating_strike_frightened(
+                context,
+                target_id=target.actor_id,
+                damage=damage.total,
+                critical=resolution.attacker_critical,
+            ))
         if resolution.source_kind == "strike":
             bomb_facts = self._admitted_bomber_bomb_facts_for_attack(attacker, resolution.attack_id)
             if bomb_facts is not None:
@@ -11466,6 +11509,11 @@ class Encounter:
             return self._complete_action(state, actor, [Event(
                 "sudden_charge_complete", actor.actor_id, continuation.target_id,
                 f"{actor.label} completes Sudden Charge.",
+            )], dice=dice)
+        if continuation.kind == "intimidating_strike":
+            return self._complete_action(state, actor, [Event(
+                "intimidating_strike_complete", actor.actor_id, continuation.target_id,
+                f"{actor.label} completes Intimidating Strike.",
             )], dice=dice)
         if continuation.finisher:
             if critical:

@@ -12,6 +12,7 @@ Sources checked 2026-09-19:
   https://2e.aonprd.com/Feats.aspx?ID=5815
 * Monk and Stunning Blows: https://2e.aonprd.com/Classes.aspx?ID=60;
   https://2e.aonprd.com/Feats.aspx?ID=5989
+* Intimidating Strike: https://2e.aonprd.com/Feats.aspx?ID=4782
 """
 
 from __future__ import annotations
@@ -129,6 +130,39 @@ def build_l2_martial_content(
             "https://2e.aonprd.com/Classes.aspx?ID=57."
         ),
     )
+    # Intimidating Strike is a level-2 Fighter and Barbarian feat.  These are
+    # legal alternate class-feat choices, not replacements for the accepted
+    # Sudden Charge and No Escape representatives.
+    fighter_intimidating_strike_l2 = _level_two(
+        fighter,
+        definition_id="fighter_m_level_2_intimidating_strike",
+        name="Level 2 Melee Fighter M (Intimidating Strike)",
+        hp=34,
+        class_feat="Intimidating Strike",
+        skill_feat="Quick Jump",
+        ability_id="intimidating_strike",
+        note=(
+            "Alternate level-2 Fighter class-feat choice: Intimidating Strike is a two-action "
+            "melee Strike. If it hits and deals damage, its target is frightened 1, or frightened "
+            "2 on a critical hit. It has the emotion, fear, and mental traits; an effect immune to "
+            "fear, emotion, mental, or frightened is not silently bypassed. Source: https://2e.aonprd.com/Feats.aspx?ID=4782."
+        ),
+    )
+    barbarian_intimidating_strike_l2 = _level_two(
+        barbarian,
+        definition_id="barbarian_animal_bear_level_2_intimidating_strike",
+        name="Level 2 Animal Instinct Barbarian (Bear, Intimidating Strike)",
+        hp=38,
+        class_feat="Intimidating Strike",
+        skill_feat="Quick Jump",
+        ability_id="intimidating_strike",
+        note=(
+            "Alternate level-2 Barbarian class-feat choice: Intimidating Strike is a two-action "
+            "melee Strike. If it hits and deals damage, its target is frightened 1, or frightened "
+            "2 on a critical hit. This shares the admitted Fighter procedure while remaining a "
+            "separate legal Barbarian choice. Source: https://2e.aonprd.com/Feats.aspx?ID=4782."
+        ),
+    )
     monk_l2 = _level_two(
         monk,
         definition_id="monk_monastic_weaponry_level_2_stunning_blows",
@@ -149,8 +183,10 @@ def build_l2_martial_content(
     )
     definitions = MappingProxyType({
         fighter_l2.definition_id: fighter_l2,
+        fighter_intimidating_strike_l2.definition_id: fighter_intimidating_strike_l2,
         barbarian_l2.definition_id: barbarian_l2,
         barbarian_sudden_charge_l2.definition_id: barbarian_sudden_charge_l2,
+        barbarian_intimidating_strike_l2.definition_id: barbarian_intimidating_strike_l2,
         monk_l2.definition_id: monk_l2,
     })
     setups = MappingProxyType({
@@ -162,6 +198,16 @@ def build_l2_martial_content(
             (
                 CreaturePlacement("fighter", fighter_l2.definition_id, "Level 2 Fighter", "blue", Position(0, 1)),
                 CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(5, 1)),
+            ),
+        ),
+        "staged_fighter_level_2_intimidating_strike": EncounterSetup(
+            "staged_fighter_level_2_intimidating_strike",
+            "Staged Level 2 Fighter Intimidating Strike",
+            5,
+            3,
+            (
+                CreaturePlacement("fighter", fighter_intimidating_strike_l2.definition_id, "Level 2 Fighter", "blue", Position(1, 1)),
+                CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
             ),
         ),
         "staged_barbarian_level_2_no_escape": EncounterSetup(
@@ -185,6 +231,16 @@ def build_l2_martial_content(
                     "Level 2 Barbarian", "blue", Position(0, 1),
                 ),
                 CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(5, 1)),
+            ),
+        ),
+        "staged_barbarian_level_2_intimidating_strike": EncounterSetup(
+            "staged_barbarian_level_2_intimidating_strike",
+            "Staged Level 2 Barbarian Intimidating Strike",
+            5,
+            3,
+            (
+                CreaturePlacement("barbarian", barbarian_intimidating_strike_l2.definition_id, "Level 2 Barbarian", "blue", Position(1, 1)),
+                CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
             ),
         ),
         "staged_monk_level_2_stunning_blows": EncounterSetup(

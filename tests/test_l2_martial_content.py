@@ -4,7 +4,7 @@ from pf2e import EndTurn
 from pf2e.barbarian import Rage, no_escape_is_eligible
 from pf2e.barbarian_content import BARBARIAN_SLICE1_CHARACTER
 from pf2e.content import GUARD_DOG, MELEE_FIGHTER_M
-from pf2e.fighter import sudden_charge_is_legal
+from pf2e.fighter import IntimidatingStrike, intimidating_strike_is_legal, intimidating_strike_target_is_immune, sudden_charge_is_legal
 from pf2e.l2_martial_content import build_l2_martial_content
 from pf2e.monk import FlurryOfBlows, stunning_blows_is_eligible
 from pf2e.encounter import Encounter
@@ -63,6 +63,8 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
     fighter = definitions["fighter_m_level_2_sudden_charge"]
     barbarian = definitions["barbarian_animal_bear_level_2_no_escape"]
     barbarian_sudden_charge = definitions["barbarian_animal_bear_level_2_sudden_charge"]
+    fighter_intimidating = definitions["fighter_m_level_2_intimidating_strike"]
+    barbarian_intimidating = definitions["barbarian_animal_bear_level_2_intimidating_strike"]
     monk = definitions["monk_monastic_weaponry_level_2_stunning_blows"]
 
     assert (fighter.level, fighter.hp, fighter.ac, fighter.perception, fighter.class_dc) == (2, 34, 19, 7, 18)
@@ -71,14 +73,19 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
     assert {"Sudden Charge", "Quick Jump"} <= set(fighter.feats)
     assert {"No Escape", "Quick Jump"} <= set(barbarian.feats)
     assert {"Sudden Charge", "Quick Jump"} <= set(barbarian_sudden_charge.feats)
+    assert {"Intimidating Strike", "Quick Jump"} <= set(fighter_intimidating.feats)
+    assert {"Intimidating Strike", "Quick Jump"} <= set(barbarian_intimidating.feats)
     assert {"Stunning Blows", "Assurance (Athletics)"} <= set(monk.feats)
-    assert {"sudden_charge", "no_escape", "stunning_blows"} <= {
-        *fighter.abilities, *barbarian.abilities, *barbarian_sudden_charge.abilities, *monk.abilities,
+    assert {"sudden_charge", "no_escape", "stunning_blows", "intimidating_strike"} <= {
+        *fighter.abilities, *fighter_intimidating.abilities, *barbarian.abilities,
+        *barbarian_sudden_charge.abilities, *barbarian_intimidating.abilities, *monk.abilities,
     }
     assert set(setups) == {
         "staged_fighter_level_2_sudden_charge",
+        "staged_fighter_level_2_intimidating_strike",
         "staged_barbarian_level_2_no_escape",
         "staged_barbarian_level_2_sudden_charge",
+        "staged_barbarian_level_2_intimidating_strike",
         "staged_monk_level_2_stunning_blows",
     }
 
@@ -131,7 +138,6 @@ def test_intimidating_strike_rejects_a_ranged_attack_before_committing_costs(
     assert result.status is ResultStatus.REJECTED
     fighter = game._state.creatures["fighter"]
     assert fighter.actions_remaining == 3 and fighter.strikes_this_turn == 0
-
 
 def test_intimidating_strike_respects_the_printed_mindless_mental_immunity() -> None:
     """AoN feat 4782's mental trait cannot frighten a mindless creature."""
@@ -499,3 +505,50 @@ def test_terminal_exposes_normal_catalog_sudden_charge_and_its_ordinary_strike()
     assert "Sudden Charge" in rendered
     assert "Level 2 Fighter begins Sudden Charge" in rendered
     assert "Attack: d20 20" in rendered and "critical success" in rendered
+
+
+def test_terminal_offers_and_executes_intimidating_strike() -> None:
+    from pf2e.content import get_setup
+
+    transcript = BoundedTranscript(max_lines=120, max_chars=18_000)
+    menu = {"text": "", "prompt": ""}
+    main_actions = iter(("Intimidating Strike", "Quit"))
+
+    def output(line: str) -> None:
+        transcript.append(line)
+        if line.startswith("1. "):
+            menu["text"] = line
+        if line.endswith(":"):
+            menu["prompt"] = line
+
+    def menu_number_containing(label: str) -> str:
+        for row in menu["text"].splitlines():
+            if ". " in row and label in row.split(". ", 1)[1]:
+                return row.split(". ", 1)[0]
+        raise AssertionError(f"missing terminal menu item containing {label!r}: {menu['text']!r}")
+
+    def script() -> str:
+        prompt = menu["prompt"]
+        if prompt == "Choice:":
+            return menu_number_containing(next(main_actions))
+        if prompt == "Choice prompt action:":
+            return "2"
+        if prompt == "Choice option number:":
+            return menu_number_containing("Keep")
+        if prompt == "Weapon / attack number:":
+            return menu_number_containing("Longsword")
+        if prompt == "Target number:":
+            return menu_number_containing("Guard Dog")
+        if prompt == "Damage type:":
+            return menu_number_containing("Slashing")
+        if prompt == "Damage intent:":
+            return menu_number_containing("Use attack default")
+        raise AssertionError(f"unexpected terminal prompt: {prompt!r}")
+
+    assert run_terminal(
+        setup=get_setup("staged_fighter_level_2_intimidating_strike"), rolls=(20, 1, 12, 1),
+        input_fn=BoundedInput(script, max_calls=30), output_fn=output,
+    ) == 0
+    rendered = "\n".join(transcript)
+    assert "Intimidating Strike" in rendered
+    assert "Guard Dog is frightened 1 by Intimidating Strike." in rendered
