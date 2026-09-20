@@ -12,10 +12,21 @@ Generated-file audit found no tracked Python caches/environments, runtime captur
 
 ## Active tasks
 
-Coordinator: `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, Astra/high. Cwd `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`; own branch to be recorded after common-baseline commit. Guidance baseline commit pending. No new engine behavior accepted.
+Common guidance/accepted baseline: `a98b631c17ec9f8c2b97d974933177dc77d8f62d`, committed before dispatch. All five created checkouts verified at this baseline through Git metadata; runtime session metadata confirms both Terra/high owners, Luna/high pilot, both Sol/high reviewers and Astra/high coordinator. Actual candidate selections remain owner assessment until the first runnable handoffs; no new W1 engine behavior is accepted yet.
 
-| Exact title | Task ID / owner | Cwd and branch/base | Peers / scope | Last executable checkpoint / next action |
+All cwd entries below are under `/Users/andrewlee/.codex/worktrees/`, followed by the listed directory and `/pf2e-engine-game-2026-07-10`. Each task uses only that checkout. Base is `a98b631` for every row.
+
+| Exact title | Task ID / owner | Cwd directory / branch | Peers and scope | Last executable checkpoint / next action |
 |---|---|---|---|---|
-| PF2e Content W1 — Coordination | current / Astra high | coordinator cwd above; f81a8a3 | guidance, scope, recovery | clean latest-main verified; commit guidance then dispatch |
+| PF2e Content W1 — Coordination | `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high | `d438` / `codex/pf2e-content-w1-coordination` | all rows; guidance, bounded scope and acceptance | committed baseline; task routing and one fallback heartbeat established; end while owners work |
+| PF2e Content W1 — Spells and integration | `01a0bc8d-f040-7c81-b59c-7edb1c1b0487` / Terra high | `d4ce` / detached at dispatch | spell reviewer below; receives accepted feat/item commits; end-to-end finite spell family and assembled wave | baseline and candidate assessment in progress; deliver runnable family, then integrate in same checkout |
+| PF2e Content W1 — Combat feats | `01a0bc8e-3447-7b60-bbe6-d561d824d0f8` / Terra high | `c57e` / `codex/content-w1-martial-feats` | feat/item reviewer and spell integration lead; legal L1/L2 combat feat family | candidate/source assessment in progress; implement and send runnable commit directly for review |
+| PF2e Content W1 — Finite items pilot | `01a0bc8e-a45d-76b2-9f72-30c02d579e07` / Luna high | `99a6` / detached at dispatch | feat/item reviewer and spell integration lead; established-mechanic finite item family | candidate/source assessment in progress; implement and send runnable commit directly for review |
+| PF2e Content W1 — Spell and integration review | `01a0bc8d-0a0d-7952-b0a1-3a1506d1eaf5` / Sol high | `dbbb` / detached | spell owner/integration lead; source, save provenance, complete family and assembled interaction review | focused baseline **25 / 0.70s**, clean; preparation complete, ended until explicit delivered commit |
+| PF2e Content W1 — Feat and item review | `01a0bc8d-49aa-7072-a253-35fc9635cce1` / Sol high | `7404` / detached | feat and item owners; independent full-family review | focused baseline **39 / 1.07s**, clean; preparation complete, ended until explicit delivered commits |
 
-The old generalization, original expansion and Sol delivery coordinators/heartbeats remain paused. One W1 coordinator heartbeat will provide fallback only. Cost monitoring stays with audit task `01a0a8e5-7dec-7030-8679-120b66f70e44`; no new metrics framework.
+Peer IDs in this table are the direct app messaging addresses; native agent paths are not substitutes. Reviewer baseline commands use the verified interpreter and 30s timeout in the working model, with spell-save/direct-spell files (25) or martial/BombFacts/Bomber/rune files (39). These are fresh focused baseline checks, not W1 feature delivery. Both synchronous checks exited; reviewers' OS process inventories were sandbox-denied, so no host-wide cleanup claim. Coordinator launched no test/probe process.
+
+Execution heartbeat `pf2e-content-w1-execution` is ACTIVE at about five minutes, fallback only; pause at closure/user pause. The old generalization, original expansion and Sol delivery coordinators/heartbeats were verified PAUSED and left unchanged. App list_threads did not expose newly created tasks during setup; exact identities/cwds were recovered from local session metadata and confirmed through successful exact-ID title/routing calls. No replacement tasks were created.
+
+The existing deterministic usage CLI registered six fresh task identities in ignored local `agent-runs.json`; checkpoints and repairs remain in those assignments. Cost monitoring stays with audit task `01a0a8e5-7dec-7030-8679-120b66f70e44`. No new metrics framework. See the preserved historical record for prior costs, limits and GM conventions.
