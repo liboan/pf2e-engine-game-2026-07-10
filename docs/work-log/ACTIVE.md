@@ -18,7 +18,13 @@ All new full tasks use prefix `PF2e Content W4 — ` and fresh managed checkouts
 
 Checkout entries expand to `/Users/andrewlee/.codex/worktrees/<directory>/pf2e-engine-game-2026-07-10`. Initial heads are detached at baseline; each may create its own assignment branch in that same checkout. Coordinator retains d438 and `codex/content-w4-coordination`. App task listing initially omitted the fresh tasks; read-only task metadata resolved exact IDs/cwds and confirmed Luna/Sol high, without loading transcripts. Worker assignments point to this canonical coordinator copy for peer lookup until their local recovery copy is advanced.
 
-Actual roster selection follows a brief source/catalog feasibility pass per owner, then implementation without routine approval. Ambition: roughly a dozen genuinely new feats across classes, chiefly level1, with inexpensive new spells/items where useful. Existing-name variants do not count. No W4 public probe yet. Each owner verifies exact symbols/environment in its fresh checkout and records a compact scoped handoff, without transcript reconstruction.
+Actual roster selection follows a brief source/catalog feasibility pass per owner, then implementation without routine approval. Ambition: roughly a dozen genuinely new feats across classes, chiefly level1, with inexpensive new spells/items where useful. Existing-name variants do not count. Each owner verifies exact symbols/environment in its fresh checkout and records a compact scoped handoff, without transcript reconstruction.
+
+## W4 scope checkpoint — 2026-09-20
+
+Integration reports repaired caster/integrated head `737987e` on pushed working branch `codex/w4-caster-support`, with 1,491 tests passing. This is owner-reported evidence, **not full milestone acceptance or coordinator publication**. Independent repaired-caster acceptance, separate final assembled interaction review and final canonical evidence remain required before closure; detailed evidence stays with owners/reviewers.
+
+Provisional new roster: Exacting Strike, Double Slice, Twin Takedown, Twin Feint; Reactive Shield, Point Blank Stance, Overextending Feint, You’re Next; Energy Ablation, Domain Initiate and Cackle. Dangerous Sorcery was removed during legal-grant repair. Its replacement Widen Spell already exists in W3 and is an existing-name adopter, with no new-feat credit. Coordinator accepts eleven genuinely new feats as sufficient breadth subject to independent verification; no count-driven replacement is required. This scope decision and remaining closure gates were sent once to integration. W5 remains queued behind full W4 acceptance/publication.
 
 ## Routing and closure
 
