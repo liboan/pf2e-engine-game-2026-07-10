@@ -44,6 +44,34 @@ def test_exacting_strike_ordinary_failure_does_not_add_map() -> None:
     assert fighter.strikes_this_turn == 1
 
 
+def test_exacting_success_press_choice_round_trips_and_can_drop_map(tmp_path: Path) -> None:
+    game = Encounter.start(
+        get_setup("w4_fighter_exacting_strike_vs_guard_dog"),
+        rolls=(20, 1, 2, 15, 1, 6, 1, 6),
+    )
+    _settle(game)
+    assert game.execute(Strike("dog", "longsword")).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "attack_hero_reroll"
+    assert game.choose(choice.choice_id, "keep", choice.owner_actor_id).status is ResultStatus.COMPLETED
+    assert game.execute(ExactingStrike("dog", "longsword")).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "attack_hero_reroll"
+    assert game.choose(choice.choice_id, "keep", choice.owner_actor_id).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "family_action"
+    path = tmp_path / "exacting-press.json"
+    game.save(path)
+    loaded = Encounter.load(path)
+    choice = loaded.inspect().choice
+    assert choice is not None and choice.kind == "family_action"
+    dog_hp = loaded._state.creatures["dog"].hp
+    result = loaded.choose(choice.choice_id, "failure_effect", choice.owner_actor_id)
+    assert result.status is ResultStatus.COMPLETED
+    assert loaded._state.creatures["dog"].hp == dog_hp
+    assert loaded._state.creatures["fighter"].strikes_this_turn == 1
+
+
 def test_double_slice_uses_same_map_and_persists_between_strikes(tmp_path: Path) -> None:
     game = Encounter.start(
         get_setup("w4_fighter_double_slice_vs_guard_dog"),

@@ -2288,8 +2288,11 @@ def run_terminal(
                         and "melee" in attack.traits
                         and (
                             action_id == "exacting_strike"
-                            or action_id != "double_slice"
-                            or attack.hands_required == 1
+                            or (
+                                attack.item_id is not None
+                                and attack.item_id in actor.held_items
+                                and attack.hands_required == 1
+                            )
                         )
                         for attack in definition.attacks
                     )

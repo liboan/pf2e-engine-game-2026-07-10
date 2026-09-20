@@ -1091,6 +1091,9 @@ class Encounter:
             if pending.procedure_id == "barbarian:quick_tempered":
                 self._validate_quick_tempered_offer(state, pending)
                 return
+            if pending.procedure_id == "w4_offensive:exacting_strike":
+                self._validate_w4_exacting_press_pending(state, pending)
+                return
             self._validate_family_pending(state, pending)
             return
         if pending.kind == "nimble_dodge":
@@ -5662,6 +5665,84 @@ class Encounter:
         )
         return FamilyProcedureResult(events=tuple(events))
 
+    def _validate_w4_exacting_press_pending(self, state, pending):
+        """Validate the success/failure-effect choice for Exacting Strike."""
+        actor = state.creatures.get(pending.actor_id or "")
+        target = state.creatures.get(pending.target_id or "")
+        continuation = pending.continuation
+        resolution = pending.damage_resolution
+        attack = self._find_attack(state, actor, pending.attack_id) if actor is not None else None
+        if (
+            actor is None
+            or target is None
+            or attack is None
+            or continuation is None
+            or resolution is None
+            or pending.owner_actor_id != actor.actor_id
+            or pending.family_id != "martial"
+            or pending.procedure_id != "w4_offensive:exacting_strike"
+            or pending.options != (
+                ChoiceOption("full_hit", "Apply the successful Strike"),
+                ChoiceOption("failure_effect", "Use the Press failure effect (no damage; no MAP)"),
+            )
+            or continuation.kind != "exacting_strike"
+            or continuation.actor_id != actor.actor_id
+            or continuation.target_id != target.actor_id
+            or continuation.attack_id != attack.attack_id
+            or resolution.source_kind != "strike"
+            or resolution.actor_id != actor.actor_id
+            or resolution.target_id != target.actor_id
+            or resolution.attack_id != attack.attack_id
+            or resolution.continuation != continuation
+            or resolution.pending_defense_choice is not None
+            or pending.damage_result is None
+            or pending.damage_result != resolution.group.results[0]
+            or pending.damage_result_is_mitigated
+            or pending.check is None
+            or pending.check != resolution.check
+            or pending.attack_count != actor.strikes_this_turn
+            or pending.attack_count_cost != 1
+            or pending.attack_actions_cost != 1
+            or pending.attack_penalty != multiple_attack_penalty(actor.strikes_this_turn - 1, attack.traits)
+            or (
+                (attack.item_id is None and pending.item_id is not None)
+                or (attack.item_id is not None and pending.item_id not in self._held_attack_item_ids(state, actor, attack))
+            )
+            or not self._attack_equipped(state, actor, attack)
+            or target.defeated
+            or actor.unconscious
+            or actor.dead
+        ):
+            raise ValueError("save has an unavailable or inconsistent Exacting Strike Press choice")
+
+    def _resolve_w4_exacting_press_choice(self, state, dice, pending, command):
+        """Apply Exacting Strike's success result or its Press failure effect."""
+        self._validate_w4_exacting_press_pending(state, pending)
+        actor = state.creatures[pending.actor_id]
+        target = state.creatures[pending.target_id]
+        continuation = pending.continuation
+        resolution = pending.damage_resolution
+        assert continuation is not None and resolution is not None and pending.check is not None
+        if command.option_id == "full_hit":
+            return [Event(
+                "exacting_strike_full_hit", actor.actor_id, target.actor_id,
+                f"{actor.label} keeps Exacting Strike's successful hit.", check=pending.check,
+            )] + self._resolve_damage_to_health(state, dice, resolution, resumed=True)
+        if command.option_id != "failure_effect":
+            raise _Rejected("Choose the successful Strike or Exacting Strike's Press failure effect.")
+        if actor.strikes_this_turn < 1:
+            raise _Rejected("Exacting Strike's Press failure effect can no longer remove its MAP.")
+        actor.strikes_this_turn -= 1
+        events = [Event(
+            "exacting_strike_failure_effect", actor.actor_id, target.actor_id,
+            f"{actor.label} uses Exacting Strike's Press failure effect; the hit deals no damage and does not increase MAP.",
+            check=pending.check,
+        )]
+        events.extend(self._resume_continuation(
+            state, dice, continuation, critical=False,
+        ))
+        return events
+
     def _start_committed_strike_rider(self, context, command, kind):
         """Commit the finite Fighter result-rider family to one Strike path."""
         from .fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike
@@ -6529,6 +6610,46 @@ class Encounter:
             bomber_only_primary_splash=bomber_only_primary_splash,
             item_id=item_id,
         )
+        if continuation is not None and continuation.kind == "exacting_strike" and not is_reaction:
+            self._set_pending(
+                state,
+                kind="family_action",
+                owner_actor_id=actor.actor_id,
+                prompt=(
+                    f"{actor.label} succeeded with Exacting Strike; choose the hit or its Press failure effect."
+                ),
+                options=(
+                    ChoiceOption("full_hit", "Apply the successful Strike"),
+                    ChoiceOption("failure_effect", "Use the Press failure effect (no damage; no MAP)"),
+                ),
+                details=(
+                    f"Successful result: d20 {check.die} + {check.modifier} = {check.total} vs AC {check.dc}.",
+                    "The Press trait allows a successful action to use its failure effect instead.",
+                ),
+                actor_id=actor.actor_id,
+                target_id=target.actor_id,
+                attack_id=attack.attack_id,
+                item_id=item_id,
+                attack_penalty=check.map_penalty,
+                attack_count=check.attack_count,
+                check=check,
+                damage_result=damage,
+                damage_type=damage_type or attack.damage_type,
+                nonlethal=nonlethal,
+                attack_critical=check.degree is DegreeOfSuccess.CRITICAL_SUCCESS,
+                attack_actions_cost=1,
+                attack_count_cost=1,
+                continuation=continuation,
+                family_id="martial",
+                procedure_id="w4_offensive:exacting_strike",
+                damage_resolution=resolution,
+            )
+            events.append(Event(
+                "exacting_strike_press_choice", actor.actor_id, target.actor_id,
+                f"{actor.label}'s Exacting Strike succeeds; choose the hit or Press failure effect.",
+                check=check, damage=damage,
+            ))
+            return events
         if finisher:
             from .swashbuckler import ConfidentFinisher
 
@@ -15193,6 +15314,8 @@ class Encounter:
             )]
 
         if pending.kind == "family_action":
+            if pending.procedure_id == "w4_offensive:exacting_strike":
+                return self._resolve_w4_exacting_press_choice(state, dice, pending, command)
             return self._run_family_choice(state, dice, pending, command)
 
         if pending.kind == "nimble_dodge":
