@@ -1,9 +1,8 @@
 """Finite Player Core 2 common Alchemist level-1/2 formula and feat content.
 
 The records below are selected catalog facts, not a crafting language.  The
-level-two Bomber progression chooses two previously unknown common formulas
-from this finite level-one catalog, as the class permits formulas of any item
-level the Alchemist can create. Definitions and prices follow the current
+level-two Bomber progressions choose from this finite catalog, as the class
+permits formulas of any item level the Alchemist can create. Definitions and prices follow the current
 individual entries, with the Spring 2026 errata applied where noted in the
 Alchemist rules source note. Every row links to its source entry.
 """
@@ -43,12 +42,13 @@ class BombFacts:
 
 @dataclass(frozen=True, slots=True)
 class ElixirFacts:
-    effect: Literal["heal", "save_bonus"]
+    effect: Literal["heal", "save_bonus", "speed_bonus"]
     healing_dice: tuple[int, ...] = ()
     save_bonuses: tuple[AlchemySaveBonus, ...] = ()
     duration_seconds: int | None = None
     living_target_only: bool = False
     coagulant: bool = False
+    speed_bonus_ft: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +78,8 @@ class MutagenFacts:
     recall_knowledge_critical_failure_becomes_failure: bool = False
     encumbrance_threshold_penalty_bulk: int = 0
     maximum_carry_penalty_bulk: int = 0
+    save_bonuses: tuple[AlchemySaveBonus, ...] = ()
+    temporary_hp: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +112,7 @@ class AlchemyFormula:
     name: str
     level: int
     price_gp: int
-    category: Literal["bomb", "healing_elixir", "mutagen", "poison"]
+    category: Literal["bomb", "healing_elixir", "elixir", "mutagen", "poison"]
     facts: AlchemyItemFacts
     traits: frozenset[str]
     bulk: str
@@ -187,6 +189,38 @@ ALCHEMIST_FORMULAS: tuple[AlchemyFormula, ...] = (
         facts=ElixirFacts("save_bonus", save_bonuses=(AlchemySaveBonus("fortitude", "disease", 2, 24 * 60 * 60),), duration_seconds=24 * 60 * 60),
         traits=frozenset({"alchemical", "consumable", "elixir", "healing"}), bulk="L", hands_required=1,
         activation_actions=1, activation_kind="interact_drink_or_feed", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3297",
+    ),
+    AlchemyFormula(
+        formula_id="cheetahs_elixir_lesser",
+        name="Cheetah's Elixir (lesser)", level=1, price_gp=3, category="elixir",
+        facts=ElixirFacts("speed_bonus", duration_seconds=60, speed_bonus_ft=5),
+        traits=frozenset({"alchemical", "consumable", "elixir"}), bulk="L", hands_required=1,
+        activation_actions=1, activation_kind="interact_drink", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3302",
+    ),
+    AlchemyFormula(
+        formula_id="juggernaut_mutagen_lesser",
+        name="Juggernaut Mutagen (lesser)", level=1, price_gp=4, category="mutagen",
+        facts=MutagenFacts(
+            60, (),
+            ("will:-2:untyped", "perception:-2:untyped", "initiative:-2:untyped"),
+            save_bonuses=(AlchemySaveBonus("fortitude", "all", 1, 60),), temporary_hp=5,
+        ),
+        traits=frozenset({"alchemical", "consumable", "elixir", "mutagen", "polymorph"}), bulk="L", hands_required=1,
+        activation_actions=1, activation_kind="interact_drink", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3318",
+    ),
+    AlchemyFormula(
+        formula_id="bravos_brew_lesser",
+        name="Bravo's Brew (lesser)", level=2, price_gp=7, category="elixir",
+        facts=ElixirFacts(
+            "save_bonus",
+            save_bonuses=(
+                AlchemySaveBonus("will", "all", 1, 60 * 60),
+                AlchemySaveBonus("will", "fear", 2, 60 * 60),
+            ),
+            duration_seconds=60 * 60,
+        ),
+        traits=frozenset({"alchemical", "consumable", "elixir", "mental"}), bulk="L", hands_required=1,
+        activation_actions=1, activation_kind="interact_drink", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3300",
     ),
     AlchemyFormula(
         formula_id="bestial_mutagen_lesser",

@@ -126,6 +126,14 @@ from .space import (
     segment_crosses_cell_interior,
     step_cost,
 )
+
+
+_CARRYABLE_W2_ALCHEMY_EFFECT_KINDS = frozenset({
+    "alchemy_cheetahs_elixir_lesser",
+    "alchemy_bravos_brew_lesser",
+    "alchemy_juggernaut_mutagen_lesser",
+})
+_ALCHEMY_TEMP_HP_CHOICES = frozenset({"keep_existing", "gain_new"})
 from .health import (
     HealthState,
     HealthTransition,
@@ -374,9 +382,12 @@ class Encounter:
         if "Quick Jump" not in definition.feats or actor.prone:
             raise ValueError("save has an unavailable Quick Jump continuation")
         from .skill_content import QUICK_JUMP
+        from .martial_defense import crane_stance_leap_bonus
 
         expected = self._prepare_skill_check(
-            state, actor, "athletics", 15, traits=QUICK_JUMP.traits,
+            state, actor, "athletics",
+            15 - crane_stance_leap_bonus(state, actor.actor_id),
+            traits=QUICK_JUMP.traits,
         )
         result = saved.result
         if (
@@ -395,9 +406,10 @@ class Encounter:
         speed = effective_speed_ft(actor, definition, self._conditions_for_actor(state, actor))
         if speed < 15:
             raise ValueError("save has Quick Jump below its required Speed")
-        normal_leap = 15 if speed >= 30 else 10
+        leap_bonus = crane_stance_leap_bonus(state, actor.actor_id)
+        normal_leap = (15 if speed >= 30 else 10) + leap_bonus
         maximum = (
-            min((result.total // 5) * 5, speed)
+            min((result.total // 5) * 5 + leap_bonus, speed)
             if result.degree >= DegreeOfSuccess.SUCCESS
             else normal_leap
         )
@@ -3453,12 +3465,19 @@ class Encounter:
 
         if state.ground_items:
             raise ValueError("all party gear must be carried before leaving the encounter")
-        if (
-            state.active_effects
-            or state.active_item_effects
-            or state.persistent_effects
-            or state.giant_centipede_venom_afflictions
-        ):
+        carried_active_effects: list[ActiveSpellEffect] = []
+        for effect in state.active_effects:
+            if effect.kind not in _CARRYABLE_W2_ALCHEMY_EFFECT_KINDS:
+                raise ValueError("next encounter cannot carry surviving turn-bound spell effects")
+            if effect.source_actor_id not in retained_ids or effect.target_actor_id not in retained_ids:
+                raise ValueError("next encounter cannot carry an item effect from a departed actor")
+            if effect.expires_at_world_time is None:
+                raise ValueError("next encounter cannot carry an item effect without an absolute expiry")
+            if effect.expires_at_world_time > state.world_time_seconds:
+                # Scene-local source-start occurrences reset to zero in the
+                # new scene; preserve only the absolute remaining duration.
+                carried_active_effects.append(replace(effect, expires_at_source_start=1))
+        if state.active_item_effects or state.persistent_effects or state.giant_centipede_venom_afflictions:
             raise ValueError("next encounter cannot carry surviving turn-bound spell effects")
         if state.condition_effects or state.feint_off_guard_effects:
             raise ValueError("next encounter cannot carry surviving turn-bound conditions")
@@ -3607,7 +3626,7 @@ class Encounter:
             actor_start_counts={actor_id: 0 for actor_id in creatures},
             actor_end_counts={actor_id: 0 for actor_id in creatures},
             feint_off_guard_effects=[],
-            active_effects=[],
+            active_effects=carried_active_effects,
             active_item_effects=[],
             guidance_immunities={
                 actor_id: 601 for actor_id in guidance_deadlines
@@ -3634,8 +3653,9 @@ class Encounter:
             definition = get_definition(placement.definition_id)
             if definition.initiative_exempt:
                 continue
-            modifier = self._initiative_modifier_for_definition(
-                definition, placement.initiative_skill,
+            modifier = self._initiative_modifier_for_state(
+                next_state, next_state.creatures[placement.actor_id], definition,
+                placement.initiative_skill,
                 weather_perception_penalty=(0 if "storm_born" in definition.abilities else next_setup.weather_perception_circumstance_penalty),
             )
             next_state.creatures[placement.actor_id].initiative = dice.draw(20) + modifier
@@ -4044,6 +4064,24 @@ class Encounter:
                 state, actor, "reach_spell", frozenset({"concentrate", "spellshape"})
             )
         )
+        from .martial_defense import crane_stance_is_active, dueling_parry_requirements_met
+
+        can_dueling_parry = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "dueling_parry" in definition.abilities
+            and dueling_parry_requirements_met(state.item_instances, actor, definition)
+            and self._action_permitted(state, actor, "dueling_parry", frozenset())
+        )
+        can_crane_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "crane_stance" in definition.abilities
+            and definition.armor_category in {None, "unarmored"}
+            and not actor.worn_items
+            and not crane_stance_is_active(state, actor.actor_id)
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and self._action_permitted(state, actor, "crane_stance", frozenset({"stance"}))
+        )
+        can_dismiss_crane_stance = crane_stance_is_active(state, actor.actor_id)
         can_arcane_bond = (
             can_act
             and "arcane_bond" in definition.abilities
@@ -4210,6 +4248,9 @@ class Encounter:
             can_hunted_shot = False
             can_hunters_aim = False
             can_reach_spell = False
+            can_dueling_parry = False
+            can_crane_stance = False
+            can_dismiss_crane_stance = False
             can_stand = False
             can_crawl = False
             can_release = False
@@ -4244,6 +4285,9 @@ class Encounter:
                 ("vicious_swing", can_vicious),
                 ("intimidating_strike", can_intimidating_strike),
                 ("sudden_charge", can_sudden_charge),
+                ("dueling_parry", can_dueling_parry),
+                ("crane_stance", can_crane_stance),
+                ("dismiss_crane_stance", can_dismiss_crane_stance),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
                 ("hunted_shot", can_hunted_shot),
@@ -4549,6 +4593,14 @@ class Encounter:
             return self._result(ResultStatus.REJECTED, str(error))
         except UnsupportedHealthRuleError as error:
             return self._result(ResultStatus.UNSUPPORTED, str(error))
+
+        # Dueling Parry has a continuous one-weapon/empty-other-hands
+        # requirement. Resolve every completed command first, then discard a
+        # guard whose equipment facts no longer qualify; a later retrieve or
+        # draw cannot reactivate that same use of the feat.
+        from .martial_defense import end_dueling_parries_with_broken_requirements
+
+        end_dueling_parries_with_broken_requirements(draft)
 
         self._state = draft
         self._dice = dice
@@ -5076,14 +5128,31 @@ class Encounter:
             advanced_alchemy_capacity,
             build_alchemy_state,
         )
-        from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS
-        from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+        from .alchemist_content import (
+            BOMBER_FIELD_FORMULA_IDS,
+            BOMBER_FORMULA_IDS,
+            BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS,
+        )
+        from .content import (
+            BOMBER_ALCHEMIST_LEVEL_2,
+            BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS,
+            BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT,
+        )
         for actor in state.creatures.values():
             definition = get_definition(actor.definition_id)
             if "bomber_alchemist" not in definition.abilities:
                 continue
-            level_two = definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2.definition_id
-            formula_ids = BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS if level_two else BOMBER_FORMULA_IDS
+            level_two = definition.definition_id in {
+                BOMBER_ALCHEMIST_LEVEL_2.definition_id,
+                BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id,
+            }
+            formula_ids = (
+                BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+                if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id
+                else BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+                if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2.definition_id
+                else BOMBER_FORMULA_IDS
+            )
             state.alchemy_states[actor.actor_id] = build_alchemy_state(
                 AlchemyBuildChoices(
                     "bomber",
@@ -5143,6 +5212,14 @@ class Encounter:
         formula = FORMULAS_BY_ID[infused.formula_id]
         if not isinstance(formula.facts, (ElixirFacts, MutagenFacts, PoisonFacts)):
             raise _Rejected("That selected formula activation is not available.")
+        is_juggernaut = formula.formula_id == "juggernaut_mutagen_lesser"
+        if is_juggernaut:
+            if actor.temporary_hp > 0 and command.temporary_hp_choice not in _ALCHEMY_TEMP_HP_CHOICES:
+                raise _Rejected("Choose keep_existing or gain_new for the temporary-HP pool before drinking Juggernaut Mutagen.")
+            if actor.temporary_hp == 0 and command.temporary_hp_choice is not None:
+                raise _Rejected("A temporary-HP choice is only available when an existing pool remains.")
+        elif command.temporary_hp_choice is not None:
+            raise _Rejected("A temporary-HP choice is only available for Juggernaut Mutagen.")
         if isinstance(formula.facts, PoisonFacts):
             return self._coat_giant_centipede_venom(state, dice, actor, command, infused, formula)
         target = state.creatures.get(command.target_id or actor.actor_id)
@@ -5157,33 +5234,53 @@ class Encounter:
         except AlchemyRuleError as error:
             raise _Rejected(str(error)) from error
         if actor.actions_remaining < formula.activation_actions:
-            raise _Rejected("This formula activation requires one action.")
+            raise _Rejected(f"This formula activation requires {formula.activation_actions} action(s).")
         actor.actions_remaining -= formula.activation_actions
         actor.held_items.remove(command.item_id)
         state.consumed_infused_item_ids.add(command.item_id)
         events=[]
         if isinstance(formula.facts, ElixirFacts):
-            if formula.formula_id == "elixir_of_life_minor":
+            facts = formula.facts
+            duration = facts.duration_seconds
+            if duration is None:
+                raise _Rejected(f"{formula.name} has no admitted duration.")
+            if facts.effect == "heal":
                 amount = dice.draw(6)
                 if target.health_mode is HealthMode.PC:
                     self._apply_health_transition(state, target, pc_healing(self._health_state(target), amount))
                 else:
                     target.hp = min(get_definition(target.definition_id).hp, target.hp + amount)
-                bonus = formula.facts.save_bonuses[0]
-                state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, bonus.bonus, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + bonus.duration_seconds))
-                events.append(Event("alchemy_healing", actor.actor_id, target.actor_id, f"{target.label} drinks Minor Elixir of Life and heals {amount} HP (1d6 {amount}); +1 item to Fortitude saves against poison or disease for 10 minutes."))
-            else:
-                bonus = formula.facts.save_bonuses[0]
-                from .alchemy import quick_alchemy_effect_duration
-                duration = quick_alchemy_effect_duration(bonus.duration_seconds) if infused.creation_kind == "quick_alchemy" else bonus.duration_seconds
+                bonus = facts.save_bonuses[0]
                 state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, bonus.bonus, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
-                events.append(Event("alchemy_save_bonus", actor.actor_id, target.actor_id, f"{target.label} gains +{bonus.bonus} to Fortitude saves against {bonus.against.replace('_', ' ')}."))
+                events.append(Event("alchemy_healing", actor.actor_id, target.actor_id, f"{target.label} drinks Minor Elixir of Life and heals {amount} HP (1d6 {amount}); +1 item to Fortitude saves against poison or disease for 10 minutes."))
+            elif facts.effect == "save_bonus":
+                bonus = facts.save_bonuses[0]
+                from .alchemy import quick_alchemy_effect_duration
+                duration = quick_alchemy_effect_duration(duration) if infused.creation_kind == "quick_alchemy" else duration
+                state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, bonus.bonus, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+                detail = " and +2 against fear" if formula.formula_id == "bravos_brew_lesser" else ""
+                events.append(Event("alchemy_save_bonus", actor.actor_id, target.actor_id, f"{target.label} gains +{bonus.bonus} to {bonus.statistic.title()} saves for {duration} seconds{detail}."))
+            elif facts.effect == "speed_bonus":
+                if facts.speed_bonus_ft <= 0:
+                    raise _Rejected(f"{formula.name} has no admitted Speed bonus.")
+                from .alchemy import quick_alchemy_effect_duration
+                duration = quick_alchemy_effect_duration(duration) if infused.creation_kind == "quick_alchemy" else duration
+                state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, target.actor_id, facts.speed_bonus_ft, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+                events.append(Event("alchemy_speed_bonus", actor.actor_id, target.actor_id, f"{target.label} gains a +{facts.speed_bonus_ft}-foot status bonus to Speed for {duration} seconds."))
+            else:
+                raise _Rejected(f"{formula.name} has an unsupported elixir effect.")
         elif isinstance(formula.facts, MutagenFacts):
             if target.actor_id != actor.actor_id:
                 raise _Rejected("The selected mutagens are drunk only by their user.")
             from .alchemy import quick_alchemy_effect_duration
             duration = quick_alchemy_effect_duration(formula.facts.duration_seconds) if infused.creation_kind == "quick_alchemy" else formula.facts.duration_seconds
-            prior = next((effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind in {"alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser"}), None)
+            mutagen_kinds = {
+                "alchemy_bestial_mutagen_lesser",
+                "alchemy_cognitive_mutagen_lesser",
+                "alchemy_juggernaut_mutagen_lesser",
+            }
+            prior = next((effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind in mutagen_kinds), None)
+            cleared_counteracted_juggernaut_temp_hp = False
             if prior is not None:
                 check = resolve_check(dice.draw(20), 5, 15)
                 events.append(Event("alchemy_counteract", actor.actor_id, actor.actor_id, f"{actor.label} attempts to counteract the prior mutagen: d20 {check.die} + 5 = {check.total} vs DC 15.", check=check))
@@ -5191,9 +5288,46 @@ class Encounter:
                     events.append(Event("alchemy_mutagen_failed", actor.actor_id, actor.actor_id, f"{formula.name} fails to counteract the existing mutagen; the consumed item has no effect."))
                     return self._complete_action(state, actor, events, dice=dice)
                 state.active_effects.remove(prior)
-            state.active_effects.append(ActiveSpellEffect(f"alchemy:{command.item_id}", f"alchemy_{formula.formula_id}", actor.actor_id, actor.actor_id, 1, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+                if prior.kind == "alchemy_juggernaut_mutagen_lesser" and actor.temporary_hp_source_id == prior.effect_id:
+                    # Counteracting the source ends its printed benefit.  A
+                    # keep-existing choice can preserve another pool, but it
+                    # cannot preserve temporary HP granted by the removed
+                    # Juggernaut effect.
+                    actor.temporary_hp = 0
+                    actor.temporary_hp_source_id = None
+                    actor.temporary_hp_expires_at_seconds = None
+                    actor.temporary_hp_expires_at_source_start = 0
+                    cleared_counteracted_juggernaut_temp_hp = True
+            effect_id = f"alchemy:{command.item_id}"
+            effect_value = formula.facts.save_bonuses[0].bonus if formula.facts.save_bonuses else 1
+            state.active_effects.append(ActiveSpellEffect(effect_id, f"alchemy_{formula.formula_id}", actor.actor_id, actor.actor_id, effect_value, state.actor_start_counts.get(actor.actor_id, 0) + 1, state.world_time_seconds + duration))
+            gaining_temporary_hp = (
+                formula.facts.temporary_hp > 0
+                and (
+                    command.temporary_hp_choice == "gain_new"
+                    or (
+                        actor.temporary_hp == 0
+                        and (
+                            command.temporary_hp_choice is None
+                            or cleared_counteracted_juggernaut_temp_hp
+                        )
+                    )
+                )
+            )
+            if gaining_temporary_hp:
+                actor.temporary_hp = formula.facts.temporary_hp
+                actor.temporary_hp_source_id = effect_id
+                actor.temporary_hp_expires_at_seconds = state.world_time_seconds + duration
+                actor.temporary_hp_expires_at_source_start = 0
             replacement = " It counteracts the previous mutagen." if prior else ""
-            events.append(Event("alchemy_mutagen", actor.actor_id, actor.actor_id, f"{actor.label} drinks {formula.name}; its printed benefits and drawbacks last {duration} seconds.{replacement}"))
+            temp_text = (
+                f" It grants {formula.facts.temporary_hp} temporary HP."
+                if gaining_temporary_hp
+                else " It keeps the existing temporary-HP pool."
+                if formula.facts.temporary_hp > 0
+                else ""
+            )
+            events.append(Event("alchemy_mutagen", actor.actor_id, actor.actor_id, f"{actor.label} drinks {formula.name}; its printed benefits and drawbacks last {duration} seconds.{temp_text}{replacement}"))
         else:
             raise _Rejected("Giant Centipede Venom coating is the next selected activation path.")
         return self._complete_action(state, actor, events, dice=dice)
@@ -6067,7 +6201,7 @@ class Encounter:
         base = dict((name, modifier) for name, _rank, modifier in get_definition(target.definition_id).saves).get("fortitude")
         if base is None:
             raise _Unsupported("Giant Centipede Venom needs an admitted Fortitude save.")
-        modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, target), *self._alchemy_fortitude_save_modifiers(state, target, "poison"), *self._mutagen_modifiers(state, target, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, target), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
+        modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, target), *self._alchemy_save_modifiers(state, target, "fortitude", against="poison"), *self._mutagen_modifiers(state, target, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, target), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
         check = replace(resolve_check(dice.draw(20), combine_modifiers(modifiers), 17), modifier_breakdown=tuple(modifiers))
         events = [Event("venom_fortitude_save", actor.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Fortitude"), check=check)]
         if check.degree in {DegreeOfSuccess.FAILURE, DegreeOfSuccess.CRITICAL_FAILURE}:
@@ -6132,7 +6266,7 @@ class Encounter:
             base = dict((name, modifier) for name, _rank, modifier in get_definition(actor.definition_id).saves).get("fortitude")
             if base is None:
                 raise _Unsupported("Giant Centipede Venom needs an admitted Fortitude save.")
-            modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, actor), *self._alchemy_fortitude_save_modifiers(state, actor, "poison"), *self._mutagen_modifiers(state, actor, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, actor), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
+            modifiers = (Modifier(base, "untyped", "printed Fortitude save"), *self._resilient_save_modifiers(state, actor), *self._alchemy_save_modifiers(state, actor, "fortitude", against="poison"), *self._mutagen_modifiers(state, actor, "fortitude"), *condition_modifiers(self._conditions_for_actor(state, actor), CheckContext("fortitude", "constitution", frozenset({"poison"}))))
             check = replace(resolve_check(dice.draw(20), combine_modifiers(modifiers), effect.dc), modifier_breakdown=tuple(modifiers))
             events.append(Event("venom_fortitude_save", effect.source_actor_id, actor.actor_id, _spell_save_text(actor, check, statistic="Fortitude"), check=check))
             delta = {DegreeOfSuccess.CRITICAL_SUCCESS: -2, DegreeOfSuccess.SUCCESS: -1, DegreeOfSuccess.FAILURE: 1, DegreeOfSuccess.CRITICAL_FAILURE: 2}[check.degree]
@@ -7423,6 +7557,10 @@ class Encounter:
         return tuple(reachable)
 
     def _attack_usable(self, state, actor, attack) -> bool:
+        from .martial_defense import crane_stance_attack_permitted
+
+        if not crane_stance_attack_permitted(state, actor.actor_id, attack.attack_id):
+            return False
         barbarian_state = actor.barbarian_state
         if barbarian_state is not None:
             from .barbarian import animal_attack_ids, attack_allowed_during_rage
@@ -12385,6 +12523,12 @@ class Encounter:
             ):
                 expired.append(effect)
             else:
+                if effect.kind.startswith("alchemy_") and effect.source_actor_id == actor.actor_id:
+                    # Alchemical effects use an absolute clock for their
+                    # duration, while persistence retains a source-relative
+                    # anchor for strict save validation.  Rebase that anchor
+                    # as the source starts another turn.
+                    effect = replace(effect, expires_at_source_start=starts[actor.actor_id] + 1)
                 retained.append(effect)
         state.active_effects = retained
         state.active_item_effects = [
@@ -12670,19 +12814,32 @@ class Encounter:
 
     @staticmethod
     def _mutagen_modifiers(state: EncounterState, actor: CreatureState, statistic: str, *, attack_traits: frozenset[str] = frozenset()) -> tuple[Modifier, ...]:
-        """The selected two mutagens' literal benefits and drawbacks."""
-        kinds = {effect.kind for effect in state.active_effects if effect.target_actor_id == actor.actor_id}
+        """Project the finite selected mutagens' literal benefits and drawbacks."""
+        from .alchemy_content import FORMULAS_BY_ID, MutagenFacts
+
+        effects = tuple(effect for effect in state.active_effects if effect.target_actor_id == actor.actor_id and effect.kind.startswith("alchemy_") and effect.kind.endswith("_mutagen_lesser"))
         modifiers: list[Modifier] = []
-        if "alchemy_bestial_mutagen_lesser" in kinds:
-            if statistic == "athletics" or (statistic == "attack" and "unarmed" in attack_traits):
-                modifiers.append(Modifier(1, "item", "Bestial Mutagen"))
-            if statistic in {"reflex", "acrobatics", "stealth"}:
-                modifiers.append(Modifier(-2, "untyped", "Bestial Mutagen drawback"))
-        if "alchemy_cognitive_mutagen_lesser" in kinds:
-            if statistic in {"arcana", "crafting", "lore", "occultism", "society", "recall_knowledge"} or statistic.endswith("_lore"):
-                modifiers.append(Modifier(1, "item", "Cognitive Mutagen"))
-            if statistic in {"athletics", "acrobatics"} or (statistic == "attack" and "unarmed" not in attack_traits):
-                modifiers.append(Modifier(-2, "untyped", "Cognitive Mutagen drawback"))
+        for effect in effects:
+            formula = FORMULAS_BY_ID.get(effect.kind.removeprefix("alchemy_"))
+            if formula is None or not isinstance(formula.facts, MutagenFacts):
+                continue
+            name = formula.name.removesuffix(" (lesser)")
+            if effect.kind == "alchemy_bestial_mutagen_lesser":
+                if statistic == "athletics" or (statistic == "attack" and "unarmed" in attack_traits):
+                    modifiers.append(Modifier(1, "item", name))
+                if statistic in {"reflex", "acrobatics", "stealth"}:
+                    modifiers.append(Modifier(-2, "untyped", f"{name} drawback"))
+            elif effect.kind == "alchemy_cognitive_mutagen_lesser":
+                if statistic in {"arcana", "crafting", "lore", "occultism", "society", "recall_knowledge"} or statistic.endswith("_lore"):
+                    modifiers.append(Modifier(1, "item", name))
+                if statistic in {"athletics", "acrobatics"} or (statistic == "attack" and "unarmed" not in attack_traits):
+                    modifiers.append(Modifier(-2, "untyped", f"{name} drawback"))
+            elif effect.kind == "alchemy_juggernaut_mutagen_lesser":
+                for bonus in formula.facts.save_bonuses:
+                    if bonus.statistic == statistic:
+                        modifiers.append(Modifier(bonus.bonus, "item", name))
+                if statistic in {"will", "perception", "initiative"}:
+                    modifiers.append(Modifier(-2, "untyped", f"{name} drawback"))
         return tuple(modifiers)
 
     def _skill_dc(self, state: EncounterState, actor_id: str, statistic: str) -> int:
@@ -12710,6 +12867,25 @@ class Encounter:
                 *self._blood_magic_save_modifiers(state, actor),
             )
         return 10 + base + combine_modifiers(modifiers)
+
+    @classmethod
+    def _initiative_modifier_for_state(
+        cls, state: EncounterState, actor: CreatureState, definition, statistic: str,
+        *, weather_perception_penalty: int = 0,
+    ) -> int:
+        modifier = cls._initiative_modifier_for_definition(
+            definition, statistic, weather_perception_penalty=weather_perception_penalty
+        )
+        if any(
+            effect.kind == "alchemy_juggernaut_mutagen_lesser"
+            and effect.target_actor_id == actor.actor_id
+            and effect.source_actor_id in state.creatures
+            and effect.expires_at_source_start > state.actor_start_counts.get(effect.source_actor_id, 0)
+            and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
+            for effect in state.active_effects
+        ):
+            modifier -= 2
+        return modifier
 
     @staticmethod
     def _initiative_modifier_for_definition(definition, statistic: str, *, weather_perception_penalty: int = 0) -> int:
@@ -12740,8 +12916,14 @@ class Encounter:
         conditions.extend(
             ConditionValue(effect.kind, effect.value, effect.effect_id)
             for effect in state.active_effects
-            if effect.target_actor_id == actor.actor_id and effect.kind in {"enfeebled", "guidance"}
+            if effect.target_actor_id == actor.actor_id
             and effect.kind == "enfeebled"
+        )
+        conditions.extend(
+            ConditionValue("speed_bonus", effect.value, effect.effect_id)
+            for effect in state.active_effects
+            if effect.target_actor_id == actor.actor_id
+            and effect.kind == "alchemy_cheetahs_elixir_lesser"
         )
         from .alchemy_content import FORMULAS_BY_ID
         for effect in state.giant_centipede_venom_afflictions:
@@ -13420,6 +13602,7 @@ class Encounter:
             creature.must_leave_occupied = False
             state.taking_cover.discard(creature.actor_id)
             state.raised_shields.pop(creature.actor_id, None)
+            state.martial_stances.pop(creature.actor_id, None)
             state.active_effects[:] = [
                 effect for effect in state.active_effects
                 if not (effect.kind == "life_link" and effect.source_actor_id == creature.actor_id)
@@ -13472,6 +13655,8 @@ class Encounter:
                 creature.actions_remaining = 0
                 creature.reaction_available = False
                 self._refresh_barbarian_state(state, creature, encounter_ended=True)
+            state.martial_stances.clear()
+            state.martial_stance_used_rounds.clear()
 
     def _effective_ac(
         self,
@@ -13499,6 +13684,9 @@ class Encounter:
         if nimble_dodge:
             modifiers.append(Modifier(2, "circumstance", "Nimble Dodge"))
         if state is not None:
+            from .martial_defense import ac_modifiers as martial_defense_ac_modifiers
+
+            modifiers.extend(martial_defense_ac_modifiers(state, creature, definition))
             shield = self._raised_shield_instance(state, creature)
             if shield is not None:
                 profile = self._shield_profile(shield)
@@ -13615,9 +13803,8 @@ class Encounter:
             raise _Unsupported(f"This target has no admitted {statistic.title()} save modifier.")
         modifiers: list[Modifier] = [Modifier(base, "untyped", f"printed {statistic.title()} save")]
         modifiers.extend(self._resilient_save_modifiers(state, target))
-        if statistic == "fortitude":
-            alchemy_context = "poison" if spell_id == "giant_centipede_venom" else None
-            modifiers.extend(self._alchemy_fortitude_save_modifiers(state, target, alchemy_context))
+        alchemy_context = "poison" if spell_id == "giant_centipede_venom" else "fear" if spell_id == "fear" else None
+        modifiers.extend(self._alchemy_save_modifiers(state, target, statistic, against=alchemy_context))
         if continuation.guidance_bonus:
             modifiers.append(Modifier(continuation.guidance_bonus, "status", "Guidance"))
         if continuation.divine_grace_used:
@@ -13663,28 +13850,35 @@ class Encounter:
         return tuple(modifiers)
 
     @staticmethod
-    def _alchemy_fortitude_save_modifiers(
-        state: EncounterState, target: CreatureState, against: str | None,
+    def _alchemy_save_modifiers(
+        state: EncounterState, target: CreatureState, statistic: str, *, against: str | None,
     ) -> tuple[Modifier, ...]:
-        """Project the finite elixir item bonuses onto the recipient's save."""
-        if against not in {"poison", "disease"}:
-            return ()
-        applicable = {
-            "alchemy_elixir_of_life_minor": {"poison", "disease"},
-            "alchemy_antidote_lesser": {"poison"},
-            "alchemy_antiplague_lesser": {"disease"},
-        }
+        """Project the finite alchemical elixir save bonuses onto one save."""
+        from .alchemy_content import ElixirFacts, FORMULAS_BY_ID
+
+        modifiers: list[Modifier] = []
         labels = {
-            "alchemy_elixir_of_life_minor": "Minor Elixir of Life",
-            "alchemy_antidote_lesser": "Antidote (lesser)",
-            "alchemy_antiplague_lesser": "Antiplague (lesser)",
+            "elixir_of_life_minor": "Minor Elixir of Life",
+            "antidote_lesser": "Antidote (lesser)",
+            "antiplague_lesser": "Antiplague (lesser)",
         }
-        return tuple(
-            Modifier(effect.value, "item", labels[effect.kind])
-            for effect in state.active_effects
-            if effect.target_actor_id == target.actor_id
-            and against in applicable.get(effect.kind, set())
-        )
+        for effect in state.active_effects:
+            if effect.target_actor_id != target.actor_id or not effect.kind.startswith("alchemy_"):
+                continue
+            formula = FORMULAS_BY_ID.get(effect.kind.removeprefix("alchemy_"))
+            if formula is None or not isinstance(formula.facts, ElixirFacts):
+                continue
+            label = labels.get(formula.formula_id, formula.name)
+            for bonus in formula.facts.save_bonuses:
+                if bonus.statistic != statistic:
+                    continue
+                if bonus.against == "all":
+                    modifiers.append(Modifier(bonus.bonus, "item", label))
+                elif against == bonus.against or (
+                    bonus.against == "poison_or_disease" and against in {"poison", "disease"}
+                ):
+                    modifiers.append(Modifier(bonus.bonus, "item", label))
+        return tuple(modifiers)
 
     @staticmethod
     def _blood_magic_save_modifiers(
@@ -15405,8 +15599,8 @@ class Encounter:
             definition = get_definition(actor.definition_id)
             if actor.health_mode is HealthMode.PC and actor.hero_points > 0 and actor.actor_id not in decided:
                 initiative_skill = state.initiative_skills.get(actor.actor_id, "perception")
-                initiative_modifier = self._initiative_modifier_for_definition(
-                    definition, initiative_skill,
+                initiative_modifier = self._initiative_modifier_for_state(
+                    state, actor, definition, initiative_skill,
                     weather_perception_penalty=(
                         0 if "storm_born" in definition.abilities
                         else get_setup(state.setup_id).weather_perception_circumstance_penalty
@@ -15579,6 +15773,15 @@ class Encounter:
         if state.initiative_order:
             active = state.creatures[state.initiative_order[0]]
             state.actor_start_counts[active.actor_id] = max(1, state.actor_start_counts.get(active.actor_id, 0))
+            state.active_effects = [
+                replace(
+                    effect,
+                    expires_at_source_start=state.actor_start_counts.get(effect.source_actor_id, 0) + 1,
+                )
+                if effect.kind.startswith("alchemy_") and effect.source_actor_id in state.creatures
+                else effect
+                for effect in state.active_effects
+            ]
             for creature in state.creatures.values():
                 if not creature.defeated:
                     definition = get_definition(creature.definition_id)

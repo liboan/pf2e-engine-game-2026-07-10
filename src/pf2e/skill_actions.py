@@ -1396,15 +1396,19 @@ def _finish_quick_jump(
     speed = effective_speed_ft(
         context.actor, context.definition, _conditions_for_target(context, context.actor)
     )
+    from .martial_defense import crane_stance_leap_bonus
+
+    leap_bonus = crane_stance_leap_bonus(context.state, context.actor.actor_id)
     # Quick Jump changes only Long Jump's action cost and run-up requirement.
     # It retains Long Jump's check-result distance and failed-check horizontal
-    # Leap, rather than using an invented degree-to-distance table.
+    # Leap, rather than using an invented degree-to-distance table. Crane
+    # Stance's printed horizontal Leap increase applies to either result.
     # A normal horizontal Leap is 10 feet at Speed 15--25 and 15 feet at
     # Speed 30 or greater.  Vertical Long/High Jump terrain remains outside
     # this deliberately horizontal movement slice.
-    normal_leap = 15 if speed >= 30 else 10
+    normal_leap = (15 if speed >= 30 else 10) + leap_bonus
     if check.degree >= DegreeOfSuccess.SUCCESS:
-        maximum = min((check.total // 5) * 5, speed)
+        maximum = min((check.total // 5) * 5 + leap_bonus, speed)
     else:
         maximum = normal_leap
     events = [Event(
@@ -2104,9 +2108,12 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
         except ValueError as error:
             return FamilyProcedureResult(rejection=str(error))
         from .skill_content import QUICK_JUMP
+        from .martial_defense import crane_stance_leap_bonus
 
         return _start_skill_action_check(
-            context, command, "athletics", 15, QUICK_JUMP.traits
+            context, command, "athletics",
+            15 - crane_stance_leap_bonus(context.state, context.actor.actor_id),
+            QUICK_JUMP.traits,
         )
     if isinstance(command, TumbleThrough):
         if context.actor.actions_remaining < TUMBLE_THROUGH.action_cost:

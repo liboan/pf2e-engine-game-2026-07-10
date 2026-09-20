@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import replace
 from types import MappingProxyType
 
-from .model import CreatureDefinition, CreaturePlacement, EncounterSetup, Position
+from .model import AttackDefinition, CreatureDefinition, CreaturePlacement, EncounterSetup, Position
 
 
 def _level_skills(definition: CreatureDefinition) -> tuple[tuple[str, str | None, int], ...]:
@@ -148,6 +148,21 @@ def build_l2_martial_content(
             "fear, emotion, mental, or frightened is not silently bypassed. Source: https://2e.aonprd.com/Feats.aspx?ID=4782."
         ),
     )
+    fighter_dueling_parry_l2 = _level_two(
+        fighter,
+        definition_id="fighter_m_level_2_dueling_parry",
+        name="Level 2 Melee Fighter M (Dueling Parry)",
+        hp=34,
+        class_feat="Dueling Parry",
+        skill_feat="Quick Jump",
+        ability_id="dueling_parry",
+        note=(
+            "Alternate level-2 Fighter class-feat choice: while wielding only one held one-handed "
+            "melee weapon, Dueling Parry grants +2 circumstance AC until the start of the next "
+            "turn, and the guard ends mechanically if that hand requirement is not retained. "
+            "Source: https://2e.aonprd.com/Feats.aspx?ID=4781."
+        ),
+    )
     barbarian_intimidating_strike_l2 = _level_two(
         barbarian,
         definition_id="barbarian_animal_bear_level_2_intimidating_strike",
@@ -181,13 +196,47 @@ def build_l2_martial_content(
             "https://2e.aonprd.com/Feats.aspx?ID=5121."
         ),
     )
+    monk_crane_stance = replace(
+        monk,
+        definition_id="monk_crane_stance_level_1",
+        name="Level 1 Monk (Crane Stance)",
+        attacks=(*(
+            attack for attack in monk.attacks if attack.item_id != "kama"
+        ), AttackDefinition(
+            "crane_wing", "Crane Wing", 7, 5,
+            frozenset({"attack", "melee", "agile", "finesse", "nonlethal", "unarmed"}),
+            "bludgeoning", (6,), 2,
+            attack_attribute="dexterity", damage_attribute="strength", hands_required=0,
+        )),
+        abilities=tuple(ability for ability in monk.abilities if ability != "monastic_weaponry") + ("crane_stance",),
+        feats=tuple(feat for feat in monk.feats if feat != "Monastic Weaponry") + ("Crane Stance",),
+        proficiencies=tuple(
+            proficiency for proficiency in monk.proficiencies
+            if proficiency[0] != "simple_and_martial_monk_weapons"
+        ),
+        held_items=(),
+        sheet_notes=(*(
+            note for note in monk.sheet_notes
+            if "Monastic Weaponry" not in note and "Feats.aspx?ID=5979" not in note
+        ), (
+            "Alternate level-1 class-feat choice: Crane Stance is a one-action stance while "
+            "unarmored. It grants +1 circumstance AC and limits Strikes to Crane Wing (1d6 "
+            "bludgeoning; agile, finesse, nonlethal, unarmed). It reduces horizontal Quick "
+            "Jump's Long Jump DC by 5 and increases the supported horizontal Leap distance by "
+            "5 feet; vertical High Jump terrain remains unsupported. The stance ends on knockout, "
+            "dismissal, encounter end, or another stance action. Source: "
+            "https://2e.aonprd.com/Feats.aspx?ID=5976."
+        )),
+    )
     definitions = MappingProxyType({
         fighter_l2.definition_id: fighter_l2,
         fighter_intimidating_strike_l2.definition_id: fighter_intimidating_strike_l2,
+        fighter_dueling_parry_l2.definition_id: fighter_dueling_parry_l2,
         barbarian_l2.definition_id: barbarian_l2,
         barbarian_sudden_charge_l2.definition_id: barbarian_sudden_charge_l2,
         barbarian_intimidating_strike_l2.definition_id: barbarian_intimidating_strike_l2,
         monk_l2.definition_id: monk_l2,
+        monk_crane_stance.definition_id: monk_crane_stance,
     })
     setups = MappingProxyType({
         "staged_fighter_level_2_sudden_charge": EncounterSetup(
@@ -207,6 +256,16 @@ def build_l2_martial_content(
             3,
             (
                 CreaturePlacement("fighter", fighter_intimidating_strike_l2.definition_id, "Level 2 Fighter", "blue", Position(1, 1)),
+                CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
+            ),
+        ),
+        "staged_fighter_level_2_dueling_parry": EncounterSetup(
+            "staged_fighter_level_2_dueling_parry",
+            "Staged Level 2 Fighter Dueling Parry",
+            5,
+            3,
+            (
+                CreaturePlacement("fighter", fighter_dueling_parry_l2.definition_id, "Level 2 Fighter", "blue", Position(1, 1)),
                 CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
             ),
         ),
@@ -250,6 +309,16 @@ def build_l2_martial_content(
             3,
             (
                 CreaturePlacement("monk", monk_l2.definition_id, "Level 2 Monk", "blue", Position(1, 1)),
+                CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
+            ),
+        ),
+        "staged_monk_crane_stance": EncounterSetup(
+            "staged_monk_crane_stance",
+            "Staged Level 1 Monk Crane Stance",
+            5,
+            3,
+            (
+                CreaturePlacement("monk", monk_crane_stance.definition_id, "Crane Monk", "blue", Position(1, 1)),
                 CreaturePlacement("dog", enemy_definition_id, "Guard Dog", "red", Position(2, 1)),
             ),
         ),

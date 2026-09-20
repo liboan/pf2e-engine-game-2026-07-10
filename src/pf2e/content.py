@@ -60,6 +60,8 @@ from .wizard_content import (
     BATTLE_MAGIC_WIZARD,
     BATTLE_MAGIC_WIZARD_DAZE,
     BATTLE_MAGIC_WIZARD_DAZE_SETUP,
+    BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS,
+    BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS_SETUP,
     BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS,
     BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP,
     BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP,
@@ -78,16 +80,20 @@ from .alchemist_content import (
     BOMBER_ALCHEMIST_NEXT_SETUP,
     BOMBER_ALCHEMIST_SETUP,
     BOMBER_FORMULA_IDS,
+    BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS,
     BOMBER_LEVEL_2_BOMB_ATTACKS,
 )
 from .witch_content import (
     COMMAND_TARGET,
     FAITHS_FLAMEKEEPER_DAZE_SETUP,
+    FAITHS_FLAMEKEEPER_SUPPRESSION_SPELLS_SETUP,
     FAITHS_FLAMEKEEPER_SETUP,
     FAITHS_FLAMEKEEPER_NEXT_SETUP,
     FAITHS_FLAMEKEEPER_WITCH,
     FAITHS_FLAMEKEEPER_WITCH_DAZE,
+    FAITHS_FLAMEKEEPER_WITCH_SUPPRESSION_SPELLS,
     FLAMEKEEPER_FOX,
+    SUPPRESSION_TARGET,
 )
 from .l2_horizontal_content import L2_HORIZONTAL_DEFINITIONS, L2_HORIZONTAL_SETUPS
 from .l2_ranger_content import (
@@ -896,6 +902,7 @@ BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS = (
     "alchemists_fire_lesser",
     "acid_flask_lesser",
 )
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS = BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
 BOMBER_ALCHEMIST_LEVEL_2 = replace(
     BOMBER_ALCHEMIST,
     definition_id="bomber_alchemist_level_2_far_lobber",
@@ -914,6 +921,15 @@ BOMBER_ALCHEMIST_LEVEL_2 = replace(
         "Level 2: HP rises by 9 (Alchemist 8 + Constitution 1), and level-based statistics rise by one.",
         "Far Lobber is the selected level-2 class feat. Its 30-foot bomb range increment is applied only through the selected Bomber alchemy state.",
         "The formula book adds lesser Alchemist's Fire and Acid Flask. Poison additions, including Black Adder Venom, remain outside this finite Bomber build.",
+    ),
+)
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT = replace(
+    BOMBER_ALCHEMIST_LEVEL_2,
+    definition_id="bomber_alchemist_level_2_item_support",
+    name="Level 2 Bomber Alchemist (Item Support)",
+    sheet_notes=(*BOMBER_ALCHEMIST_LEVEL_2.sheet_notes,
+        "W2 item-support variant: the accepted W1 sheet remains unchanged while this finite ten-formula book adds Cheetah's Elixir, Juggernaut Mutagen, and Bravo's Brew.",
+        "The item-support menu uses only common consumables at or below level 2; it does not add poison, affliction, or unsupported exploration effects.",
     ),
 )
 BOMBER_ALCHEMIST_LEVEL_2_SETUP = EncounterSetup(
@@ -951,6 +967,26 @@ BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP = EncounterSetup(
     (
         CreaturePlacement("alchemist", BOMBER_ALCHEMIST_LEVEL_2.definition_id, "Level 2 Bomber Alchemist", "blue", Position(1, 1)),
         CreaturePlacement("long_range_dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(1, 26)),
+    ),
+)
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP = EncounterSetup(
+    "l2_bomber_item_support_vs_guard_dog",
+    "Level 2 Item-Support Bomber versus Guard Dog",
+    15,
+    3,
+    (
+        CreaturePlacement("alchemist", BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id, "Level 2 Item-Support Bomber", "blue", Position(1, 1)),
+        CreaturePlacement("dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(7, 1)),
+    ),
+)
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP = EncounterSetup(
+    "l2_bomber_item_support_next_vs_guard_dog",
+    "Prepared Level 2 Item-Support Bomber versus Guard Dog",
+    15,
+    3,
+    (
+        CreaturePlacement("alchemist", BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id, "Level 2 Item-Support Bomber", "blue", Position(1, 1)),
+        CreaturePlacement("next_dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(7, 1)),
     ),
 )
 
@@ -998,14 +1034,17 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         # it moves into the normal catalog; diagnostic alternates stay staged.
         BATTLE_MAGIC_WIZARD.definition_id: BATTLE_MAGIC_WIZARD,
         BATTLE_MAGIC_WIZARD_DAZE.definition_id: BATTLE_MAGIC_WIZARD_DAZE,
+        BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS.definition_id: BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS,
         STORM_DRUID.definition_id: STORM_DRUID,
         # Preserve the selected Oracle's stable ID while moving its completed
         # representative encounter into the ordinary catalog.
         LIFE_ORACLE.definition_id: LIFE_ORACLE,
         FAITHS_FLAMEKEEPER_WITCH.definition_id: FAITHS_FLAMEKEEPER_WITCH,
         FAITHS_FLAMEKEEPER_WITCH_DAZE.definition_id: FAITHS_FLAMEKEEPER_WITCH_DAZE,
+        FAITHS_FLAMEKEEPER_WITCH_SUPPRESSION_SPELLS.definition_id: FAITHS_FLAMEKEEPER_WITCH_SUPPRESSION_SPELLS,
         FLAMEKEEPER_FOX.definition_id: FLAMEKEEPER_FOX,
         COMMAND_TARGET.definition_id: COMMAND_TARGET,
+        SUPPRESSION_TARGET.definition_id: SUPPRESSION_TARGET,
         # The selected Maestro keeps its historical definition ID so existing
         # staged saves remain compatible after normal catalog admission.
         MAESTRO_BARD_STAGED.definition_id: MAESTRO_BARD_STAGED,
@@ -1013,6 +1052,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         # level-1 recovery, preparation, venom, and terminal route is admitted.
         BOMBER_ALCHEMIST.definition_id: BOMBER_ALCHEMIST,
         BOMBER_ALCHEMIST_LEVEL_2.definition_id: BOMBER_ALCHEMIST_LEVEL_2,
+        BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT,
         # Selected L2 progression bundles retain explicit, finite public
         # sheets and encounters; no class/subclass discovery is implied.
         **L2_HORIZONTAL_DEFINITIONS,
@@ -1395,10 +1435,12 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         **{setup.setup_id: setup for setup in S3_INTERACTION_SETUPS},
         BATTLE_MAGIC_WIZARD_SETUP.setup_id: BATTLE_MAGIC_WIZARD_SETUP,
         BATTLE_MAGIC_WIZARD_DAZE_SETUP.setup_id: BATTLE_MAGIC_WIZARD_DAZE_SETUP,
+        BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS_SETUP.setup_id: BATTLE_MAGIC_WIZARD_SUPPRESSION_SPELLS_SETUP,
         STORM_DRUID_SETUP.setup_id: STORM_DRUID_SETUP,
         LIFE_ORACLE_NUDGE_SETUP.setup_id: LIFE_ORACLE_NUDGE_SETUP,
         FAITHS_FLAMEKEEPER_SETUP.setup_id: FAITHS_FLAMEKEEPER_SETUP,
         FAITHS_FLAMEKEEPER_DAZE_SETUP.setup_id: FAITHS_FLAMEKEEPER_DAZE_SETUP,
+        FAITHS_FLAMEKEEPER_SUPPRESSION_SPELLS_SETUP.setup_id: FAITHS_FLAMEKEEPER_SUPPRESSION_SPELLS_SETUP,
         MAESTRO_BARD_ANTHEM_SETUP.setup_id: MAESTRO_BARD_ANTHEM_SETUP,
         MAESTRO_BARD_FEAR_SETUP.setup_id: MAESTRO_BARD_FEAR_SETUP,
         MAESTRO_BARD_COUNTER_SETUP.setup_id: MAESTRO_BARD_COUNTER_SETUP,
@@ -1406,6 +1448,8 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         BOMBER_ALCHEMIST_LEVEL_2_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_SETUP,
         BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
         BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
+        BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP,
+        BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP,
         **L2_HORIZONTAL_SETUPS,
         RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id: RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
         **{setup.setup_id: setup for setup in L2_REACH_SETUPS},

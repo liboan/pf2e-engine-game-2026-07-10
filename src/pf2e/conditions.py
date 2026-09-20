@@ -83,6 +83,7 @@ _VALUED_CONDITIONS = frozenset(
         "enfeebled",
         "frightened",
         "sickened",
+        "speed_bonus",
         "speed_penalty",
         "stupefied",
     }
@@ -184,7 +185,7 @@ def condition_modifiers(
         elif condition.kind == "fascinated":
             if _is_skill_check(context.statistic):
                 amount = -2
-        elif condition.kind in {"dazzled", "grabbed", "immobilized", "paralyzed", "restrained", "speed_penalty"}:
+        elif condition.kind in {"dazzled", "grabbed", "immobilized", "paralyzed", "restrained", "speed_bonus", "speed_penalty"}:
             # These conditions have action/target restrictions, handled by
             # condition_restrictions or by core-owned state procedures.
             pass

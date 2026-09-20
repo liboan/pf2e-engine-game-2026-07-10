@@ -9,6 +9,20 @@ BOMBER_FIELD_FORMULA_IDS = ("bottled_lightning_lesser", "frost_vial_lesser")
 BOMBER_LEVEL_2_BOMB_FORMULA_IDS = ("alchemists_fire_lesser", "acid_flask_lesser")
 BOMBER_COMBAT_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, *BOMBER_LEVEL_2_BOMB_FORMULA_IDS)
 BOMBER_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, "elixir_of_life_minor", "antidote_lesser", "antiplague_lesser", "bestial_mutagen_lesser", "cognitive_mutagen_lesser", "giant_centipede_venom")
+# W2 keeps the accepted W1 Bomber book intact and adds a separate legal level-2
+# item-support menu.  It has the same ten-formula book size as every level-2
+# Alchemist, with the field pair occupying two of those slots.
+BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS = (
+    *BOMBER_FIELD_FORMULA_IDS,
+    "elixir_of_life_minor",
+    "cheetahs_elixir_lesser",
+    "juggernaut_mutagen_lesser",
+    "bravos_brew_lesser",
+    "antidote_lesser",
+    "antiplague_lesser",
+    "bestial_mutagen_lesser",
+    "cognitive_mutagen_lesser",
+)
 
 
 def admitted_bomber_bomb_facts(formula_id: object, *, character_level: int = 1) -> BombFacts | None:
