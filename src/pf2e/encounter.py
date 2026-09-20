@@ -6314,7 +6314,7 @@ class Encounter:
                 and bomb_facts.splash_damage
             ):
                 events.extend(self._apply_bomber_miss_primary_splash(
-                    state, dice, actor, target, attack, bomb_facts
+                    state, dice, actor, target, attack, bomb_facts, item_id=item_id
                 ))
                 if state.pending_choice is not None:
                     raise _Unsupported("A bomb splash that pauses for a defense choice after a miss is not yet admitted.")
@@ -7062,8 +7062,9 @@ class Encounter:
             for effect in state.active_effects
             if effect.kind == "frostbite_weakness" and effect.target_actor_id == target.actor_id
         )
+        bomber_immunities = self._bomber_bomb_damage_immunities(state, target, resolution)
         base_defenses, paired_parent = self._paired_base_defenses(
-            resolution, (*get_definition(target.definition_id).damage_defenses, *frostbite_weakness)
+            resolution, (*get_definition(target.definition_id).damage_defenses, *frostbite_weakness, *bomber_immunities)
         )
         defenses = self._justice_damage_defenses(state, resolution, base_defenses)
         try:
@@ -7555,7 +7556,9 @@ class Encounter:
         # saved Shield choice re-enters damage resolution, so committing it
         # earlier would make the same Strike consume IWR twice on resume.
         base_defenses, paired_parent = self._paired_base_defenses(
-            resolution, get_definition(target.definition_id).damage_defenses
+            resolution,
+            (*get_definition(target.definition_id).damage_defenses,
+             *self._bomber_bomb_damage_immunities(state, target, resolution)),
         )
         effective_defenses = self._justice_damage_defenses(state, resolution, base_defenses)
         mitigation = apply_damage_defenses(
@@ -7626,7 +7629,7 @@ class Encounter:
             total=damage.total + facts.splash_damage,
         )
 
-    def _apply_bomber_miss_primary_splash(self, state, dice, attacker, target, attack, facts):
+    def _apply_bomber_miss_primary_splash(self, state, dice, attacker, target, attack, facts, *, item_id):
         """A missed bomb still applies its splash to the primary target."""
         splash = DamageResult(
             (DamageComponent(
@@ -7646,6 +7649,7 @@ class Encounter:
             target_id=target.actor_id,
             source=f"{attack.attack_id}_splash",
             damage_type=facts.damage_type,
+            item_id=item_id,
         )
         return self._resolve_damage_to_health(state, dice, resolution, resumed=False)
 
@@ -7673,6 +7677,7 @@ class Encounter:
                         (splash,), "family", frozenset({"bomb", "splash"}),
                     ), actor_id=attacker.actor_id, target_id=recipient.actor_id,
                     source=f"{attack_id}_splash", damage_type=facts.damage_type,
+                    item_id=resolution.item_id,
                 )
                 events.extend(self._resolve_damage_to_health(state, dice, splash_resolution, resumed=False))
         if resolution.check is not None and resolution.check.degree in {
@@ -7803,6 +7808,37 @@ class Encounter:
                 text = f"{target.label} takes a -{value}-foot status penalty to all Speeds for {duration} seconds."
             return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
         return []
+
+    @staticmethod
+    def _bomber_bomb_damage_immunities(state, target, resolution):
+        """Return the finite Dread damage immunity for one bomb recipient."""
+        item_id = resolution.item_id
+        if not isinstance(item_id, str):
+            return ()
+        from .alchemy_content import FORMULAS_BY_ID
+        from .opponent_content import PUBLISHED_OPPONENT_PROFILES
+
+        infused = state.infused_alchemy_items.get(item_id)
+        formula_id = getattr(infused, "formula_id", None) or item_id
+        formula = FORMULAS_BY_ID.get(formula_id)
+        if formula is None or formula.formula_id != "dread_ampoule_lesser":
+            return ()
+        dynamic_immunity = any(
+            immunity.target_actor_id == target.actor_id
+            and immunity.expires_at_seconds > state.world_time_seconds
+            and immunity.kind in {"mental", "poison"}
+            for immunity in state.condition_immunities
+        )
+        published = PUBLISHED_OPPONENT_PROFILES.get(target.definition_id)
+        printed_immunity = published is not None and bool(
+            {"mental", "poison"} & set(published.condition_immunities)
+        )
+        if not (dynamic_immunity or printed_immunity):
+            return ()
+        return (DamageDefense(
+            "immunity", "mental", 0,
+            source=f"{resolution.source}:dread_ampoule_immunity",
+        ),)
 
     @staticmethod
     def _admitted_bomber_bomb_facts(formula_id, *, character_level=1):

@@ -98,9 +98,13 @@ def test_dread_respects_published_mental_and_poison_immunity(monkeypatch: pytest
     setup = replace(
         base,
         setup_id="w3_dread_skeleton_immunity",
-        placements=(base.placements[0], CreaturePlacement(
-            "skeleton", SKELETON_GUARD.definition.definition_id, "Skeleton Guard", "red", Position(7, 1),
-        )),
+        placements=(
+            base.placements[0],
+            CreaturePlacement(
+                "skeleton", SKELETON_GUARD.definition.definition_id, "Skeleton Guard", "red", Position(7, 1),
+            ),
+            CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(8, 1)),
+        ),
     )
     monkeypatch.setattr(
         content,
@@ -112,12 +116,21 @@ def test_dread_respects_published_mental_and_poison_immunity(monkeypatch: pytest
         "_STAGED_SETUPS",
         MappingProxyType({**content._STAGED_SETUPS, setup.setup_id: setup}),
     )
-    game = Encounter.start(setup, rolls=(10, 1, 10, 1))
+    game = Encounter.start(setup, rolls=(20, 1, 1, 10, 1))
     _settle(game)
     assert game.execute(QuickAlchemy("create_consumable", "dread_ampoule_lesser")).status is ResultStatus.COMPLETED
     assert game.execute(QuickBomber("skeleton", "dread_ampoule_lesser")).status in {ResultStatus.COMPLETED, ResultStatus.PAUSED}
     _settle(game)
+    assert game._state.creatures["skeleton"].hp == 4
+    assert game._state.creatures["dog"].hp == 7
     assert not any(effect.kind == "frightened" for effect in game._state.condition_effects)
+
+    miss_game = Encounter.start(setup, rolls=(20, 1, 1, 1, 1))
+    _settle(miss_game)
+    assert miss_game.execute(QuickAlchemy("create_consumable", "dread_ampoule_lesser")).status is ResultStatus.COMPLETED
+    assert miss_game.execute(QuickBomber("skeleton", "dread_ampoule_lesser")).status in {ResultStatus.COMPLETED, ResultStatus.PAUSED}
+    _settle(miss_game)
+    assert miss_game._state.creatures["skeleton"].hp == 4
 
 
 def test_glue_bomb_saves_active_minute_rider_and_escape_removes_it(tmp_path: Path) -> None:
