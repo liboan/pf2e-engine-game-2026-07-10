@@ -357,6 +357,16 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 frozenset({"focus", "witch"}), None, False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1882",
             ),
+            SpellDefinition(
+                "weapon_surge", "Weapon Surge", (1,),
+                frozenset({"cleric", "focus", "manipulate", "sanctified"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1852",
+            ),
+            SpellDefinition(
+                "cackle", "Cackle", (0,),
+                frozenset({"concentrate", "focus", "free", "hex", "witch"}), None, False,
+                "https://app.demiplane.com/nexus/pathfinder2e/spells/cackle-rm",
+            ),
         )
     }
 )

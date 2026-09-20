@@ -145,6 +145,64 @@ class FeintOffGuardEffect:
 
 
 @dataclass(frozen=True)
+class OverextendingFeintEffect:
+    """Rogue's typed attack penalty from Overextending Feint."""
+
+    effect_id: str
+    source_actor_id: str
+    target_actor_id: str
+    expiration: EffectExpiration
+    all_attacks: bool
+
+    def __post_init__(self) -> None:
+        if not self.effect_id or not self.source_actor_id or not self.target_actor_id:
+            raise ValueError("Overextending Feint needs stable source and target actors")
+        if self.source_actor_id == self.target_actor_id:
+            raise ValueError("Overextending Feint needs distinct actors")
+        if self.expiration.anchor_actor_id != self.target_actor_id or self.expiration.boundary != "end":
+            raise ValueError("Overextending Feint expires at the feinted target's turn end")
+        if self.expiration.occurrence < 1 or type(self.all_attacks) is not bool:
+            raise ValueError("Overextending Feint has invalid expiry or scope")
+
+
+def overextending_feint_penalty(
+    effects: tuple[OverextendingFeintEffect, ...],
+    *, attacker_id: str,
+    target_id: str,
+    actor_end_counts: dict[str, int],
+) -> int:
+    """Return the -2 penalty when the attacker is the feinted creature."""
+
+    for effect in effects:
+        if (
+            effect.source_actor_id == target_id
+            and effect.target_actor_id == attacker_id
+            and actor_end_counts.get(attacker_id, 0) < effect.expiration.occurrence
+        ):
+            return -2
+    return 0
+
+
+def consume_overextending_feint_on_attack(
+    effects: tuple[OverextendingFeintEffect, ...],
+    *, attacker_id: str, target_id: str, actor_end_counts: dict[str, int],
+) -> tuple[OverextendingFeintEffect, ...]:
+    """Consume a successful (non-critical) Overextending Feint on one attack."""
+
+    consumed = {
+        effect.effect_id
+        for effect in effects
+        if (
+            not effect.all_attacks
+            and effect.source_actor_id == target_id
+            and effect.target_actor_id == attacker_id
+            and actor_end_counts.get(attacker_id, 0) < effect.expiration.occurrence
+        )
+    }
+    return tuple(effect for effect in effects if effect.effect_id not in consumed)
+
+
+@dataclass(frozen=True)
 class FeintResolution:
     check: CheckResult
     off_guard_effects: tuple[FeintOffGuardEffect, ...]
@@ -373,12 +431,14 @@ class Demoralize(FamilyCommand):
     target_id: str
     spoken_language: str | None = None
     use_intimidating_glare: bool = False
+    youre_next_reaction: bool = False
 
 
 @dataclass(frozen=True)
 class Feint(FamilyCommand):
     family_id: ClassVar[str] = "martial"
     target_id: str
+    use_overextending: bool = False
 
 
 @dataclass(frozen=True)
@@ -1178,7 +1238,8 @@ def _start_skill_action_check(
 ) -> FamilyProcedureResult:
     """Commit a named action once, then preserve the check through choices."""
 
-    if context.actor.actions_remaining < 1:
+    reaction_action = isinstance(command, Demoralize) and command.youre_next_reaction
+    if not reaction_action and context.actor.actions_remaining < 1:
         return FamilyProcedureResult(rejection=f"{_action_id(command).title()} requires one action.")
     use_assurance = getattr(command, "use_assurance", False)
     if type(use_assurance) is not bool:
@@ -1236,7 +1297,7 @@ def _start_skill_action_check(
     ) else 0
     if commit_attack_count:
         saved = replace(saved, attack_count_committed=True)
-    context.commit_family_action(actions=1, attacks=(
+    context.commit_family_action(actions=0 if reaction_action else 1, attacks=(
         commit_attack_count or (1 if use_assurance and "attack" in traits else 0)
     ))
     if isinstance(command, (Trip, Grapple)):
@@ -1306,6 +1367,8 @@ def _offer_hero_point_or_finish(
     command: FamilyCommand,
     saved_check,
 ) -> FamilyProcedureResult:
+    if isinstance(command, Demoralize) and command.youre_next_reaction:
+        return _finish_checked_action(context, command, saved_check)
     if context.actor.health_mode.value == "pc" and context.actor.hero_points > 0:
         action_id = _action_id(command)
         # Keep the already resolved check's committed MAP and targeting
@@ -1866,16 +1929,19 @@ def _escape_stride_destinations(context: FamilyProcedureContext):
 
 
 def _demoralize(context: FamilyProcedureContext, command: Demoralize) -> FamilyProcedureResult:
-    if context.actor.actions_remaining < DEMORALIZE.action_cost:
+    if command.youre_next_reaction and not context.youre_next_trigger:
+        return FamilyProcedureResult(rejection="You're Next requires its post-defeat reaction trigger.")
+    if not command.youre_next_reaction and context.actor.actions_remaining < DEMORALIZE.action_cost:
         return FamilyProcedureResult(rejection="Demoralize requires one action.")
-    if context.actor.must_leave_occupied:
+    if not command.youre_next_reaction and context.actor.must_leave_occupied:
         return FamilyProcedureResult(rejection="Move out of the occupied ally's space before taking another action.")
     try:
         target = _target(context, command.target_id)
     except ValueError as error:
         return FamilyProcedureResult(rejection=str(error))
-    if grid_distance_feet(context.actor.position, target.position) > DEMORALIZE.range_ft:
-        return FamilyProcedureResult(rejection="Demoralize requires a target within 30 feet.")
+    max_range = 60 if command.youre_next_reaction else DEMORALIZE.range_ft
+    if grid_distance_feet(context.actor.position, target.position) > max_range:
+        return FamilyProcedureResult(rejection=f"Demoralize requires a target within {max_range} feet.")
     if target.unconscious:
         return FamilyProcedureResult(rejection="Demoralize requires an aware target.")
     if command.use_intimidating_glare:
@@ -1936,6 +2002,7 @@ def _demoralize(context: FamilyProcedureContext, command: Demoralize) -> FamilyP
         dc,
         traits,
         extra_modifiers=(
+            *((Modifier(2, "circumstance", "You're Next"),) if command.youre_next_reaction else ()),
             *stylish_combatant_modifiers(context.definition),
             *(() if understood or command.use_intimidating_glare else (
                 Modifier(-4, "circumstance", "Demoralize language barrier"),
@@ -1995,6 +2062,8 @@ def _finish_demoralize(context: FamilyProcedureContext, command: Demoralize, che
         else:
             text = f"{context.actor.label}'s temporary Panache is extended."
         events.append(Event(panache_event, context.actor.actor_id, None, text, check=check_context.result))
+    if command.youre_next_reaction:
+        return FamilyProcedureResult(events=tuple(events))
     return _complete_action_unless_paused(context, events)
 
 
@@ -2058,7 +2127,13 @@ def _feint_step_options(destinations: tuple[Position, ...]) -> tuple[ChoiceOptio
     )
 
 
-def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context) -> FamilyProcedureResult:
+def _finish_feint(
+    context: FamilyProcedureContext,
+    command: Feint,
+    check_context,
+    *,
+    offer_overextending: bool = True,
+) -> FamilyProcedureResult:
     if check_context.result is None:
         return FamilyProcedureResult(rejection="The saved Feint check has not been resolved.")
     try:
@@ -2066,6 +2141,8 @@ def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context
     except ValueError as error:
         return FamilyProcedureResult(rejection=str(error))
 
+    if command.use_overextending and "Overextending Feint" not in context.definition.feats:
+        return FamilyProcedureResult(rejection="Overextending Feint is not admitted for this creature.")
     store = getattr(context.state, "feint_off_guard_effects", None)
     if check_context.result.degree is not DegreeOfSuccess.FAILURE and store is None:
         return FamilyProcedureResult(
@@ -2081,6 +2158,53 @@ def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context
         wielding_agile_or_finesse_melee_weapon=_wielding_agile_or_finesse_melee_weapon(context),
     )
     events = [_event_check("feint", context.actor, target, outcome.check)]
+    if (
+        offer_overextending
+        and not command.use_overextending
+        and "Overextending Feint" in context.definition.feats
+        and outcome.check.degree >= DegreeOfSuccess.SUCCESS
+    ):
+        continuation = ActionContinuation(
+            kind="family_action",
+            actor_id=context.actor.actor_id,
+            target_id=target.actor_id,
+            stage="feint_overextending_choice",
+        )
+        context.present_choice(
+            "skill_actions:feint:overextending",
+            context.actor.actor_id,
+            f"{context.actor.label} may replace the successful Feint with Overextending Feint.",
+            (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            ),
+            continuation,
+            target_id=target.actor_id,
+            saved_check=check_context,
+            family_command=command,
+        )
+        events.append(Event(
+            "choice_offered", context.actor.actor_id, target.actor_id,
+            "Choose ordinary Feint or Overextending Feint.", check=outcome.check,
+        ))
+        return FamilyProcedureResult(events=tuple(events))
+    if command.use_overextending and outcome.check.degree >= DegreeOfSuccess.SUCCESS:
+        effect_id = f"overextending_feint:{context.actor.actor_id}:{target.actor_id}:{context.state.round_number}:{len(context.state.overextending_feint_effects) + 1}"
+        context.state.overextending_feint_effects.append(OverextendingFeintEffect(
+            effect_id,
+            context.actor.actor_id,
+            target.actor_id,
+            EffectExpiration(target.actor_id, "end", context.state.actor_end_counts.get(target.actor_id, 0) + 1),
+            outcome.check.degree is DegreeOfSuccess.CRITICAL_SUCCESS,
+        ))
+        events.append(Event(
+            "overextending_feint",
+            context.actor.actor_id,
+            target.actor_id,
+            f"{target.label} takes a -2 circumstance penalty to {'all attacks' if outcome.check.degree is DegreeOfSuccess.CRITICAL_SUCCESS else 'their next attack'} against {context.actor.label}.",
+            check=outcome.check,
+        ))
+        return _complete_action_unless_paused(context, events)
     for effect in outcome.off_guard_effects:
         store.append(effect)
         if effect.target_actor_id == context.actor.actor_id:
@@ -2268,6 +2392,30 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
             return FamilyProcedureResult(rejection="Choose whether to keep or reroll the concealment check.")
         events.extend(_finish_skill_targeting(context, command, saved, continuation, check))
         return FamilyProcedureResult(events=tuple(events))
+    if pending.procedure_id == "skill_actions:feint:overextending":
+        command = pending.family_command
+        saved = pending.saved_check
+        if (
+            not isinstance(command, Feint)
+            or saved is None
+            or saved.result is None
+            or continuation.stage != "feint_overextending_choice"
+            or pending.target_id != command.target_id
+            or "Overextending Feint" not in context.definition.feats
+            or saved.result.degree < DegreeOfSuccess.SUCCESS
+            or pending.options != (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            )
+        ):
+            return FamilyProcedureResult(rejection="The saved Overextending Feint choice is incomplete.")
+        if choice.option_id == "ordinary":
+            selected = replace(command, use_overextending=False)
+        elif choice.option_id == "overextending":
+            selected = replace(command, use_overextending=True)
+        else:
+            return FamilyProcedureResult(rejection="Choose ordinary Feint or Overextending Feint.")
+        return _finish_feint(context, selected, saved, offer_overextending=False)
     if pending.procedure_id == "skill_actions:feint:scoundrel_step":
         command = pending.family_command
         saved = pending.saved_check
@@ -2491,6 +2639,29 @@ def validate_pending(context: FamilyProcedureContext) -> None:
             or pending.options != _feint_step_options(destinations)
         ):
             raise ValueError("save has an invalid Scoundrel Step continuation")
+        return
+    if pending.procedure_id == "skill_actions:feint:overextending":
+        command = pending.family_command
+        continuation = pending.continuation
+        saved = pending.saved_check
+        if (
+            not isinstance(command, Feint)
+            or continuation is None
+            or continuation.stage != "feint_overextending_choice"
+            or pending.family_id != "martial"
+            or pending.actor_id != context.actor.actor_id
+            or pending.owner_actor_id != context.actor.actor_id
+            or pending.target_id != command.target_id
+            or saved is None
+            or saved.result is None
+            or saved.result.degree < DegreeOfSuccess.SUCCESS
+            or "Overextending Feint" not in context.definition.feats
+            or pending.options != (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            )
+        ):
+            raise ValueError("save has an invalid Overextending Feint choice")
         return
     if pending.procedure_id.endswith(":guidance") or pending.procedure_id.endswith(":hero_point"):
         command = pending.family_command

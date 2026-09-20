@@ -425,6 +425,22 @@ class WidenSpell(FamilyCommand):
 
 
 @dataclass(frozen=True)
+class EnergyAblation(FamilyCommand):
+    """Shape the next qualifying elemental spell for matching resistance."""
+
+    family_id = "casting"
+    energy_type: str
+
+
+@dataclass(frozen=True)
+class Cackle(FamilyCommand):
+    """Extend the acting Witch's current Stoke the Heart."""
+
+    family_id = "minions"
+    effect_id: str | None = None
+
+
+@dataclass(frozen=True)
 class LayOnHands(FamilyCommand):
     """One-action living-target devotion healing."""
 
@@ -752,6 +768,9 @@ class CreatureState:
     # Widen Spell uses the same immediate-cast lifecycle while carrying its
     # committed area length only on the cast continuation.
     widen_spell_pending: bool = False
+    # Energy Ablation is the same one-successor spellshape lifecycle, with the
+    # selected energy retained until the next qualifying Cast.
+    energy_ablation_pending: str | None = None
     must_leave_occupied: bool = False
     temporary_hp: int = 0
     temporary_hp_source_id: str | None = None
@@ -832,6 +851,8 @@ class CreatureState:
     witch_restored_spirit_used_start: int = 0
     # The hex trait permits at most one Cast-a-hex action in a Witch turn.
     witch_hex_cast_start: int = 0
+    # Cackle is a focus hex and can be used at most once per Witch turn.
+    witch_cackle_used_start: int = 0
     # A minion receives one two-action allotment per owner turn.
     minion_commanded_start: int = 0
     # Literal turn-begins trigger gate for the selected Patron's Puppet.
@@ -985,6 +1006,8 @@ class ActionContinuation:
     attack_target_off_guard: bool = False
     nimble_dodge_decided: bool = False
     nimble_dodge_used: bool = False
+    reactive_shield_decided: bool = False
+    overextending_feint_penalty: int = 0
     guidance_checked: bool = False
     # Divine Grace is an optional Champion reaction before a spell save.  Its
     # two markers distinguish declining the reaction from consuming it, so a
@@ -1422,6 +1445,7 @@ class EncounterState:
     actor_start_counts: dict[str, int] = field(default_factory=dict)
     actor_end_counts: dict[str, int] = field(default_factory=dict)
     feint_off_guard_effects: list["FeintOffGuardEffect"] = field(default_factory=list)
+    overextending_feint_effects: list["OverextendingFeintEffect"] = field(default_factory=list)
     # Tumble Behind is deliberately a distinct typed, attacker-relative
     # one-attack exposure; it does not reuse Feint's melee-only contract.
     tumble_behind_exposures: list["TumbleBehindExposure"] = field(default_factory=list)
@@ -1490,6 +1514,7 @@ class FamilyProcedureContext:
     pending: PendingChoice | None = None
     choice: Choose | None = None
     quick_tempered_trigger: bool = False
+    youre_next_trigger: bool = False
 
     @property
     def rage_source_id(self) -> str | None:

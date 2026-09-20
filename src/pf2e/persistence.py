@@ -492,6 +492,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "lingering_composition_pending": creature.lingering_composition_pending,
                 "reach_spell_pending": creature.reach_spell_pending,
                 "widen_spell_pending": creature.widen_spell_pending,
+                "energy_ablation_pending": creature.energy_ablation_pending,
                 "must_leave_occupied": creature.must_leave_occupied,
                 "temporary_hp": creature.temporary_hp,
                 "temporary_hp_source_id": creature.temporary_hp_source_id,
@@ -548,6 +549,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "witch_patron_used_start": creature.witch_patron_used_start,
                 "witch_restored_spirit_used_start": creature.witch_restored_spirit_used_start,
                 "witch_hex_cast_start": creature.witch_hex_cast_start,
+                "witch_cackle_used_start": creature.witch_cackle_used_start,
                 "minion_commanded_start": creature.minion_commanded_start,
                 "witch_turn_activity_start": creature.witch_turn_activity_start,
             }
@@ -608,6 +610,16 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 effect.consume_on_next_attack,
             ]
             for effect in state.feint_off_guard_effects
+        ],
+        "overextending_feint_effects": [
+            [
+                effect.effect_id,
+                effect.source_actor_id,
+                effect.target_actor_id,
+                [effect.expiration.anchor_actor_id, effect.expiration.boundary, effect.expiration.occurrence],
+                effect.all_attacks,
+            ]
+            for effect in state.overextending_feint_effects
         ],
         "tumble_behind_exposures": [
             [
@@ -1099,6 +1111,9 @@ def _state_from_data(data: Any) -> EncounterState:
         widen_spell_pending = raw.get("widen_spell_pending", False)
         if type(widen_spell_pending) is not bool:
             raise ValueError(f"saved actor {actor_id!r} has invalid Widen Spell state")
+        energy_ablation_pending = raw.get("energy_ablation_pending")
+        if energy_ablation_pending is not None and energy_ablation_pending not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Energy Ablation state")
         must_leave_occupied = _required_bool(raw, "must_leave_occupied")
         temporary_hp = _required_int(raw, "temporary_hp")
         temporary_hp_source_id = raw.get("temporary_hp_source_id")
@@ -1233,6 +1248,7 @@ def _state_from_data(data: Any) -> EncounterState:
         witch_patron_used_start = raw.get("witch_patron_used_start", 0)
         witch_restored_spirit_used_start = raw.get("witch_restored_spirit_used_start", 0)
         witch_hex_cast_start = raw.get("witch_hex_cast_start", 0)
+        witch_cackle_used_start = raw.get("witch_cackle_used_start", 0)
         minion_commanded_start = raw.get("minion_commanded_start", 0)
         witch_turn_activity_start = raw.get("witch_turn_activity_start", 0)
         if (
@@ -1303,6 +1319,7 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(witch_restored_spirit_used_start) is not int
             or witch_restored_spirit_used_start < 0
             or type(witch_hex_cast_start) is not int or witch_hex_cast_start < 0
+            or type(witch_cackle_used_start) is not int or witch_cackle_used_start < 0
             or type(minion_commanded_start) is not int or minion_commanded_start < 0
             or type(witch_turn_activity_start) is not int or witch_turn_activity_start < 0
         ):
@@ -1470,6 +1487,7 @@ def _state_from_data(data: Any) -> EncounterState:
             lingering_composition_pending=lingering_composition_pending,
             reach_spell_pending=reach_spell_pending,
             widen_spell_pending=widen_spell_pending,
+            energy_ablation_pending=energy_ablation_pending,
             must_leave_occupied=must_leave_occupied,
             temporary_hp=temporary_hp,
             temporary_hp_source_id=temporary_hp_source_id,
@@ -1516,6 +1534,7 @@ def _state_from_data(data: Any) -> EncounterState:
             witch_patron_used_start=witch_patron_used_start,
             witch_restored_spirit_used_start=witch_restored_spirit_used_start,
             witch_hex_cast_start=witch_hex_cast_start,
+            witch_cackle_used_start=witch_cackle_used_start,
             minion_commanded_start=minion_commanded_start,
             witch_turn_activity_start=witch_turn_activity_start,
         )
@@ -1983,7 +2002,7 @@ def _state_from_data(data: Any) -> EncounterState:
     ):
         raise ValueError("save has invalid Lingering Composition spellshape state")
     for creature in creatures.values():
-        if creature.reach_spell_pending and creature.widen_spell_pending:
+        if sum(bool(marker) for marker in (creature.reach_spell_pending, creature.widen_spell_pending, creature.energy_ablation_pending is not None)) > 1:
             raise ValueError("save has overlapping spellshape markers")
         if creature.reach_spell_pending:
             definition = get_definition(creature.definition_id)
@@ -2013,6 +2032,17 @@ def _state_from_data(data: Any) -> EncounterState:
                 or not 0 <= creature.actions_remaining <= 2
             ):
                 raise ValueError("save has invalid Widen Spell spellshape state")
+        if creature.energy_ablation_pending is not None:
+            definition = get_definition(creature.definition_id)
+            if (
+                "energy_ablation" not in definition.abilities
+                or "Energy Ablation" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                or creature.actions_remaining < 0
+            ):
+                raise ValueError("save has invalid Energy Ablation spellshape state")
     weakness_raw = data.get("investigator_weakness_bonuses", [])
     if not isinstance(weakness_raw, list):
         raise ValueError("save has invalid Investigator Known Weaknesses bonuses")
@@ -2118,6 +2148,34 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save retains an expired Feint off-guard effect")
         feint_effect_ids.add(effect.effect_id)
         feint_effects.append(effect)
+    overextending_effects_raw = data.get("overextending_feint_effects", [])
+    if not isinstance(overextending_effects_raw, list):
+        raise ValueError("save has invalid Overextending Feint effects")
+    from .skill_actions import OverextendingFeintEffect
+
+    overextending_effects: list[OverextendingFeintEffect] = []
+    overextending_ids: set[str] = set()
+    for row in overextending_effects_raw:
+        if (
+            not isinstance(row, list) or len(row) != 5
+            or any(not isinstance(value, str) or not value for value in row[:3])
+            or not isinstance(row[3], list) or len(row[3]) != 3
+            or row[3][0] not in expected_ids or row[3][1] != "end"
+            or type(row[3][2]) is not int or row[3][2] < 1
+            or type(row[4]) is not bool or row[0] in overextending_ids
+            or row[1] not in expected_ids or row[2] not in expected_ids
+            or row[1] == row[2]
+        ):
+            raise ValueError("save has invalid Overextending Feint effect")
+        try:
+            expiration = EffectExpiration(row[3][0], row[3][1], row[3][2])
+            effect = OverextendingFeintEffect(row[0], row[1], row[2], expiration, row[4])
+        except (TypeError, ValueError) as error:
+            raise ValueError("save has invalid Overextending Feint effect") from error
+        if expiration.occurrence <= ends_raw[expiration.anchor_actor_id]:
+            raise ValueError("save retains an expired Overextending Feint effect")
+        overextending_ids.add(effect.effect_id)
+        overextending_effects.append(effect)
     tumble_effects_raw = data.get("tumble_behind_exposures", [])
     if not isinstance(tumble_effects_raw, list):
         raise ValueError("save has invalid Tumble Behind exposures")
@@ -2201,14 +2259,14 @@ def _state_from_data(data: Any) -> EncounterState:
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
             or type(row[12]) is not int or row[12] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
                 and row[6] is not None
             )
             or (
@@ -2601,6 +2659,26 @@ def _state_from_data(data: Any) -> EncounterState:
             anthem_pairs.add((row[2], row[3]))
         if row[1] == "sure_strike":
             sure_strike_sources.add(row[2])
+        if row[1] == "energy_ablation":
+            energy = row[0].split(":", 3)[2] if row[0].count(":") >= 2 else ""
+            definition = get_definition(creatures[row[2]].definition_id)
+            if (
+                row[2] != row[3] or row[4] != 1 or row[5] != starts_raw[row[2]] + 2
+                or type(row[6]) is not int or not world_time_seconds < row[6] <= world_time_seconds + 12
+                or energy not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}
+                or "energy_ablation" not in definition.abilities
+            ):
+                raise ValueError("save has invalid Energy Ablation effect")
+        if row[1] == "weapon_surge":
+            definition = get_definition(creatures[row[2]].definition_id)
+            if (
+                row[2] != row[3] or row[4] != 1 or row[5] != starts_raw[row[2]] + 1
+                or type(row[6]) is not int or not world_time_seconds < row[6] <= world_time_seconds + 6
+                or "weapon_surge" not in definition.abilities
+                or row[0].count(":") < 3
+                or row[0].split(":", 3)[2] not in creatures[row[2]].held_items
+            ):
+                raise ValueError("save has invalid Weapon Surge effect")
         if row[1] == "soothe":
             soothe_pairs.add((row[2], row[3]))
         if row[1] == "protection":
@@ -2969,12 +3047,24 @@ def _state_from_data(data: Any) -> EncounterState:
         definition = get_definition(actor.definition_id)
         if (
             not isinstance(row, list) or len(row) != 2
-            or row[0] != "crane_stance" or type(row[1]) is not int
+            or row[0] not in {"crane_stance", "point_blank_stance"} or type(row[1]) is not int
             or not 1 <= row[1] <= round_number
             or not in_progress or actor.unconscious or actor.dead
-            or "crane_stance" not in definition.abilities
-            or definition.armor_category not in {None, "unarmored"}
-            or bool(actor.worn_items)
+            or (
+                row[0] == "crane_stance"
+                and (
+                    "crane_stance" not in definition.abilities
+                    or definition.armor_category not in {None, "unarmored"}
+                    or bool(actor.worn_items)
+                )
+            )
+            or (
+                row[0] == "point_blank_stance"
+                and (
+                    "point_blank_stance" not in definition.abilities
+                    or not any("ranged" in attack.traits and attack.item_id in actor.held_items for attack in definition.attacks)
+                )
+            )
         ):
             raise ValueError("save has invalid Crane Stance state")
         martial_stances[actor_id] = MartialStanceState(row[0], row[1])
@@ -2984,7 +3074,10 @@ def _state_from_data(data: Any) -> EncounterState:
         or not set(stance_rounds_raw).issubset(expected_ids)
         or any(type(value) is not int or not 1 <= value <= round_number for value in stance_rounds_raw.values())
         or any(
-            "crane_stance" not in get_definition(creatures[actor_id].definition_id).abilities
+            not (
+                "crane_stance" in get_definition(creatures[actor_id].definition_id).abilities
+                or "point_blank_stance" in get_definition(creatures[actor_id].definition_id).abilities
+            )
             for actor_id in stance_rounds_raw
         )
         or any(stance_rounds_raw.get(actor_id) != stance.entered_round for actor_id, stance in martial_stances.items())
@@ -3082,6 +3175,7 @@ def _state_from_data(data: Any) -> EncounterState:
         actor_start_counts=dict(starts_raw),
         actor_end_counts=dict(ends_raw),
         feint_off_guard_effects=feint_effects,
+        overextending_feint_effects=overextending_effects,
         tumble_behind_exposures=tumble_effects,
         active_effects=effects,
         persistent_effects=persistent_effects,
@@ -3621,9 +3715,10 @@ def _family_command_to_data(command) -> dict[str, Any] | None:
             "type": "Demoralize", "target_id": command.target_id,
             "spoken_language": command.spoken_language,
             "use_intimidating_glare": command.use_intimidating_glare,
+            "youre_next_reaction": command.youre_next_reaction,
         }
     if type(command) is Feint:
-        return {"type": "Feint", "target_id": command.target_id}
+        return {"type": "Feint", "target_id": command.target_id, "use_overextending": command.use_overextending}
     if type(command) is TumbleThrough:
         return {
             "type": "TumbleThrough",
@@ -3782,23 +3877,29 @@ def _family_command_from_data(data: Any):
             raise ValueError("save has invalid pending Escape command")
         return Escape(data["impediment_id"], data["check_method"], data["attack_id"], use_assurance)
     if kind == "Demoralize":
-        if set(data) != {"type", "target_id", "spoken_language", "use_intimidating_glare"}:
+        if set(data) not in (
+            {"type", "target_id", "spoken_language", "use_intimidating_glare"},
+            {"type", "target_id", "spoken_language", "use_intimidating_glare", "youre_next_reaction"},
+        ):
             raise ValueError("save has invalid pending Demoralize command")
         target_id, language, glare = data["target_id"], data["spoken_language"], data["use_intimidating_glare"]
+        youre_next = data.get("youre_next_reaction", False)
         if (
             not isinstance(target_id, str) or not target_id
             or (language is not None and (not isinstance(language, str) or not language))
             or type(glare) is not bool
+            or type(youre_next) is not bool
         ):
             raise ValueError("save has invalid pending Demoralize command")
-        return Demoralize(target_id, language, glare)
+        return Demoralize(target_id, language, glare, youre_next)
     if kind == "Feint":
-        if set(data) != {"type", "target_id"}:
+        if set(data) not in ({"type", "target_id"}, {"type", "target_id", "use_overextending"}):
             raise ValueError("save has invalid pending Feint command")
         target_id = data["target_id"]
-        if not isinstance(target_id, str) or not target_id:
+        use_overextending = data.get("use_overextending", False)
+        if not isinstance(target_id, str) or not target_id or type(use_overextending) is not bool:
             raise ValueError("save has invalid pending Feint command")
-        return Feint(target_id)
+        return Feint(target_id, use_overextending)
     if kind == "TumbleThrough":
         if set(data) != {"type", "path"} or not isinstance(data["path"], list) or not data["path"]:
             raise ValueError("save has invalid pending Tumble Through command")
@@ -3941,7 +4042,7 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
             "spell_save_hero_reroll", "spell_slot",
             "lingering_composition_hero_reroll", "counter_performance_save_choice", "counter_performance_bard_hero_reroll",
         "grabbed_manipulate_hero_reroll",
-        "family_action", "nimble_dodge", "concealment_hero_reroll",
+        "family_action", "nimble_dodge", "reactive_shield", "youre_next", "concealment_hero_reroll",
             "desperate_prayer", "witch_restored_spirit", "witch_restored_spirit_timing",
             "witch_restored_spirit_temp_hp", "witch_restored_spirit_willingness",
     }:
@@ -4224,6 +4325,8 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "attack_target_off_guard": continuation.attack_target_off_guard,
         "nimble_dodge_decided": continuation.nimble_dodge_decided,
         "nimble_dodge_used": continuation.nimble_dodge_used,
+        "reactive_shield_decided": continuation.reactive_shield_decided,
+        "overextending_feint_penalty": continuation.overextending_feint_penalty,
         "concealment_checked": continuation.concealment_checked,
         "light_control": continuation.light_control,
         "light_point": None if continuation.light_point is None else [
@@ -4291,6 +4394,9 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         key: _required_int(data, key)
         for key in ("next_step", "damage_bonus_dice", "attack_actions_cost", "attack_count_cost", "attack_penalty", "attack_count", "spell_actions", "ranged_penalty", "guidance_bonus")
     }
+    overextending_feint_penalty = data.get("overextending_feint_penalty", 0)
+    if type(overextending_feint_penalty) is not int or overextending_feint_penalty not in {0, -2}:
+        raise ValueError("save has invalid Overextending Feint penalty")
     sorcerous_potency = data.get("sorcerous_potency", 0)
     if type(sorcerous_potency) is not int or sorcerous_potency < 0:
         raise ValueError("save has invalid Sorcerous Potency")
@@ -4609,6 +4715,11 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         attack_target_off_guard=_required_bool(data, "attack_target_off_guard"),
         nimble_dodge_decided=_required_bool(data, "nimble_dodge_decided"),
         nimble_dodge_used=_required_bool(data, "nimble_dodge_used"),
+        reactive_shield_decided=(
+            _required_bool(data, "reactive_shield_decided")
+            if "reactive_shield_decided" in data else False
+        ),
+        overextending_feint_penalty=overextending_feint_penalty,
         concealment_checked=_required_bool(data, "concealment_checked"),
         targeting_failed=(
             _required_bool(data, "targeting_failed")

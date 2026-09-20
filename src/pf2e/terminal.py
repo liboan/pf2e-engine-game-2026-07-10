@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from pf2e.model import Position
+from pf2e.model import Cackle, EnergyAblation, Position
 
 if TYPE_CHECKING:
     from pf2e.encounter import Encounter
@@ -51,6 +51,10 @@ _ACTION_LABELS = {
     "devise_stratagem": "Devise a Stratagem",
     "known_weaknesses": "Known Weaknesses + Devise",
     "vicious_swing": "Vicious Swing",
+    "exacting_strike": "Exacting Strike",
+    "double_slice": "Double Slice",
+    "twin_takedown": "Twin Takedown",
+    "twin_feint": "Twin Feint",
     "intimidating_strike": "Intimidating Strike",
     "snagging_strike": "Snagging Strike",
     "combat_grab": "Combat Grab",
@@ -59,6 +63,7 @@ _ACTION_LABELS = {
     "dueling_parry": "Dueling Parry",
     "crane_stance": "Crane Stance",
     "dismiss_crane_stance": "Dismiss Crane Stance",
+    "point_blank_stance": "Point Blank Stance",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
     "hunted_shot": "Hunted Shot",
@@ -98,6 +103,8 @@ _ACTION_LABELS = {
     "lingering_composition": "Lingering Composition",
     "reach_spell": "Reach Spell",
     "widen_spell": "Widen Spell",
+    "energy_ablation": "Energy Ablation",
+    "cackle": "Cackle",
     "sustain_light": "Sustain Light",
     "dismiss_light": "Dismiss Light",
     "dismiss_life_link": "Dismiss Life Link",
@@ -1536,6 +1543,12 @@ def _choose_cast_inputs(
         # eligibility, range, commitment, and willingness checks.
         return spell.spell_id, None, target_mode.actions, slot_id, None, item_id
 
+    if spell.spell_id == "weapon_surge":
+        item_id = _choose_held_item(inspection, input_fn, output_fn)
+        if item_id is None:
+            return None
+        return spell.spell_id, None, target_mode.actions, slot_id, None, item_id
+
     if spell.spell_id == "sigil":
         kind = _choose_index(
             "Sigil target:", ("Creature", "Carried or worn item"), input_fn, output_fn,
@@ -1956,7 +1969,8 @@ def run_terminal(
     from pf2e.swashbuckler import ConfidentFinisher
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
     from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
-    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry
+    from pf2e.w4_offensive import DoubleSlice, ExactingStrike, TwinFeint, TwinTakedown
+    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, PointBlankStance
 
     if input_fn is None:
         input_fn = input
@@ -2268,6 +2282,40 @@ def run_terminal(
                             ),
                             output_fn,
                         )
+            elif action_id in {"exacting_strike", "double_slice", "twin_takedown", "twin_feint"}:
+                from pf2e.content import get_definition
+                from pf2e.model import PairedStrikeSelection
+
+                actor = game._state.creatures.get(engine_options.actor_id or "")
+                definition = get_definition(actor.definition_id) if actor is not None else None
+                choices = tuple(
+                    option for option in engine_options.strikes
+                    if definition is not None and any(
+                        attack.attack_id == option.attack_id
+                        and "melee" in attack.traits
+                        and (
+                            action_id == "exacting_strike"
+                            or (
+                                attack.item_id is not None
+                                and attack.item_id in actor.held_items
+                                and attack.hands_required == 1
+                            )
+                        )
+                        for attack in definition.attacks
+                    )
+                )
+                strike_inputs = _choose_strike_inputs(choices, inspection, input_fn, output_fn)
+                if strike_inputs is not None:
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    selection = PairedStrikeSelection(target_id, attack_id, damage_type, nonlethal)
+                    if action_id == "exacting_strike":
+                        _run_command(game, ExactingStrike(target_id, attack_id, damage_type, nonlethal), output_fn)
+                    elif action_id == "double_slice":
+                        _run_command(game, DoubleSlice(selection), output_fn)
+                    elif action_id == "twin_takedown":
+                        _run_command(game, TwinTakedown(selection), output_fn)
+                    else:
+                        _run_command(game, TwinFeint(selection), output_fn)
             elif action_id == "sudden_charge":
                 try:
                     first_raw = _read_line(
@@ -2732,6 +2780,8 @@ def run_terminal(
                 _run_command(game, CraneStance(), output_fn)
             elif action_id == "dismiss_crane_stance":
                 _run_command(game, DismissCraneStance(), output_fn)
+            elif action_id == "point_blank_stance":
+                _run_command(game, PointBlankStance(), output_fn)
             elif action_id == "flurry_of_blows":
                 strike_inputs = _choose_strike_inputs(
                     tuple(
@@ -3152,6 +3202,13 @@ def run_terminal(
                 from pf2e.widen_spell_terminal import command as widen_spell_command
 
                 _run_command(game, widen_spell_command(), output_fn)
+            elif action_id == "energy_ablation":
+                energy_types = ("acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void")
+                selected = _choose_index("Energy type number:", energy_types, input_fn, output_fn)
+                if selected is not None:
+                    _run_command(game, EnergyAblation(energy_types[selected]), output_fn)
+            elif action_id == "cackle":
+                _run_command(game, Cackle(), output_fn)
             elif action_id == "end_turn":
                 _run_command(game, EndTurn(), output_fn)
             elif action_id == "refocus":

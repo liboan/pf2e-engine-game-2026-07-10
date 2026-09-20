@@ -32,11 +32,22 @@ from .model import (
     Position,
     ReachSpell,
     WidenSpell,
+    EnergyAblation,
+    ActiveSpellEffect,
 )
 from .spellshape import clear_pending_spellshape, has_pending_spellshape
 from .spells import SPELLS, spell_traits, telekinetic_projectile_object_profile
 from .space import grid_distance_feet, in_bounds
 from .widen_spell import widened_cone_length
+
+
+# Energy Ablation keys off an actual damage packet, not merely a spell trait:
+# Shield carries the force trait but deals no damage. Keep this finite list
+# aligned with the admitted rank-one resolution paths.
+_ENERGY_ABLATION_DAMAGE_SPELLS = frozenset({
+    "force_bolt", "force_barrage", "breathe_fire", "caustic_blast", "electric_arc",
+    "ignition", "frostbite", "void_warp", "vitality_lash", "tempest_surge", "harm",
+})
 
 
 def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedureResult:
@@ -73,6 +84,12 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     forbidding_ward = spell.spell_id == "forbidding_ward"
     detect_magic = spell.spell_id == "detect_magic"
     sigil = spell.spell_id == "sigil"
+    weapon_surge = spell.spell_id == "weapon_surge"
+    energy_ablation_type = context.actor.energy_ablation_pending
+    energy_ablation_qualifies = spell.spell_id in _ENERGY_ABLATION_DAMAGE_SPELLS
+    if energy_ablation_type is not None:
+        if energy_ablation_type not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}:
+            return FamilyProcedureResult(rejection="Energy Ablation has an invalid energy choice.")
     if spell.spell_id == "counter_performance":
         return FamilyProcedureResult(
             rejection="Counter Performance is available only as its saved reaction to an auditory or visual effect."
@@ -91,6 +108,24 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             return FamilyProcedureResult(rejection="Sigil may be placed visible or invisible.")
     elif command.spell_mode is not None:
         return FamilyProcedureResult(rejection=f"{spell.name} has no selectable spell mode.")
+    if weapon_surge:
+        if command.target_id is not None or command.target_ids is not None:
+            return FamilyProcedureResult(rejection="Weapon Surge targets one held weapon, not a creature.")
+        selected_item = command.item_id
+        if selected_item is None:
+            selected_item = next(
+                (attack.item_id for attack in context.definition.attacks
+                 if attack.item_id in context.actor.held_items),
+                None,
+            )
+        if selected_item is None or selected_item not in context.actor.held_items:
+            return FamilyProcedureResult(rejection="Weapon Surge requires one held weapon.")
+        command = Cast(
+            spell_id=command.spell_id, target_id=command.target_id, actions=command.actions,
+            slot_id=command.slot_id, item_id=selected_item, target_ids=command.target_ids,
+            include_self=command.include_self, area_direction=command.area_direction,
+            spell_mode=command.spell_mode, use_arcane_bond=command.use_arcane_bond,
+        )
     if spell.unavailable_reason:
         return FamilyProcedureResult(rejection=spell.unavailable_reason)
     if life_link and context.encounter._active_life_link(context.state, context.actor) is not None:
@@ -541,7 +576,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             or grid_distance_feet(context.actor.position, item_positions[0]) > (reach_spell_effective_range_ft or 30)
         ):
             return FamilyProcedureResult(rejection="Telekinetic Projectile requires a supported loose unattended object of at most 1 Bulk within 30 feet.")
-    if not electric_arc and not gale_blast and not shield and not breathe_fire and not force_barrage and not forbidding_ward and not detect_magic and not sigil and not runic_weapon and not light and not courageous_anthem and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
+    if not electric_arc and not gale_blast and not shield and not breathe_fire and not force_barrage and not forbidding_ward and not detect_magic and not sigil and not runic_weapon and not light and not courageous_anthem and not weapon_surge and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
         if (
             command.target_id is not None
             and spell.spell_id in {"divine_lance", "void_warp"}
@@ -615,6 +650,19 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     # mode receives a durable committed range on its continuation.
     if reach_spell_ready or widen_spell_ready:
         clear_pending_spellshape(context.actor)
+    elif energy_ablation_type is not None:
+        context.actor.energy_ablation_pending = None
+        if energy_ablation_qualifies:
+            start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+            context.state.active_effects.append(ActiveSpellEffect(
+                effect_id=f"energy_ablation:{context.actor.actor_id}:{energy_ablation_type}:{context.state.next_choice_id}",
+                kind="energy_ablation",
+                source_actor_id=context.actor.actor_id,
+                target_actor_id=context.actor.actor_id,
+                value=1,
+                expires_at_source_start=start + 2,
+                expires_at_world_time=context.state.world_time_seconds + 12,
+            ))
     if command.use_arcane_bond:
         context.actor.arcane_bond_recast_until_start = 0
         context.actor.arcane_bond_eligible_slots.discard(permission.selection.resource_id or "")
@@ -642,7 +690,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         sorcerous_potency=1 if source_kind == "spontaneous" and spell.spell_id == "heal" else 0,
         movement_kind="manipulate" if "manipulate" in traits else None,
         must_disrupt_on_critical="manipulate" in traits,
-        spell_target_item_id=command.item_id if runic_weapon or telekinetic_projectile or sigil else None,
+        spell_target_item_id=command.item_id if runic_weapon or telekinetic_projectile or sigil or weapon_surge else None,
         spell_target_wielder_id=(target_facts[1] if target_facts is not None else None),
         light_point=command.point if light else None,
         light_color=(command.color.strip() if isinstance(command.color, str) else "white") if light else None,
@@ -719,8 +767,33 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
         return _begin_reach_spell(context)
     if isinstance(command, WidenSpell):
         return _begin_widen_spell(context)
+    if isinstance(command, EnergyAblation):
+        return _begin_energy_ablation(context, command)
     from . import wizard
     return wizard.handle_action(context)
+
+
+def _begin_energy_ablation(context: FamilyProcedureContext, command: EnergyAblation) -> FamilyProcedureResult:
+    actor = context.actor
+    if context.state.pending_choice is not None:
+        return FamilyProcedureResult(rejection="A pending choice must be resolved before Energy Ablation.")
+    if "energy_ablation" not in context.definition.abilities or "Energy Ablation" not in context.definition.feats:
+        return FamilyProcedureResult(rejection=f"{actor.label} has no admitted Energy Ablation feat.")
+    if command.energy_type not in {"acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void"}:
+        return FamilyProcedureResult(rejection="Energy Ablation requires one supported energy type.")
+    if has_pending_spellshape(actor):
+        return FamilyProcedureResult(rejection="A spellshape is already waiting for the next eligible cast.")
+    if actor.actions_remaining < 1:
+        return FamilyProcedureResult(rejection="Energy Ablation requires 1 action.")
+    context.encounter._require_action_permitted(
+        context.state, actor, "energy_ablation", frozenset({"spellshape"})
+    )
+    actor.actions_remaining -= 1
+    actor.energy_ablation_pending = command.energy_type
+    return FamilyProcedureResult((Event(
+        "energy_ablation_ready", actor.actor_id, None,
+        f"{actor.label} shapes the next qualifying spell against {command.energy_type} energy.",
+    ),))
 
 
 def _begin_reach_spell(context: FamilyProcedureContext) -> FamilyProcedureResult:

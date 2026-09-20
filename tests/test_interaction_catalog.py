@@ -47,12 +47,14 @@ from pf2e.content import (
     L2_MARTIAL_SETUPS,
     L2_DIVINE_DEFINITIONS,
     L2_DIVINE_SETUPS,
+    W4_DEFENSIVE_SETUPS,
     BOMBER_ALCHEMIST_LEVEL_2,
     BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_SETUP,
+    W4_OFFENSIVE_SETUPS,
     get_setup,
 )
 from pf2e.investigator_content import INVESTIGATOR_SETUPS
@@ -72,6 +74,8 @@ from pf2e.l2_ranger_content import (
 from pf2e.l2_prepared_content import L2_PREPARED_SETUPS
 from pf2e.l2_reach_content import L2_REACH_DEFINITIONS, L2_REACH_SETUPS
 from pf2e.w3_caster_content import W3_CASTER_SETUPS
+from pf2e.w4_caster_content import build_w4_caster_content
+from pf2e.content import WARPRIEST_C
 import pf2e.terminal as terminal
 
 
@@ -123,6 +127,9 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     l2_ranger_ids = {RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id}
     l2_reach_ids = {setup.setup_id for setup in L2_REACH_SETUPS}
     w3_caster_ids = {setup.setup_id for setup in W3_CASTER_SETUPS}
+    _w4_definitions, w4_caster_setups = build_w4_caster_content(WARPRIEST_C)
+    w4_caster_ids = {setup.setup_id for setup in w4_caster_setups}
+    w4_offensive_ids = {setup.setup_id for setup in W4_OFFENSIVE_SETUPS}
     l2_expanded_ids = set(L2_MARTIAL_SETUPS) | {setup.setup_id for setup in L2_PREPARED_SETUPS}
     content_w1_spell_ids = {
         BATTLE_MAGIC_WIZARD_DAZE_SETUP.setup_id,
@@ -156,7 +163,8 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert (
         s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids
             | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
-            | w3_caster_ids | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
+            | w3_caster_ids | w4_caster_ids | w4_offensive_ids | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
+            | {setup.setup_id for setup in W4_DEFENSIVE_SETUPS}
         ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):
