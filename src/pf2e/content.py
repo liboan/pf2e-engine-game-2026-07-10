@@ -107,6 +107,7 @@ from .l2_prepared_content import L2_PREPARED_DEFINITIONS, L2_PREPARED_SETUPS
 from .l2_divine_content import build_l2_divine_content
 from .w3_caster_content import W3_CASTER_DEFINITIONS, W3_CASTER_SETUPS
 from .w4_caster_content import build_w4_caster_content
+from .w4_defensive_content import build_w4_defensive_content
 
 
 # The Witch's L2 class-local sheet is deliberately held in staging until its
@@ -899,6 +900,13 @@ L2_DIVINE_DEFINITIONS, L2_DIVINE_SETUPS = build_l2_divine_content(
     oracle=LIFE_ORACLE,
     enemy_definition_id=GUARD_DOG.definition_id,
 )
+W4_DEFENSIVE_DEFINITIONS, W4_DEFENSIVE_SETUPS = build_w4_defensive_content(
+    fighter=MELEE_FIGHTER_M,
+    shield_fighter=STEEL_SHIELD_FIGHTER_M,
+    ranged_fighter=SHORTBOW_FIGHTER_R,
+    rogue=ROGUE_THIEF_PLAYABLE,
+    enemy_id=GUARD_DOG.definition_id,
+)
 
 # The finite L2 Bomber keeps the admitted field pair and Quick Bomber from
 # the level-one sheet, adds exactly the two source-selected common formulas,
@@ -1102,6 +1110,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         **W4_CASTER_DEFINITION_MAP,
         **L2_MARTIAL_DEFINITIONS,
         **L2_DIVINE_DEFINITIONS,
+        **{definition.definition_id: definition for definition in W4_DEFENSIVE_DEFINITIONS},
         **{
             definition.definition_id: definition
             for definition in L2_PREPARED_DEFINITIONS
@@ -1513,6 +1522,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         **{setup.setup_id: setup for setup in W4_CASTER_SETUPS},
         **L2_MARTIAL_SETUPS,
         **L2_DIVINE_SETUPS,
+        **{setup.setup_id: setup for setup in W4_DEFENSIVE_SETUPS},
         **{
             setup.setup_id: setup
             for setup in L2_PREPARED_SETUPS

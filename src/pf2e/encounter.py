@@ -1116,6 +1116,52 @@ class Encounter:
             ):
                 raise ValueError("save has an unavailable or inconsistent Nimble Dodge choice")
             return
+        if pending.kind == "youre_next":
+            actor = state.creatures.get(pending.actor_id or "")
+            definition = get_definition(actor.definition_id) if actor is not None else None
+            expected = tuple(
+                candidate.actor_id
+                for candidate in sorted(state.creatures.values(), key=lambda item: item.actor_id)
+                if actor is not None
+                and candidate.team != actor.team
+                and not candidate.defeated and not candidate.unconscious and not candidate.dead
+                and grid_distance_feet(actor.position, candidate.position) <= 60
+            )
+            expected_options = tuple(
+                [ChoiceOption(f"target:{target_id}", f"Demoralize {state.creatures[target_id].label} (+2)") for target_id in expected]
+                + [ChoiceOption("decline", "Decline")]
+            )
+            if (
+                actor is None or definition is None
+                or pending.owner_actor_id != actor.actor_id
+                or "You're Next" not in definition.feats
+                or not actor.reaction_available
+                or not expected
+                or pending.target_ids != expected
+                or pending.options != expected_options
+            ):
+                raise ValueError("save has an unavailable or inconsistent You're Next choice")
+            return
+        if pending.kind == "reactive_shield":
+            continuation = pending.continuation
+            attacker = state.creatures.get(pending.actor_id or "")
+            target = state.creatures.get(pending.target_id or "")
+            attack = self._find_attack(state, attacker, pending.attack_id) if attacker is not None else None
+            if (
+                continuation is None or attacker is None or target is None or attack is None
+                or pending.owner_actor_id != target.actor_id
+                or continuation.actor_id != attacker.actor_id
+                or continuation.target_id != target.actor_id
+                or continuation.kind not in {"strike", "reaction_strike"}
+                or "melee" not in attack.traits or "ranged" in attack.traits
+                or not self._reactive_shield_available(state, attacker, target)
+                or pending.options != (
+                    ChoiceOption("use", "Use Reactive Shield (+2 AC)"),
+                    ChoiceOption("decline", "Decline"),
+                )
+            ):
+                raise ValueError("save has an unavailable or inconsistent Reactive Shield choice")
+            return
         if pending.kind == "concealment_hero_reroll":
             self._validate_concealment_pending(state, pending)
             return
@@ -2032,6 +2078,18 @@ class Encounter:
                 "Hunter's Aim",
             ))
         expected_modifiers = (*expected_modifiers, *self._strike_condition_modifiers(state, actor, attack), *self._mutagen_modifiers(state, actor, "attack", attack_traits=attack.traits))
+        from .skill_actions import overextending_feint_penalty
+
+        saved_overextending_penalty = overextending_feint_penalty(
+            tuple(state.overextending_feint_effects),
+            attacker_id=actor.actor_id,
+            target_id=target.actor_id,
+            actor_end_counts=state.actor_end_counts,
+        )
+        if saved_overextending_penalty:
+            expected_modifiers = (*expected_modifiers, Modifier(
+                saved_overextending_penalty, "circumstance", "Overextending Feint"
+            ))
         if check.modifier_breakdown != expected_modifiers or check.modifier != combine_modifiers(expected_modifiers):
             raise ValueError("save has a pending check with inconsistent Strike modifiers")
         if (
@@ -4249,6 +4307,7 @@ class Encounter:
             and self._action_permitted(state, actor, "cackle", frozenset({"auditory", "concentrate"}))
         )
         from .martial_defense import crane_stance_is_active, dueling_parry_requirements_met
+        from .martial_defense import point_blank_stance_is_active
 
         can_dueling_parry = (
             can_act and actions >= 1 and not actor.must_leave_occupied
@@ -4266,6 +4325,15 @@ class Encounter:
             and self._action_permitted(state, actor, "crane_stance", frozenset({"stance"}))
         )
         can_dismiss_crane_stance = crane_stance_is_active(state, actor.actor_id)
+        can_point_blank_stance = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "point_blank_stance" in definition.abilities
+            and not point_blank_stance_is_active(state, actor.actor_id)
+            and state.martial_stances.get(actor.actor_id) is None
+            and state.martial_stance_used_rounds.get(actor.actor_id) != state.round_number
+            and any("ranged" in attack.traits and attack.item_id in actor.held_items for attack in definition.attacks)
+            and self._action_permitted(state, actor, "point_blank_stance", frozenset({"stance"}))
+        )
         can_arcane_bond = (
             can_act
             and "arcane_bond" in definition.abilities
@@ -4445,6 +4513,7 @@ class Encounter:
             can_dueling_parry = False
             can_crane_stance = False
             can_dismiss_crane_stance = False
+            can_point_blank_stance = False
             can_stand = False
             can_crawl = False
             can_release = False
@@ -4489,6 +4558,7 @@ class Encounter:
                 ("dueling_parry", can_dueling_parry),
                 ("crane_stance", can_crane_stance),
                 ("dismiss_crane_stance", can_dismiss_crane_stance),
+                ("point_blank_stance", can_point_blank_stance),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
                 ("hunted_shot", can_hunted_shot),
@@ -6251,6 +6321,29 @@ class Encounter:
                 actor.actor_id,
                 f"{target.label} may use Nimble Dodge before {actor.label}'s attack roll.",
             )]
+        if (
+            not context.reactive_shield_decided
+            and "melee" in attack.traits
+            and "ranged" not in attack.traits
+            and self._reactive_shield_available(state, actor, target)
+        ):
+            context.parent_continuation = parent
+            self._present_reactive_shield(state, actor, target, context)
+            return [Event(
+                "reactive_shield_choice",
+                target.actor_id,
+                actor.actor_id,
+                f"{target.label} may use Reactive Shield before {actor.label}'s melee attack roll.",
+            )]
+        if context.overextending_feint_penalty == 0:
+            from .skill_actions import overextending_feint_penalty
+
+            context.overextending_feint_penalty = overextending_feint_penalty(
+                tuple(state.overextending_feint_effects),
+                attacker_id=actor.actor_id,
+                target_id=target.actor_id,
+                actor_end_counts=state.actor_end_counts,
+            )
         stratagem_roll = consume_stratagem(
             actor,
             target_id=target.actor_id,
@@ -6308,6 +6401,12 @@ class Encounter:
             modifiers = (*modifiers, weakness_bonus)
         if context.sure_strike_used:
             modifiers = self._sure_strike_attack_modifiers(modifiers)
+        if context.overextending_feint_penalty:
+            modifiers = (*modifiers, Modifier(
+                context.overextending_feint_penalty,
+                "circumstance",
+                "Overextending Feint",
+            ))
         modifier = combine_modifiers(modifiers)
         dc = self._attack_dc(
             state, actor, target, attack,
@@ -6380,6 +6479,15 @@ class Encounter:
                 ),
             )
             return [self._attack_event(actor, target, check)]
+        if context.overextending_feint_penalty:
+            from .skill_actions import consume_overextending_feint_on_attack
+
+            state.overextending_feint_effects = list(consume_overextending_feint_on_attack(
+                tuple(state.overextending_feint_effects),
+                attacker_id=actor.actor_id,
+                target_id=target.actor_id,
+                actor_end_counts=state.actor_end_counts,
+            ))
         return self._resolve_attack_result(
             state, dice, actor, target, attack, check,
             damage_type=context.damage_type or attack.damage_type,
@@ -6878,6 +6986,11 @@ class Encounter:
         weapon_surge=False,
     ):
         modifier = self._damage_modifier(state, actor, attack)
+        from .martial_defense import point_blank_stance_damage_bonus
+
+        modifier += point_blank_stance_damage_bonus(
+            state, actor, state.creatures[target_id], attack
+        )
         weapon_dice = attack.damage_dice
         rune_profile = self._weapon_rune_profile_for_attack(
             state, actor, attack, item_id=item_id
@@ -7854,6 +7967,13 @@ class Encounter:
                     state, dice, resolution, attacker, target, bomb_facts,
                     only_primary_splash=resolution.bomber_only_primary_splash,
                 ))
+        if (
+            outcome.defeated
+            and resolution.continuation is None
+            and not resolution.is_reaction
+            and self._present_youre_next(state, attacker, target)
+        ):
+            return events
         self._finish_if_team_defeated(state)
         # Commit the shared Flurry defense ledger only after this damage event
         # has cleared its own Shield Block/Hero/Justice continuations.  A
@@ -7912,6 +8032,55 @@ class Encounter:
                 events.extend(self._end_turn(state, attacker, early=False, dice=dice))
         elif resumed and resolution.complete_family_action_on_resume:
             events = self._complete_action(state, attacker, events, dice=dice)
+        return events
+
+    def _present_youre_next(self, state, attacker, defeated_target) -> bool:
+        """Offer the finite post-defeat reaction before the attack completes."""
+
+        definition = get_definition(attacker.definition_id)
+        if (
+            "You're Next" not in definition.feats
+            or not attacker.reaction_available
+            or attacker.unconscious
+            or attacker.dead
+        ):
+            return False
+        target_ids = tuple(
+            candidate.actor_id
+            for candidate in sorted(state.creatures.values(), key=lambda item: item.actor_id)
+            if candidate.team != attacker.team
+            and candidate.actor_id != defeated_target.actor_id
+            and not candidate.defeated
+            and not candidate.unconscious
+            and not candidate.dead
+            and grid_distance_feet(attacker.position, candidate.position) <= 60
+        )
+        if not target_ids:
+            return False
+        self._set_pending(
+            state,
+            kind="youre_next",
+            owner_actor_id=attacker.actor_id,
+            prompt=f"{attacker.label} may use You're Next after defeating {defeated_target.label}.",
+            options=tuple(
+                [ChoiceOption(f"target:{target_id}", f"Demoralize {state.creatures[target_id].label} (+2)") for target_id in target_ids]
+                + [ChoiceOption("decline", "Decline")]
+            ),
+            details=("Reaction; choose an enemy within 60 feet for a Demoralize attempt with a +2 circumstance bonus.",),
+            actor_id=attacker.actor_id,
+            target_ids=target_ids,
+        )
+        return True
+
+    def _finish_after_youre_next(self, state, dice, attacker, events):
+        self._finish_if_team_defeated(state)
+        if (
+            state.in_progress
+            and attacker.actions_remaining == 0
+            and state.pending_choice is None
+            and not self._free_devise_target_ids(state, attacker)
+        ):
+            events.extend(self._end_turn(state, attacker, early=False, dice=dice))
         return events
 
     @staticmethod
@@ -8585,6 +8754,18 @@ class Encounter:
         )
         return modifier is not None and not target.unconscious and not target.dead
 
+    def _reactive_shield_available(self, state, attacker, target) -> bool:
+        definition = get_definition(target.definition_id)
+        return (
+            ("Reactive Shield" in definition.feats or "reactive_shield" in definition.abilities)
+            and target.reaction_available
+            and not target.unconscious
+            and not target.dead
+            and self._held_shield_instance(state, target) is not None
+            and not attacker.unconscious
+            and not attacker.dead
+        )
+
     def _present_nimble_dodge(self, state, attacker, target, continuation) -> None:
         continuation.nimble_dodge_decided = False
         self._set_pending(
@@ -8599,6 +8780,38 @@ class Encounter:
             details=(
                 f"{attacker.label} is visible and targets {target.label}; +2 circumstance AC against this attack only.",
                 "Using Nimble Dodge spends the Rogue's shared reaction.",
+            ),
+            actor_id=attacker.actor_id,
+            target_id=target.actor_id,
+            attack_id=continuation.attack_id,
+            attack_penalty=continuation.attack_penalty,
+            attack_count=continuation.attack_count,
+            damage_type=continuation.damage_type,
+            nonlethal=continuation.nonlethal,
+            attack_actions_cost=continuation.attack_actions_cost,
+            attack_count_cost=continuation.attack_count_cost,
+            ranged_penalty=continuation.ranged_penalty,
+            feint_off_guard_applied=continuation.feint_off_guard_applied,
+            attack_target_off_guard=continuation.attack_target_off_guard,
+            nimble_dodge_used=continuation.nimble_dodge_used,
+            is_reaction=continuation.kind == "reaction_strike",
+            continuation=continuation,
+        )
+
+    def _present_reactive_shield(self, state, attacker, target, continuation) -> None:
+        continuation.reactive_shield_decided = False
+        self._set_pending(
+            state,
+            kind="reactive_shield",
+            owner_actor_id=target.actor_id,
+            prompt=f"{target.label} may use Reactive Shield before {attacker.label}'s melee attack roll.",
+            options=(
+                ChoiceOption("use", "Use Reactive Shield (+2 AC)"),
+                ChoiceOption("decline", "Decline"),
+            ),
+            details=(
+                f"Raise the held shield immediately; its +2 circumstance AC applies to the triggering attack.",
+                "Using Reactive Shield spends the target's shared reaction.",
             ),
             actor_id=attacker.actor_id,
             target_id=target.actor_id,
@@ -14285,7 +14498,7 @@ class Encounter:
             actor.stunned_until_start = 0
             actor.stunned_source_actor_id = None
         abilities = set(get_definition(actor.definition_id).abilities)
-        actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & abilities) or "Nimble Dodge" in get_definition(actor.definition_id).feats or "investigator_on_the_case" in abilities
+        actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & abilities) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(get_definition(actor.definition_id).feats)) or "investigator_on_the_case" in abilities
         commanded = next((effect for effect in state.condition_effects if effect.kind == "commanded" and effect.target_actor_id == actor.actor_id), None)
         if commanded is not None:
             actor.actions_remaining = max(0, actor.actions_remaining - commanded.value)
@@ -15224,7 +15437,7 @@ class Encounter:
                 )]
             actor.actions_remaining = 3
             abilities = set(get_definition(actor.definition_id).abilities)
-            actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & abilities) or "Nimble Dodge" in get_definition(actor.definition_id).feats or "investigator_on_the_case" in abilities
+            actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & abilities) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(get_definition(actor.definition_id).feats)) or "investigator_on_the_case" in abilities
             events.append(Event("turn_started", actor.actor_id, None, f"{actor.label} regains 3 actions and 1 reaction."))
             return events
 
@@ -15360,6 +15573,89 @@ class Encounter:
                     state, dice, attacker, target, attack, continuation,
                     parent=continuation.parent_continuation,
                 )]
+            return events
+
+        if pending.kind == "youre_next":
+            attacker = state.creatures.get(pending.actor_id or "")
+            if attacker is None or pending.owner_actor_id != attacker.actor_id:
+                raise _Rejected("The pending You're Next choice is incomplete.")
+            state.pending_choice = pending
+            try:
+                self._validate_pending_context()
+            except ValueError as error:
+                raise _Rejected("You're Next is no longer available.") from error
+            finally:
+                state.pending_choice = None
+            if command.option_id == "decline":
+                return self._finish_after_youre_next(
+                    state, dice, attacker,
+                    [Event("youre_next_declined", attacker.actor_id, None, f"{attacker.label} declines You're Next.")],
+                )
+            if not command.option_id.startswith("target:"):
+                raise _Rejected("Choose an eligible You're Next target or decline.")
+            target_id = command.option_id.removeprefix("target:")
+            if target_id not in pending.target_ids:
+                raise _Rejected("That You're Next target is no longer eligible.")
+            attacker.reaction_available = False
+            from .skill_actions import Demoralize
+
+            events = [Event(
+                "youre_next_used", attacker.actor_id, target_id,
+                f"{attacker.label} uses You're Next against {state.creatures[target_id].label}; the Demoralize gains +2 circumstance.",
+            )]
+            events.extend(self._run_family_action(
+                state, dice, attacker,
+                Demoralize(target_id=target_id, youre_next_reaction=True),
+            ))
+            if state.pending_choice is not None:
+                raise _Rejected("You're Next must resolve its bounded Demoralize check without another choice.")
+            return self._finish_after_youre_next(state, dice, attacker, events)
+
+        if pending.kind == "reactive_shield":
+            target = state.creatures.get(pending.target_id or "")
+            attacker = state.creatures.get(pending.actor_id or "")
+            continuation = pending.continuation
+            if target is None or attacker is None or continuation is None:
+                raise _Rejected("The pending Reactive Shield choice is incomplete.")
+            attack = self._find_attack(state, attacker, continuation.attack_id)
+            if (
+                target.actor_id != pending.owner_actor_id
+                or attack is None
+                or "melee" not in attack.traits
+                or "ranged" in attack.traits
+                or not self._reactive_shield_available(state, attacker, target)
+            ):
+                raise _Rejected("Reactive Shield is no longer available.")
+            continuation.reactive_shield_decided = True
+            if command.option_id == "use":
+                target.reaction_available = False
+                clear_pending_spellshape(target)
+                shield = self._held_shield_instance(state, target)
+                if shield is None:
+                    raise _Rejected("Reactive Shield requires the same intact held shield.")
+                state.raised_shields[target.actor_id] = RaisedShieldState(
+                    shield.instance_id,
+                    state.actor_start_counts.get(target.actor_id, 0) + 1,
+                )
+                event = Event(
+                    "reactive_shield_used",
+                    target.actor_id,
+                    attacker.actor_id,
+                    f"{target.label} uses Reactive Shield; the shield's +2 circumstance AC applies to this attack.",
+                )
+            elif command.option_id == "decline":
+                event = Event(
+                    "reactive_shield_declined",
+                    target.actor_id,
+                    attacker.actor_id,
+                    f"{target.label} declines Reactive Shield; the reaction remains available.",
+                )
+            else:
+                raise _Rejected("Choose whether to use Reactive Shield.")
+            events = [event, *self._roll_strike(
+                state, dice, attacker, target, attack, continuation,
+                parent=continuation.parent_continuation,
+            )]
             return events
 
         if pending.kind == "concealment_hero_reroll":
@@ -16104,10 +16400,18 @@ class Encounter:
                         pending.continuation is not None
                         and pending.continuation.hunter_aim_intent is not None
                     )
-                    else pending.continuation
+            else pending.continuation
                 ),
                 item_id=pending.item_id,
                 bomber_only_primary_splash=pending.damage_context == "bomber_only_primary",
+            ))
+            from .skill_actions import consume_overextending_feint_on_attack
+
+            state.overextending_feint_effects = list(consume_overextending_feint_on_attack(
+                tuple(state.overextending_feint_effects),
+                attacker_id=actor.actor_id,
+                target_id=target.actor_id,
+                actor_end_counts=state.actor_end_counts,
             ))
             return events
 
@@ -16236,7 +16540,7 @@ class Encounter:
             else:
                 actor.actions_remaining = 3
                 definition = get_definition(actor.definition_id)
-                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & set(definition.abilities)) or "Nimble Dodge" in definition.feats or "investigator_on_the_case" in definition.abilities
+                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & set(definition.abilities)) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(definition.feats)) or "investigator_on_the_case" in definition.abilities
                 events.append(Event("turn_started", actor.actor_id, None, f"{actor.label} regains 3 actions and 1 reaction."))
             return events
 
@@ -16264,7 +16568,7 @@ class Encounter:
             else:
                 actor.actions_remaining = 3
                 definition = get_definition(actor.definition_id)
-                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & set(definition.abilities)) or "Nimble Dodge" in definition.feats or "investigator_on_the_case" in definition.abilities
+                actor.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & set(definition.abilities)) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(definition.feats)) or "investigator_on_the_case" in definition.abilities
                 events.append(Event("turn_started", actor.actor_id, None, f"{actor.label} regains 3 actions and 1 reaction."))
             return events
 
@@ -16587,7 +16891,7 @@ class Encounter:
             for creature in state.creatures.values():
                 if not creature.defeated:
                     definition = get_definition(creature.definition_id)
-                    creature.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape"} & set(definition.abilities)) or "Nimble Dodge" in definition.feats or "investigator_on_the_case" in definition.abilities
+                    creature.reaction_available = bool({"reactive_strike", "shield_block", "shield_cantrip", "counter_performance", "no_escape", "reactive_shield"} & set(definition.abilities)) or bool({"Nimble Dodge", "Reactive Shield", "You're Next"} & set(definition.feats)) or "investigator_on_the_case" in definition.abilities
             active.actions_remaining = 3
 
     def _apply_initiative_tie_order(self, state, index: int) -> None:

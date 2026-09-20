@@ -1004,6 +1004,8 @@ class ActionContinuation:
     attack_target_off_guard: bool = False
     nimble_dodge_decided: bool = False
     nimble_dodge_used: bool = False
+    reactive_shield_decided: bool = False
+    overextending_feint_penalty: int = 0
     guidance_checked: bool = False
     # Divine Grace is an optional Champion reaction before a spell save.  Its
     # two markers distinguish declining the reaction from consuming it, so a
@@ -1441,6 +1443,7 @@ class EncounterState:
     actor_start_counts: dict[str, int] = field(default_factory=dict)
     actor_end_counts: dict[str, int] = field(default_factory=dict)
     feint_off_guard_effects: list["FeintOffGuardEffect"] = field(default_factory=list)
+    overextending_feint_effects: list["OverextendingFeintEffect"] = field(default_factory=list)
     # Tumble Behind is deliberately a distinct typed, attacker-relative
     # one-attack exposure; it does not reuse Feint's melee-only contract.
     tumble_behind_exposures: list["TumbleBehindExposure"] = field(default_factory=list)

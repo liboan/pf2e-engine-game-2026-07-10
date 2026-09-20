@@ -47,6 +47,7 @@ from pf2e.content import (
     L2_MARTIAL_SETUPS,
     L2_DIVINE_DEFINITIONS,
     L2_DIVINE_SETUPS,
+    W4_DEFENSIVE_SETUPS,
     BOMBER_ALCHEMIST_LEVEL_2,
     BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP,
@@ -163,6 +164,7 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
         s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids
             | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
             | w3_caster_ids | w4_caster_ids | w4_offensive_ids | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
+            | {setup.setup_id for setup in W4_DEFENSIVE_SETUPS}
         ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):

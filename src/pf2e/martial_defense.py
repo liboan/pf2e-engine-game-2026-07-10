@@ -6,6 +6,10 @@ Sources checked 2026-09-19:
   https://2e.aonprd.com/Feats.aspx?ID=4781
 * Crane Stance, Player Core 2 p. 118:
   https://2e.aonprd.com/Feats.aspx?ID=5976
+* Reactive Shield, Player Core p. 142:
+  https://2e.aonprd.com/Feats.aspx?ID=4772
+* Point Blank Stance, Player Core p. 141:
+  https://2e.aonprd.com/Feats.aspx?ID=4771
 
 They deliberately share only their AC-modifier projection.  Dueling Parry is
 a one-turn circumstance guard whose weapon/hand requirement remains live;
@@ -46,6 +50,13 @@ class CraneStance(FamilyCommand):
 @dataclass(frozen=True)
 class DismissCraneStance(FamilyCommand):
     """Dismiss Crane Stance as its explicit free action."""
+
+    family_id = "martial"
+
+
+@dataclass(frozen=True)
+class PointBlankStance(FamilyCommand):
+    """Enter the Fighter's shortbow stance."""
 
     family_id = "martial"
 
@@ -111,6 +122,32 @@ def crane_stance_leap_bonus(state, actor_id: str) -> int:
     """Return Crane Stance's printed horizontal Leap increase, if active."""
 
     return 5 if crane_stance_is_active(state, actor_id) else 0
+
+
+def point_blank_stance_is_active(state, actor_id: str) -> bool:
+    stance = state.martial_stances.get(actor_id)
+    return stance is not None and stance.stance_id == "point_blank_stance"
+
+
+def point_blank_stance_damage_bonus(state, actor, target, attack) -> int:
+    """Return the fixed first-range-increment bonus for a legal attack."""
+
+    from .content import get_definition
+
+    definition = get_definition(actor.definition_id)
+    if (
+        not point_blank_stance_is_active(state, actor.actor_id)
+        or "Point Blank Stance" not in definition.feats
+        or "ranged" not in attack.traits
+        or "volley" in attack.traits
+        or attack.range_increment_ft is None
+    ):
+        return 0
+    distance = max(
+        abs(actor.position.x - target.position.x),
+        abs(actor.position.y - target.position.y),
+    ) * 5
+    return 2 if distance <= attack.range_increment_ft else 0
 
 
 def end_dueling_parries_with_broken_requirements(state) -> None:
@@ -206,6 +243,28 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | No
         return FamilyProcedureResult(events=(Event(
             "crane_stance_dismissed", context.actor.actor_id, context.actor.actor_id,
             f"{context.actor.label} dismisses Crane Stance.",
+        ),))
+    if isinstance(command, PointBlankStance):
+        if "point_blank_stance" not in context.definition.abilities:
+            return FamilyProcedureResult(rejection="Point Blank Stance is not admitted for this creature.")
+        context.require_action_permitted("point_blank_stance", frozenset({"stance"}))
+        if context.state.martial_stances.get(context.actor.actor_id) is not None:
+            return FamilyProcedureResult(rejection="Dismiss the current stance before entering Point Blank Stance.")
+        if context.state.martial_stance_used_rounds.get(context.actor.actor_id) == context.state.round_number:
+            return FamilyProcedureResult(rejection="Only one stance action can be used each round.")
+        if not any(
+            "ranged" in attack.traits and attack.item_id in context.actor.held_items
+            for attack in context.definition.attacks
+        ):
+            return FamilyProcedureResult(rejection="Point Blank Stance requires a held ranged weapon.")
+        context.encounter._commit_family_action(context, actions=1)
+        context.state.martial_stances[context.actor.actor_id] = MartialStanceState(
+            "point_blank_stance", context.state.round_number,
+        )
+        context.state.martial_stance_used_rounds[context.actor.actor_id] = context.state.round_number
+        return FamilyProcedureResult(events=(Event(
+            "point_blank_stance", context.actor.actor_id, context.actor.actor_id,
+            f"{context.actor.label} enters Point Blank Stance; ranged attacks within the first range increment deal +2 circumstance damage.",
         ),))
     return None
 

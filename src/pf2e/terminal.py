@@ -63,6 +63,7 @@ _ACTION_LABELS = {
     "dueling_parry": "Dueling Parry",
     "crane_stance": "Crane Stance",
     "dismiss_crane_stance": "Dismiss Crane Stance",
+    "point_blank_stance": "Point Blank Stance",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
     "hunted_shot": "Hunted Shot",
@@ -1963,7 +1964,7 @@ def run_terminal(
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
     from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
     from pf2e.w4_offensive import DoubleSlice, ExactingStrike, TwinFeint, TwinTakedown
-    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry
+    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, PointBlankStance
 
     if input_fn is None:
         input_fn = input
@@ -2773,6 +2774,8 @@ def run_terminal(
                 _run_command(game, CraneStance(), output_fn)
             elif action_id == "dismiss_crane_stance":
                 _run_command(game, DismissCraneStance(), output_fn)
+            elif action_id == "point_blank_stance":
+                _run_command(game, PointBlankStance(), output_fn)
             elif action_id == "flurry_of_blows":
                 strike_inputs = _choose_strike_inputs(
                     tuple(
@@ -2969,9 +2972,21 @@ def run_terminal(
                     output_fn,
                 )
                 if target_id is not None:
+                    use_overextending = False
+                    acting_actor = next(
+                        (actor for actor in inspection.actors if actor.actor_id == engine_options.actor_id),
+                        None,
+                    )
+                    if acting_actor is not None and "Overextending Feint" in getattr(acting_actor, "feats", ()):
+                        answer = _read_line(
+                            "Use Overextending Feint? [y/N]:",
+                            input_fn,
+                            output_fn,
+                        ).strip().casefold()
+                        use_overextending = answer in {"y", "yes"}
                     _run_command(
                         game,
-                        Feint(target_id=target_id),
+                        Feint(target_id=target_id, use_overextending=use_overextending),
                         output_fn,
                     )
             elif action_id == "interact":
