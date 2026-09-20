@@ -2361,7 +2361,17 @@ def run_terminal(
                     item_id = held[item_index]
                     formula_id = game._state.infused_alchemy_items[item_id].formula_id
                     if formula_id in {"bestial_mutagen_lesser", "cognitive_mutagen_lesser", "juggernaut_mutagen_lesser", "giant_centipede_venom"}:
-                        _run_command(game, ActivateAlchemy(item_id), output_fn)
+                        temporary_hp_choice = None
+                        if formula_id == "juggernaut_mutagen_lesser" and actor.temporary_hp > 0:
+                            choice_index = _choose_index(
+                                "Juggernaut temporary-HP pool:",
+                                ("Keep existing temporary HP", "Gain Juggernaut's temporary HP"),
+                                input_fn, output_fn,
+                            )
+                            if choice_index is not None:
+                                temporary_hp_choice = ("keep_existing", "gain_new")[choice_index]
+                        if formula_id != "juggernaut_mutagen_lesser" or actor.temporary_hp == 0 or temporary_hp_choice is not None:
+                            _run_command(game, ActivateAlchemy(item_id, temporary_hp_choice=temporary_hp_choice), output_fn)
                     else:
                         recipient_id = _choose_target(
                             tuple(

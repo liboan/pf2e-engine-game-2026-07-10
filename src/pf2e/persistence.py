@@ -884,6 +884,27 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save changed infused item identity or quantity")
         item_instances[instance_id] = instance
 
+    saved_starts_for_initiative = data.get("actor_start_counts", {})
+    saved_effects_for_initiative = data.get("active_effects", [])
+
+    def saved_juggernaut_penalty(actor_id: str) -> int:
+        if not isinstance(saved_starts_for_initiative, dict) or not isinstance(saved_effects_for_initiative, list):
+            return 0
+        for row in saved_effects_for_initiative:
+            if (
+                isinstance(row, list)
+                and len(row) >= 7
+                and row[1] == "alchemy_juggernaut_mutagen_lesser"
+                and row[3] == actor_id
+                and isinstance(row[2], str)
+                and type(row[5]) is int
+                and row[5] > saved_starts_for_initiative.get(row[2], 0)
+                and type(row[6]) is int
+                and row[6] > world_time_seconds
+            ):
+                return 2
+        return 0
+
     creatures: dict[str, CreatureState] = {}
     for placement in setup.placements:
         actor_id = placement.actor_id
@@ -931,7 +952,7 @@ def _state_from_data(data: Any) -> EncounterState:
         if definition.initiative_exempt:
             if initiative != 0:
                 raise ValueError(f"saved familiar {actor_id!r} has an initiative")
-        elif not initiative_modifier + 1 <= initiative <= initiative_modifier + 20:
+        elif not initiative_modifier - saved_juggernaut_penalty(actor_id) + 1 <= initiative <= initiative_modifier + 20:
             raise ValueError(f"saved actor {actor_id!r} has invalid initiative")
         if not 0 <= actions_remaining <= 3 or strikes_this_turn < 0 or diagonals_this_turn < 0:
             raise ValueError(f"saved actor {actor_id!r} has invalid turn counters")

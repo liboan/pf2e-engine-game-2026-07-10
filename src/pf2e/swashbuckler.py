@@ -213,11 +213,12 @@ def confident_finisher_failure_damage(
 
 
 def effective_speed_ft(actor: CreatureState, definition: CreatureDefinition, conditions=()) -> int:
-    """Return land Speed after Panache, one status bonus, and penalties."""
+    """Return land Speed after same-type status bonuses and penalties."""
 
-    base = definition.land_speed_ft + (5 if is_swashbuckler(definition) and actor.panache else 0)
-    bonuses = [effect.value for effect in conditions if effect.kind == "speed_bonus"]
-    base += max(bonuses, default=0)
+    status_bonuses = [effect.value for effect in conditions if effect.kind == "speed_bonus"]
+    if is_swashbuckler(definition) and actor.panache:
+        status_bonuses.append(5)
+    base = definition.land_speed_ft + max(status_bonuses, default=0)
     penalties = [effect.value for effect in conditions if effect.kind == "speed_penalty"]
     return max(0, base - (max(penalties) if penalties else 0))
 

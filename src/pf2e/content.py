@@ -979,6 +979,16 @@ BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP = EncounterSetup(
         CreaturePlacement("dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(7, 1)),
     ),
 )
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP = EncounterSetup(
+    "l2_bomber_item_support_next_vs_guard_dog",
+    "Prepared Level 2 Item-Support Bomber versus Guard Dog",
+    15,
+    3,
+    (
+        CreaturePlacement("alchemist", BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id, "Level 2 Item-Support Bomber", "blue", Position(1, 1)),
+        CreaturePlacement("next_dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(7, 1)),
+    ),
+)
 
 
 CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
@@ -1439,6 +1449,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
         BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
         BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP,
+        BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP,
         **L2_HORIZONTAL_SETUPS,
         RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id: RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
         **{setup.setup_id: setup for setup in L2_REACH_SETUPS},

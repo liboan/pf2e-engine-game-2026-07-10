@@ -259,6 +259,10 @@ class ActivateAlchemy:
 
     item_id: str
     target_id: str | None = None
+    # Juggernaut Mutagen asks the recipient to choose between an existing
+    # temporary-HP pool and its new pool.  Keep this optional and appended so
+    # legacy command construction remains valid.
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)

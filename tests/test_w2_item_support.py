@@ -4,7 +4,7 @@ from pf2e.alchemist_content import BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
 from pf2e.alchemy_content import FORMULAS_BY_ID, ElixirFacts, MutagenFacts
 from pf2e.content import get_setup
 from pf2e.encounter import Encounter
-from pf2e.model import ActivateAlchemy, Choose, EndTurn, QuickAlchemy, ResultStatus
+from pf2e.model import ActiveSpellEffect, ActivateAlchemy, Choose, EndTurn, QuickAlchemy, ResultStatus
 from pf2e.terminal import build_action_menu
 
 
@@ -77,6 +77,89 @@ def test_juggernaut_grants_temporary_hp_and_printed_fortitude_bonus_then_cleans_
     assert {(modifier.amount, modifier.modifier_type) for modifier in modifiers} == {(1, "item")}
     will_modifiers = game._mutagen_modifiers(game._state, actor, "will")
     assert {(modifier.amount, modifier.modifier_type) for modifier in will_modifiers} == {(-2, "untyped")}
+
+
+def test_juggernaut_requires_explicit_temporary_hp_choice_before_consumption() -> None:
+    game = Encounter.start(
+        get_setup("l2_bomber_item_support_vs_guard_dog"),
+        rolls=(20, 1) * 8,
+    )
+    _settle(game)
+    _to_alchemist_turn(game)
+    actor = game._state.creatures["alchemist"]
+    actor.temporary_hp = 3
+    actor.temporary_hp_source_id = "existing:pool"
+    actor.temporary_hp_expires_at_seconds = 600
+    assert game.execute(QuickAlchemy("create_consumable", "juggernaut_mutagen_lesser")).status is ResultStatus.COMPLETED
+    actor = game._state.creatures["alchemist"]
+
+    item_id = "alchemist:quick:1"
+    rejected = game.execute(ActivateAlchemy(item_id, "alchemist"))
+    assert rejected.status is ResultStatus.REJECTED
+    assert item_id in actor.held_items
+    assert item_id not in game._state.consumed_infused_item_ids
+    assert actor.temporary_hp == 3
+
+    kept = game.execute(ActivateAlchemy(item_id, "alchemist", "keep_existing"))
+    assert kept.status is ResultStatus.COMPLETED
+    actor = game._state.creatures["alchemist"]
+    assert actor.temporary_hp == 3
+    assert actor.temporary_hp_source_id == "existing:pool"
+
+
+def test_juggernaut_gain_choice_replaces_even_a_larger_existing_pool() -> None:
+    game = Encounter.start(
+        get_setup("l2_bomber_item_support_vs_guard_dog"),
+        rolls=(20, 1) * 8,
+    )
+    _settle(game)
+    _to_alchemist_turn(game)
+    actor = game._state.creatures["alchemist"]
+    actor.temporary_hp = 8
+    actor.temporary_hp_source_id = "existing:pool"
+    actor.temporary_hp_expires_at_seconds = 600
+    assert game.execute(QuickAlchemy("create_consumable", "juggernaut_mutagen_lesser")).status is ResultStatus.COMPLETED
+    result = game.execute(ActivateAlchemy("alchemist:quick:1", "alchemist", "gain_new"))
+    assert result.status is ResultStatus.COMPLETED
+    actor = game._state.creatures["alchemist"]
+    assert actor.temporary_hp == 5
+    assert actor.temporary_hp_source_id == "alchemy:alchemist:quick:1"
+
+
+def test_w2_item_effects_carry_across_a_finished_scene_and_save_load(tmp_path) -> None:
+    game = _use_item("cheetahs_elixir_lesser")
+    game._state.creatures["dog"].hp = 0
+    game._state.in_progress = False
+    game._state.winner_team = "blue"
+
+    transitioned = game.next_encounter(get_setup("l2_bomber_item_support_next_vs_guard_dog"))
+    assert transitioned.status in {ResultStatus.COMPLETED, ResultStatus.PAUSED}
+    _settle(game)
+    assert game.effective_speed_ft("alchemist") == 35
+    assert any(effect.kind == "alchemy_cheetahs_elixir_lesser" for effect in game._state.active_effects)
+
+    path = tmp_path / "w2-next-scene.json"
+    game.save(path)
+    restored = Encounter.load(path)
+    assert restored.effective_speed_ft("alchemist") == 35
+    assert any(effect.kind == "alchemy_cheetahs_elixir_lesser" for effect in restored._state.active_effects)
+
+
+def test_cheetah_status_speed_bonus_does_not_stack_with_panache() -> None:
+    game = Encounter.start(
+        get_setup("staged_braggart_swashbuckler_vs_guard_dog"),
+        rolls=(20, 1) * 8,
+    )
+    actor = game._state.creatures["braggart"]
+    actor.panache = True
+    game._state.active_effects.append(
+        ActiveSpellEffect(
+            "test:cheetah", "alchemy_cheetahs_elixir_lesser", "braggart", "braggart", 5,
+            game._state.actor_start_counts["braggart"] + 1,
+            game._state.world_time_seconds + 60,
+        )
+    )
+    assert game.effective_speed_ft("braggart") == 30
 
 
 def test_bravos_brew_projects_normal_and_fear_will_bonus() -> None:
