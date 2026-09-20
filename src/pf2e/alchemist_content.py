@@ -6,34 +6,46 @@ from .alchemy_content import BombFacts, FORMULAS_BY_ID
 
 
 BOMBER_FIELD_FORMULA_IDS = ("bottled_lightning_lesser", "frost_vial_lesser")
+BOMBER_LEVEL_2_BOMB_FORMULA_IDS = ("alchemists_fire_lesser", "acid_flask_lesser")
+BOMBER_COMBAT_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, *BOMBER_LEVEL_2_BOMB_FORMULA_IDS)
 BOMBER_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, "elixir_of_life_minor", "antidote_lesser", "antiplague_lesser", "bestial_mutagen_lesser", "cognitive_mutagen_lesser", "giant_centipede_venom")
 
 
-def admitted_bomber_bomb_facts(formula_id: object) -> BombFacts | None:
-    """Return facts for the two authored Bomber field bombs only.
+def admitted_bomber_bomb_facts(formula_id: object, *, character_level: int = 1) -> BombFacts | None:
+    """Return facts for the finite Bomber bomb menu at a character level.
 
     The general catalog intentionally contains additional reference bombs.  A
-    combat caller must opt into this finite field pair before treating a
-    formula's catalog facts as an admitted thrown-bomb effect.
+    combat caller must opt into this finite menu before treating a formula's
+    catalog facts as an admitted thrown-bomb effect.  The two level-2 variants
+    are deliberately unavailable to the level-1 sheet.
     """
-    if not isinstance(formula_id, str) or formula_id not in BOMBER_FIELD_FORMULA_IDS:
+    if type(character_level) is not int or character_level not in {1, 2}:
+        return None
+    allowed = BOMBER_FIELD_FORMULA_IDS if character_level == 1 else BOMBER_COMBAT_FORMULA_IDS
+    if not isinstance(formula_id, str) or formula_id not in allowed:
         return None
     facts = FORMULAS_BY_ID[formula_id].facts
     return facts if isinstance(facts, BombFacts) else None
 
 
-def _bomber_bomb_attack(attack_id: str, name: str, formula_id: str) -> AttackDefinition:
-    facts = admitted_bomber_bomb_facts(formula_id)
+def _bomber_bomb_attack(attack_id: str, name: str, formula_id: str, *, modifier: int = 6, character_level: int = 1) -> AttackDefinition:
+    facts = admitted_bomber_bomb_facts(formula_id, character_level=character_level)
     if facts is None:  # The selected sheet and its finite field pair must agree.
         raise ValueError(f"Bomber attack {attack_id!r} lacks admitted bomb facts.")
     return AttackDefinition(
-        attack_id, name, 6, facts.range_increment_ft,
+        attack_id, name, modifier, facts.range_increment_ft,
         frozenset({"attack", "ranged", "thrown", "bomb", "splash"}),
         facts.damage_type, facts.initial_damage_dice, facts.initial_damage_flat,
         item_id=formula_id, attack_attribute="dexterity", damage_attribute=None,
         range_increment_ft=facts.range_increment_ft,
         max_range_ft=facts.range_increment_ft * 6, striking_applies=False,
     )
+
+
+BOMBER_LEVEL_2_BOMB_ATTACKS = (
+    _bomber_bomb_attack("alchemists_fire", "Alchemist's Fire", "alchemists_fire_lesser", modifier=7, character_level=2),
+    _bomber_bomb_attack("acid_flask", "Acid Flask", "acid_flask_lesser", modifier=7, character_level=2),
+)
 
 
 BOMBER_ALCHEMIST = CreatureDefinition(

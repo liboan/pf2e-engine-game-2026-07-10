@@ -161,6 +161,7 @@ from .spells import (
     CONCEALMENT_TARGETED_SPELL_IDS,
     SPELLS,
     basic_save_damage,
+    basic_save_damage_result,
     divine_lance_damage,
     heal_range_ft,
     heal_roll,
@@ -340,6 +341,7 @@ class Encounter:
                 if definition.definition_id in {
                     "barbarian_animal_bear_level_2_no_escape",
                     "barbarian_animal_bear_level_2_sudden_charge",
+                    "barbarian_animal_bear_level_2_intimidating_strike",
                 }
                 else None,
             ),
@@ -1626,10 +1628,10 @@ class Encounter:
             else:
                 if pending.owner_actor_id != target.actor_id or target.health_mode is not HealthMode.PC or target.hero_points < 1:
                     raise ValueError("save has an unavailable spell save Hero Point choice")
-                if pending.spell_id not in {"void_warp", "fear", "breathe_fire", "electric_arc", "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "caustic_blast", "gale_blast"} or check.attack_id is not None:
+                if pending.spell_id not in {"daze", "void_warp", "fear", "breathe_fire", "electric_arc", "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "caustic_blast", "gale_blast"} or check.attack_id is not None:
                     raise ValueError("save has an unsupported pending spell save")
                 save_statistic = (
-                    "will" if pending.spell_id == "fear"
+                    "will" if pending.spell_id in {"daze", "fear"}
                     else "reflex" if pending.spell_id in {"breathe_fire", "electric_arc", "tempest_surge", "caustic_blast"}
                     else "fortitude"
                 )
@@ -1821,10 +1823,21 @@ class Encounter:
                 and pending.attack_actions_cost == 0
                 and pending.attack_count_cost == 1
             )
+            intimidating_strike = (
+                continuation is not None
+                and continuation.kind == "intimidating_strike"
+                and continuation.actor_id == actor.actor_id
+                and continuation.target_id == target.actor_id
+                and continuation.attack_id == attack.attack_id
+                and "intimidating_strike" in get_definition(actor.definition_id).abilities
+                and pending.attack_actions_cost == 2
+                and pending.attack_count_cost == 1
+                and "melee" in attack.traits
+            )
             if (
                 pending.attack_actions_cost not in ((0, 1, 2) if sudden_charge_strike else (1, 2))
                 or pending.attack_count_cost not in (1, 2)
-                or (not hunter_aim and not sudden_charge_strike and pending.attack_count_cost != pending.attack_actions_cost)
+                or (not hunter_aim and not sudden_charge_strike and not intimidating_strike and pending.attack_count_cost != pending.attack_actions_cost)
                 or (hunter_aim and pending.attack_actions_cost != 2)
             ):
                 raise ValueError("save has inconsistent pending Strike costs")
@@ -1857,6 +1870,7 @@ class Encounter:
             if (
                 pending.attack_actions_cost == 2
                 and not hunter_aim
+                and not intimidating_strike
                 and "vicious_swing" not in get_definition(actor.definition_id).abilities
             ):
                 raise ValueError("save has an unsupported pending two-action Strike")
@@ -2081,8 +2095,9 @@ class Encounter:
                 )
             ):
                 raise ValueError("save has inconsistent Divine Lance concealment MAP state")
-            elif pending.spell_id in {"soothe", "protection", "fear", "void_warp", "guidance", "stabilize"}:
+            elif pending.spell_id in {"daze", "soothe", "protection", "fear", "void_warp", "guidance", "stabilize"}:
                 expected_actions = {
+                    "daze": 2,
                     "soothe": 2,
                     "protection": 2,
                     "fear": 2,
@@ -3942,6 +3957,18 @@ class Encounter:
                 if "melee" in attack.traits and self._strike_targets(actor, state, attack)
             )
         )
+        can_intimidating_strike = (
+            can_act and actions >= 2 and not actor.must_leave_occupied
+            and "intimidating_strike" in definition.abilities
+            and any(
+                "melee" in attack.traits and self._strike_targets(actor, state, attack)
+                and self._action_permitted(
+                    state, actor, "intimidating_strike",
+                    frozenset({"attack", "emotion", "fear", "mental"}),
+                )
+                for attack in usable
+            )
+        )
         can_sudden_charge = (
             can_act and actions >= 2 and not actor.must_leave_occupied
             and "sudden_charge" in definition.abilities
@@ -4176,6 +4203,7 @@ class Encounter:
             can_step = False
             can_strike = False
             can_vicious = False
+            can_intimidating_strike = False
             can_sudden_charge = False
             can_flurry = False
             can_hunt_prey = False
@@ -4204,13 +4232,17 @@ class Encounter:
                 ("activate_alchemy", can_act and activate_alchemy_available),
                 ("quick_bomber", can_act and "quick_bomber" in definition.abilities and any(
                     state.item_instances.get(item) is not None
-                    and self._admitted_bomber_bomb_facts(state.item_instances[item].definition_id) is not None
+                    and self._admitted_bomber_bomb_facts(
+                        state.item_instances[item].definition_id,
+                        character_level=state.alchemy_states[actor.actor_id].character_level,
+                    ) is not None
                     for item in actor.held_items + actor.stowed_items
                 )),
                 ("confident_finisher", can_finisher),
                 ("devise_stratagem", devise_available),
                 ("known_weaknesses", known_weaknesses_available),
                 ("vicious_swing", can_vicious),
+                ("intimidating_strike", can_intimidating_strike),
                 ("sudden_charge", can_sudden_charge),
                 ("flurry_of_blows", can_flurry),
                 ("hunt_prey", can_hunt_prey),
@@ -4452,7 +4484,7 @@ class Encounter:
                 and self._is_living_target(target)
                 and "void_healing" not in get_definition(target.definition_id).abilities
             )
-        if spell_id in {"force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
+        if spell_id in {"daze", "force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
             return target.actor_id != caster.actor_id and not target.dead and not target.defeated
         if spell_id == "vitality_lash":
             return target.actor_id != caster.actor_id and not target.dead and (
@@ -5195,7 +5227,10 @@ class Encounter:
         definition = get_definition(actor.definition_id)
         if "quick_bomber" not in definition.abilities:
             raise _Unsupported("Quick Bomber is not admitted for this creature.")
-        if self._admitted_bomber_bomb_facts(command.formula_id) is None:
+        if self._admitted_bomber_bomb_facts(
+            command.formula_id,
+            character_level=state.alchemy_states[actor.actor_id].character_level,
+        ) is None:
             raise _Rejected("Quick Bomber requires one selected prepared Bomber formula.")
         if type(command.only_primary_splash) is not bool:
             raise _Rejected("Quick Bomber splash restriction must be true or false.")
@@ -5250,7 +5285,29 @@ class Encounter:
             vicious_swing=True,
         )
 
-    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
+    def _start_intimidating_strike(self, context, command):
+        """Commit Intimidating Strike to the ordinary melee Strike pipeline."""
+        from .fighter import IntimidatingStrike
+
+        if not isinstance(command, IntimidatingStrike):
+            return FamilyProcedureResult(rejection="Intimidating Strike needs its fighter command.")
+        parent = ActionContinuation(
+            kind="intimidating_strike",
+            actor_id=context.actor.actor_id,
+            target_id=command.target_id,
+            attack_id=command.attack_id,
+        )
+        events = self._start_strike(
+            context.state, context.dice, context.actor,
+            command.target_id, command.attack_id, command.item_id,
+            command.damage_type, command.nonlethal,
+            actions_cost=2, attack_count_cost=1, vicious_swing=False,
+            melee_required=True,
+            parent=parent,
+        )
+        return FamilyProcedureResult(events=tuple(events))
+
+    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
         if not isinstance(target_id, str):
             raise _Rejected("Strike target id must be text.")
         if actions_cost > actor.actions_remaining:
@@ -5276,6 +5333,8 @@ class Encounter:
                     raise _Rejected(f"Attack {attack_id!r} requires its listed item to be held.")
                 raise _Rejected(f"Attack {attack_id!r} is not currently available.")
             raise _Unsupported(f"Attack {attack_id!r} is not supported in S1 or for this creature.")
+        if melee_required and "melee" not in attack.traits:
+            raise _Rejected("Intimidating Strike requires a melee Strike.")
         if hunter_aim_intent is not None:
             from .ranger import validate_hunter_aim_intent
 
@@ -5855,7 +5914,10 @@ class Encounter:
             landing = self._land_thrown_item(state, actor, target, attack, item_id)
             if landing is not None:
                 events.append(landing)
-            bomb_facts = self._admitted_bomber_bomb_facts(attack.item_id)
+            bomb_facts = self._admitted_bomber_bomb_facts(
+                attack.item_id,
+                character_level=get_definition(actor.definition_id).level,
+            )
             if (
                 check.degree is DegreeOfSuccess.FAILURE
                 and bomb_facts is not None
@@ -5901,7 +5963,10 @@ class Encounter:
             use_intelligence=investigator_use_intelligence,
             finisher=finisher,
         )
-        bomb_facts = self._admitted_bomber_bomb_facts(attack.item_id)
+        bomb_facts = self._admitted_bomber_bomb_facts(
+            attack.item_id,
+            character_level=get_definition(actor.definition_id).level,
+        )
         if bomb_facts is not None and bomb_facts.splash_damage:
             damage = self._bomb_damage_with_primary_splash(damage, attack.attack_id, bomb_facts)
         resolution = DamageResolution(
@@ -7077,6 +7142,22 @@ class Encounter:
 
         if outcome.defeated:
             events.append(Event("defeated", attacker.actor_id, target.actor_id, f"{target.label} is defeated."))
+        if (
+            resolution.source_kind == "strike"
+            and resolution.continuation is not None
+            and resolution.continuation.kind == "intimidating_strike"
+        ):
+            from .fighter import apply_intimidating_strike_frightened
+
+            context = FamilyProcedureContext(
+                self, state, dice, attacker, get_definition(attacker.definition_id), "martial"
+            )
+            events.append(apply_intimidating_strike_frightened(
+                context,
+                target_id=target.actor_id,
+                damage=damage.total,
+                critical=resolution.attacker_critical,
+            ))
         if resolution.source_kind == "strike":
             bomb_facts = self._admitted_bomber_bomb_facts_for_attack(attacker, resolution.attack_id)
             if bomb_facts is not None:
@@ -7213,6 +7294,26 @@ class Encounter:
         if resolution.check is not None and resolution.check.degree in {
             DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS,
         } and not target.defeated:
+            if facts.persistent_damage_type is not None:
+                bomb_formula_id = next(
+                    (attack.item_id for attack in get_definition(attacker.definition_id).attacks
+                     if attack.attack_id == attack_id),
+                    None,
+                )
+                persistent_multiplier = 2 if resolution.attacker_critical else 1
+                self._apply_persistent_effect(
+                    state,
+                    attacker,
+                    target,
+                    bomb_formula_id or "bomber_bomb",
+                    facts.persistent_damage_type,
+                    dice=facts.persistent_damage_dice * persistent_multiplier,
+                    flat=facts.persistent_damage_flat * persistent_multiplier,
+                )
+                events.append(Event(
+                    "persistent_applied", attacker.actor_id, target.actor_id,
+                    f"{target.label} takes persistent {facts.persistent_damage_type} damage.",
+                ))
             if facts.on_hit_effect == "off_guard":
                 kind, value = "off_guard", 1
                 text = f"{target.label} is off-guard until {attacker.label}'s next turn."
@@ -7240,10 +7341,10 @@ class Encounter:
         return events
 
     @staticmethod
-    def _admitted_bomber_bomb_facts(formula_id):
+    def _admitted_bomber_bomb_facts(formula_id, *, character_level=1):
         from .alchemist_content import admitted_bomber_bomb_facts
 
-        return admitted_bomber_bomb_facts(formula_id)
+        return admitted_bomber_bomb_facts(formula_id, character_level=character_level)
 
     def _admitted_bomber_bomb_facts_for_attack(self, actor, attack_id):
         if not isinstance(attack_id, str):
@@ -7252,7 +7353,9 @@ class Encounter:
             (candidate for candidate in get_definition(actor.definition_id).attacks if candidate.attack_id == attack_id),
             None,
         )
-        return None if attack is None else self._admitted_bomber_bomb_facts(attack.item_id)
+        return None if attack is None else self._admitted_bomber_bomb_facts(
+            attack.item_id, character_level=get_definition(actor.definition_id).level,
+        )
 
     def _damage_modifier(self, state, actor, attack):
         if attack.damage_attribute is None:
@@ -7287,7 +7390,9 @@ class Encounter:
             return attack.range_increment_ft, attack.max_range_ft
         alchemy_state = state.alchemy_states.get(actor.actor_id)
         if (
-            self._admitted_bomber_bomb_facts(attack.item_id) is None
+            self._admitted_bomber_bomb_facts(
+                attack.item_id, character_level=get_definition(actor.definition_id).level,
+            ) is None
             or alchemy_state is None
         ):
             return attack.range_increment_ft, attack.max_range_ft
@@ -9182,6 +9287,8 @@ class Encounter:
             return events + self._complete_action(state, caster, [], dice=dice)
         if spell_id == "fear":
             return self._roll_fear_save(state, dice, caster, target, continuation)
+        if spell_id == "daze":
+            return self._roll_daze_save(state, dice, caster, target, continuation)
         if spell_id == "harm":
             if continuation.spell_actions != 2:
                 raise _Rejected("Harm is admitted only in its two-action living-target form.")
@@ -9543,9 +9650,7 @@ class Encounter:
         raw_damage = continuation.spell_damage
         if raw_damage is None:
             raise _Rejected("Gale Blast's shared damage roll is missing.")
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(raw_damage, components=(replace(raw_damage.components[0], amount=total),), total=total,
-                         adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw_damage, check.degree)
         index = int((continuation.stage or "gale:0:0").split(":")[1])
         push_ft = 10 if check.degree is DegreeOfSuccess.CRITICAL_FAILURE else 5 if check.degree is DegreeOfSuccess.FAILURE else 0
         continuation.stage = f"gale:{index}:{push_ft}"
@@ -9619,13 +9724,7 @@ class Encounter:
         raw_damage = continuation.spell_damage
         if raw_damage is None:
             raise _Rejected("Electric Arc's shared damage roll is missing.")
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(
-            raw_damage,
-            components=(replace(raw_damage.components[0], amount=total),),
-            total=total,
-            adjustment=f"basic_save:{check.degree.name.lower()}",
-        )
+        damage = basic_save_damage_result(raw_damage, check.degree)
         return [Event(
             "spell_save", caster.actor_id, target.actor_id,
             _spell_save_text(target, check, statistic="Reflex"), check=check,
@@ -9748,8 +9847,7 @@ class Encounter:
 
     def _resolve_tempest_surge_result(self, state, dice, caster, target, check, continuation):
         raw_damage = resolve_damage(DamagePacket("Tempest Surge", "electricity", 12, 1, 0), dice.draw)
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(raw_damage, components=(replace(raw_damage.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw_damage, check.degree)
         events = [Event("spell_save", caster.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Reflex"), check=check)]
         if check.degree in {DegreeOfSuccess.FAILURE, DegreeOfSuccess.CRITICAL_FAILURE}:
             occurrence = state.actor_start_counts.get(caster.actor_id, 0) + 1
@@ -9770,8 +9868,7 @@ class Encounter:
     def _resolve_vitality_lash_result(self, state, dice, caster, target, check, continuation):
         status_bonus = combine_modifiers(self._courageous_anthem_damage_modifiers(state, caster))
         raw = resolve_damage(DamagePacket("Vitality Lash", "vitality", 6, 2, status_bonus), dice.draw)
-        total = basic_save_damage(raw.total, check.degree)
-        damage = replace(raw, components=(replace(raw.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw, check.degree)
         events = [Event("spell_save", caster.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Fortitude"), check=check)]
         if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
             occurrence = state.actor_start_counts.get(caster.actor_id, 0) + 1
@@ -10173,6 +10270,7 @@ class Encounter:
             "frostbite": self._resolve_direct_fortitude_result,
             "enfeeble": self._resolve_direct_fortitude_result,
             "void_warp": self._resolve_void_warp_result,
+            "daze": self._resolve_daze_result,
         }
         try:
             resolver = resolvers[continuation.spell_id]
@@ -10183,11 +10281,7 @@ class Encounter:
     def _resolve_harm_result(self, state, dice, caster, target, check, continuation):
         """Resolve the finite rank-one two-action Harm basic Fortitude form."""
         raw = resolve_damage(DamagePacket("Harm", "void", 8, 1, 0), dice.draw)
-        total = basic_save_damage(raw.total, check.degree)
-        damage = replace(
-            raw, components=(replace(raw.components[0], amount=total),), total=total,
-            adjustment=f"basic_save:{check.degree.name.lower()}",
-        )
+        damage = basic_save_damage_result(raw, check.degree)
         events = [Event(
             "spell_save", caster.actor_id, target.actor_id,
             _spell_save_text(target, check, statistic="Fortitude"), check=check,
@@ -10210,8 +10304,7 @@ class Encounter:
             self._record_arcane_bond_completed(caster, continuation)
             return events + self._complete_action(state, caster, [], dice=dice)
         damage = resolve_damage(DamagePacket("Frostbite", "cold", 4, 2, 0), dice.draw)
-        total = basic_save_damage(damage.total, check.degree)
-        damage = replace(damage, components=(replace(damage.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(damage, check.degree)
         if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
             state.active_effects.append(ActiveSpellEffect(
                 effect_id=f"frostbite_weakness:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
@@ -10861,6 +10954,34 @@ class Encounter:
         ))
         return events
 
+    def _roll_daze_save(self, state, dice, caster, target, continuation):
+        """Resolve Daze's single-target basic Will save."""
+        if continuation.spell_actions != 2:
+            raise _Rejected("Daze requires its two-action cantrip form.")
+        return self._roll_spell_save(
+            state, dice, caster, target, continuation, "daze", "will",
+        )
+
+    def _resolve_daze_result(self, state, dice, caster, target, check, continuation):
+        """Apply Daze's basic mental damage and critical-failure stun."""
+        raw = resolve_damage(DamagePacket("Daze", "mental", 6, 1, 0), dice.draw)
+        damage = basic_save_damage_result(raw, check.degree)
+        events = [Event(
+            "spell_save", caster.actor_id, target.actor_id,
+            _spell_save_text(target, check, statistic="Will"), check=check,
+        )]
+        if check.degree is DegreeOfSuccess.CRITICAL_FAILURE and self._apply_stunned(
+            state, caster, target, 1,
+        ):
+            events.append(Event(
+                "condition_applied", caster.actor_id, target.actor_id,
+                f"{target.label} is stunned 1 until the start of its next turn.", check=check,
+            ))
+        return events + self._apply_spell_damage(
+            state, dice, caster, target, damage, check=check, source="daze",
+            damage_type="mental", nonlethal=True, continuation=continuation,
+        )
+
     def _roll_fear_save(self, state, dice, caster, target, continuation):
         """Roll Fear's Will save, honoring Guidance before Hero Point choice."""
         return self._roll_spell_save(
@@ -10946,6 +11067,24 @@ class Encounter:
             expires_at_world_time=state.world_time_seconds + 6 * duration_rounds,
         ))
 
+    def _apply_stunned(self, state, source, target, value: int) -> bool:
+        """Apply an admitted stunned value through the literal saved fields.
+
+        Stunned values use the strongest current value; both currently admitted
+        sources expire at the start of the target's next turn and remove the
+        target's reaction immediately.
+        """
+        if type(value) is not int or value < 1:
+            raise ValueError("stunned requires a positive whole value")
+        until_start = state.actor_start_counts.get(target.actor_id, 0) + 1
+        if target.stunned >= value and target.stunned_until_start >= until_start:
+            return False
+        target.stunned = value
+        target.stunned_source_actor_id = source.actor_id
+        target.stunned_until_start = until_start
+        target.reaction_available = False
+        return True
+
     def apply_family_damage(
         self,
         state,
@@ -10998,7 +11137,7 @@ class Encounter:
         )
 
     def _apply_spell_damage(self, state, dice, caster, target, damage, *, check, source, damage_type,
-                            attacker_critical=False, target_critical_failure=False, continuation,
+                            attacker_critical=False, target_critical_failure=False, nonlethal=False, continuation,
                             enfeebled_on_failure=0):
         if not isinstance(damage, DamageResult) or damage.total < 0:
             raise _Rejected("Spell damage must be a valid rolled damage result.")
@@ -11016,6 +11155,7 @@ class Encounter:
             damage_type=damage_type,
             check=check,
             spell_id=source,
+            nonlethal=nonlethal,
             attacker_critical=attacker_critical,
             target_critical_failure=target_critical_failure,
             continuation=continuation,
@@ -11370,6 +11510,11 @@ class Encounter:
                 "sudden_charge_complete", actor.actor_id, continuation.target_id,
                 f"{actor.label} completes Sudden Charge.",
             )], dice=dice)
+        if continuation.kind == "intimidating_strike":
+            return self._complete_action(state, actor, [Event(
+                "intimidating_strike_complete", actor.actor_id, continuation.target_id,
+                f"{actor.label} completes Intimidating Strike.",
+            )], dice=dice)
         if continuation.finisher:
             if critical:
                 events.append(Event(
@@ -11456,11 +11601,7 @@ class Encounter:
             check=check,
         )]
         value = 3 if check.degree is DegreeOfSuccess.CRITICAL_FAILURE else 1 if check.degree is DegreeOfSuccess.FAILURE else 0
-        if value:
-            target.stunned = value
-            target.stunned_source_actor_id = monk.actor_id
-            target.stunned_until_start = state.actor_start_counts.get(target.actor_id, 0) + 1
-            target.reaction_available = False
+        if value and self._apply_stunned(state, monk, target, value):
             events.append(Event(
                 "condition_applied", monk.actor_id, target.actor_id,
                 f"{target.label} is stunned {value} until the start of its next turn.", check=check,
@@ -12318,6 +12459,11 @@ class Encounter:
             raise ValueError("elapsed time must be a positive integer")
         state.world_time_seconds += elapsed_seconds
         Encounter._expire_elapsed_spell_effects(state)
+        state.persistent_effects[:] = [
+            effect for effect in state.persistent_effects
+            if effect.expires_at_world_time is None
+            or effect.expires_at_world_time > state.world_time_seconds
+        ]
         Encounter._expire_person_of_interest_grants(state)
 
         # Turn-bound defenses have no useful meaning between fights. Their

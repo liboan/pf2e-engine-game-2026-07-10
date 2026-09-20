@@ -17,6 +17,10 @@ _CANTRIPS = frozenset({
     "divine_lance", "void_warp", "shield", "guidance", "stabilize", "light",
     "vitality_lash", "forbidding_ward", "sigil", "detect_magic",
 })
+_DAZE_CANTRIPS = (_CANTRIPS - {"sigil"}) | {"daze"}
+_DAZE_FAMILIAR_SPELL_DEFINITIONS = frozenset({
+    "faiths_flamekeeper_witch_level_1_daze_prepared",
+})
 _RANK_ONE = frozenset({
     "heal", "fear", "enfeeble", "runic_weapon", "runic_body", "command",
 })
@@ -41,7 +45,7 @@ def preparation_choices(definition, slot) -> tuple[str, ...]:
     if "faiths_flamekeeper" not in definition.abilities:
         return ()
     if slot.cantrip:
-        return tuple(sorted(_CANTRIPS))
+        return tuple(sorted(_cantrip_choices(definition)))
     if slot.rank == 1:
         return tuple(sorted(_rank_one_choices(definition)))
     return ()
@@ -50,10 +54,20 @@ def preparation_choices(definition, slot) -> tuple[str, ...]:
 def prepared_slot_rejection(actor, definition, slot, spell_id: str) -> str | None:
     if "faiths_flamekeeper" not in definition.abilities:
         return None
-    allowed = _CANTRIPS if slot.cantrip else _rank_one_choices(definition) if slot.rank == 1 else frozenset()
+    allowed = _cantrip_choices(definition) if slot.cantrip else _rank_one_choices(definition) if slot.rank == 1 else frozenset()
     if spell_id not in allowed:
         return "The spell is outside this Witch's finite divine preparation choices."
     return None
+
+
+def _cantrip_choices(definition) -> frozenset[str]:
+    """Return the selected familiar's ten-spell cantrip book.
+
+    Daze is a source-legal learned-spell replacement for Sigil on the one
+    W1 alternate sheet; it does not expand the established Witch's starting
+    familiar beyond its ten known divine cantrips.
+    """
+    return _DAZE_CANTRIPS if definition.definition_id in _DAZE_FAMILIAR_SPELL_DEFINITIONS else _CANTRIPS
 
 
 @dataclass(frozen=True)

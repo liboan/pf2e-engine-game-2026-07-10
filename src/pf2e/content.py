@@ -58,6 +58,8 @@ from .ranger_monk_content import (
 )
 from .wizard_content import (
     BATTLE_MAGIC_WIZARD,
+    BATTLE_MAGIC_WIZARD_DAZE,
+    BATTLE_MAGIC_WIZARD_DAZE_SETUP,
     BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS,
     BATTLE_MAGIC_WIZARD_MOVEMENT_SPELLS_SETUP,
     BATTLE_MAGIC_WIZARD_HERO_SAVE_SETUP,
@@ -76,8 +78,17 @@ from .alchemist_content import (
     BOMBER_ALCHEMIST_NEXT_SETUP,
     BOMBER_ALCHEMIST_SETUP,
     BOMBER_FORMULA_IDS,
+    BOMBER_LEVEL_2_BOMB_ATTACKS,
 )
-from .witch_content import FAITHS_FLAMEKEEPER_WITCH, FLAMEKEEPER_FOX, COMMAND_TARGET, FAITHS_FLAMEKEEPER_SETUP, FAITHS_FLAMEKEEPER_NEXT_SETUP
+from .witch_content import (
+    COMMAND_TARGET,
+    FAITHS_FLAMEKEEPER_DAZE_SETUP,
+    FAITHS_FLAMEKEEPER_SETUP,
+    FAITHS_FLAMEKEEPER_NEXT_SETUP,
+    FAITHS_FLAMEKEEPER_WITCH,
+    FAITHS_FLAMEKEEPER_WITCH_DAZE,
+    FLAMEKEEPER_FOX,
+)
 from .l2_horizontal_content import L2_HORIZONTAL_DEFINITIONS, L2_HORIZONTAL_SETUPS
 from .l2_ranger_content import (
     RANGER_PRECISION_LEVEL_2,
@@ -893,7 +904,7 @@ BOMBER_ALCHEMIST_LEVEL_2 = replace(
     ac=18,
     perception=5,
     level=2,
-    attacks=tuple(replace(attack, modifier=attack.modifier + 1) for attack in BOMBER_ALCHEMIST.attacks),
+    attacks=tuple(replace(attack, modifier=attack.modifier + 1) for attack in BOMBER_ALCHEMIST.attacks) + BOMBER_LEVEL_2_BOMB_ATTACKS,
     skills=tuple((name, rank, modifier + 1) for name, rank, modifier in BOMBER_ALCHEMIST.skills),
     saves=tuple((name, rank, modifier + 1) for name, rank, modifier in BOMBER_ALCHEMIST.saves),
     class_dc=18,
@@ -986,11 +997,13 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         # The completed selected Battle Magic Wizard keeps its stable ID as
         # it moves into the normal catalog; diagnostic alternates stay staged.
         BATTLE_MAGIC_WIZARD.definition_id: BATTLE_MAGIC_WIZARD,
+        BATTLE_MAGIC_WIZARD_DAZE.definition_id: BATTLE_MAGIC_WIZARD_DAZE,
         STORM_DRUID.definition_id: STORM_DRUID,
         # Preserve the selected Oracle's stable ID while moving its completed
         # representative encounter into the ordinary catalog.
         LIFE_ORACLE.definition_id: LIFE_ORACLE,
         FAITHS_FLAMEKEEPER_WITCH.definition_id: FAITHS_FLAMEKEEPER_WITCH,
+        FAITHS_FLAMEKEEPER_WITCH_DAZE.definition_id: FAITHS_FLAMEKEEPER_WITCH_DAZE,
         FLAMEKEEPER_FOX.definition_id: FLAMEKEEPER_FOX,
         COMMAND_TARGET.definition_id: COMMAND_TARGET,
         # The selected Maestro keeps its historical definition ID so existing
@@ -1381,9 +1394,11 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         **{setup.setup_id: setup for setup in S2_INTERACTION_SETUPS},
         **{setup.setup_id: setup for setup in S3_INTERACTION_SETUPS},
         BATTLE_MAGIC_WIZARD_SETUP.setup_id: BATTLE_MAGIC_WIZARD_SETUP,
+        BATTLE_MAGIC_WIZARD_DAZE_SETUP.setup_id: BATTLE_MAGIC_WIZARD_DAZE_SETUP,
         STORM_DRUID_SETUP.setup_id: STORM_DRUID_SETUP,
         LIFE_ORACLE_NUDGE_SETUP.setup_id: LIFE_ORACLE_NUDGE_SETUP,
         FAITHS_FLAMEKEEPER_SETUP.setup_id: FAITHS_FLAMEKEEPER_SETUP,
+        FAITHS_FLAMEKEEPER_DAZE_SETUP.setup_id: FAITHS_FLAMEKEEPER_DAZE_SETUP,
         MAESTRO_BARD_ANTHEM_SETUP.setup_id: MAESTRO_BARD_ANTHEM_SETUP,
         MAESTRO_BARD_FEAR_SETUP.setup_id: MAESTRO_BARD_FEAR_SETUP,
         MAESTRO_BARD_COUNTER_SETUP.setup_id: MAESTRO_BARD_COUNTER_SETUP,
