@@ -1,6 +1,6 @@
 # Content W5 recovery
 
-Status: **W4 fully accepted and published; W5 plan adopted; Arms has a runnable unreviewed delivery; catalog dependency repaired and all seven W5 execution tasks dispatched.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
+Status: **W4 fully accepted and published; W5 plan adopted; Arms lane independently accepted; assembled acceptance remains pending; catalog dependency repaired and all seven W5 execution tasks dispatched.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
 
 User-requested [RCA](w5-task-creation-rca.md) identified a catalog reference to deleted old worktree `8bbe`. Repair `3b1ef500ebb4fa08583f71db7feb1aa26d741927` points to the byte-identical catalog in the durable saved project. Fresh backend config/read passes for the saved project and coordinator; all six pending create_thread calls subsequently succeeded. Same one-line runtime repair applied to saved project (uncommitted, no main commit/merge) and retained Arms checkout (owner notified to incorporate it). User config `desktop.worktree-auto-cleanup-enabled = false` prevents automatic deletion of the explicitly retained checkouts; prior value was absent/default true. All fourteen pre-dispatch PF2e worktrees verified present after dispatch. No model/catalog content changed.
 
@@ -20,7 +20,7 @@ All seven execution tasks now exist. Six new full isolated tasks started at `3b1
 
 | Exact title / role | Task ID | Model / effort | Checkout suffix | Routing / current dependency |
 |---|---|---|---|---|
-| PF2e Content W5 — Arms integration | `01a0beff-6744-78c1-8f9a-25863d30b3b0` | `gpt-5.6-luna` / high | `d6c4` | B owner and lead; runnable unreviewed `2eb2d80ff9896f428d1e6a10c0227b5334392fd9`, independent Arms review underway. |
+| PF2e Content W5 — Arms integration | `01a0beff-6744-78c1-8f9a-25863d30b3b0` | `gpt-5.6-luna` / high | `d6c4` | B owner and lead; Arms reviewer accepted `4232c0d8f3fd3e8c1426cb85884c16f5ca685cc8`; integration and final gate remain with B. |
 | PF2e Content W5 — Monk stances | `01a0bf8b-2f2d-7913-9cd7-bd39aaee19a0` | `gpt-5.6-luna` / high | `a3b7` | A owner → Monk reviewer. |
 | PF2e Content W5 — Focus and font | `01a0bf8b-3888-70a0-bb7b-595f09f486ef` | `gpt-5.6-luna` / high | `6d02` | C owner → Focus reviewer. |
 | PF2e Content W5 — Arms review | `01a0bf8a-7a45-7172-96e8-47cc78adb2b1` | `gpt-5.6-sol` / high | `fb42` | Runnable B commit supplied at creation; repair/acceptance directly to B. |
@@ -30,7 +30,7 @@ All seven execution tasks now exist. Six new full isolated tasks started at `3b1
 
 Checkout paths are `/Users/andrewlee/.codex/worktrees/<suffix>/pf2e-engine-game-2026-07-10`. Every fresh task received adopted planning, accepted-W4 symbols/tests/environment/evidence/boundaries and direct routing. B received complete peer map once; A/C have exact reviewers, reviewers have exact owners. No repeat handoffs or review requests are needed.
 
-Initial compact snapshot confirms A/C implementation and Arms review active; Monk preparation complete pending owner delivery. No W5 lane or milestone acceptance yet. B previously reported43 focused tests, compile/diff/terminal notice smoke; detailed evidence stays with owner/reviewer. Reserved hooks do not earn content credit. Future fallback inspection should target lead only for meaningful decisions/full assembly, not poll lane workers. Latest pre-dispatch B cursor `1aea962b-a6c3-4cf4-b215-19b279a90e37:3`; the actionable peer-map message starts a new lead turn.
+Arms lane independently accepted at `4232c0d8f3fd3e8c1426cb85884c16f5ca685cc8`; detailed50-test/public/save/terminal evidence remains with B and its reviewer. Full W5 assembly is pending. At the16:21UTC fallback, B incorrectly assigned assembly/canonical validation to coordinator. One actionable ownership correction was sent: B retains integration, separate assembled-review handoff and final canonical gate; coordinator receives only unresolved substantial decisions/full acceptance and owns publication. No acknowledgement requested. Future fallback inspection targets lead only, not lane workers. Latest B snapshot cursor `1aea962b-a6c3-4cf4-b215-19b279a90e37:5`, followed by that ownership correction.
 
 B owns the shared Strike notification contract and single save-version decision, integrates accepted B→A→C families, and runs final canonical gate after separate assembled acceptance. A owns stance/Step/Trip/persistent helpers; C owns composition/sustain/typed-status helpers. Narrow shared call sites only; B integrates semantic overlap. Planner note supplies exact verified symbols, analogous tests, source decisions and review cases. Every assignment reads it plus the accepted-W4 handoff. No replacement tasks through ordinary repairs.
 
