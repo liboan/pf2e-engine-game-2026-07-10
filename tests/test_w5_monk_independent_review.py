@@ -202,6 +202,12 @@ def test_tiger_bleed_choice_keeps_saved_flurry_continuation(monkeypatch, tmp_pat
     forged_path.write_text(json.dumps(dropped_parent))
     with pytest.raises(ValueError):
         Encounter.load(forged_path)
+    dropped_lineage = json.loads(path.read_text())
+    dropped_lineage["state"]["pending_choice"]["continuation"]["parent_continuation"] = None
+    dropped_lineage["state"]["pending_choice"]["damage_resolution"] = None
+    forged_path.write_text(json.dumps(dropped_lineage))
+    with pytest.raises(ValueError):
+        Encounter.load(forged_path)
     game = Encounter.load(path)
     choice = game.inspect().choice
     assert choice is not None

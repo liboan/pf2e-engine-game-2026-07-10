@@ -157,17 +157,13 @@ def validate_pending(context: FamilyProcedureContext) -> None:
         or "Tiger Stance" not in context.definition.feats
         or existing is None
         or (bool(existing.dice) and existing.dice == (4,))
-        or (
-            resolution is not None
-            and (
-                resolution.source_kind != "strike"
-                or resolution.actor_id != context.actor.actor_id
-                or resolution.target_id != pending.target_id
-                or resolution.attack_id != "tiger_claws"
-                or not resolution.attacker_critical
-                or resolution.continuation != continuation.parent_continuation
-            )
-        )
+        or resolution is None
+        or resolution.source_kind != "strike"
+        or resolution.actor_id != context.actor.actor_id
+        or resolution.target_id != pending.target_id
+        or resolution.attack_id != "tiger_claws"
+        or not resolution.attacker_critical
+        or resolution.continuation != continuation.parent_continuation
     ):
         raise ValueError("save has an invalid Tiger bleed choice")
 
