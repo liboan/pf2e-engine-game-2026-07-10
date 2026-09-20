@@ -161,6 +161,7 @@ from .spells import (
     CONCEALMENT_TARGETED_SPELL_IDS,
     SPELLS,
     basic_save_damage,
+    basic_save_damage_result,
     divine_lance_damage,
     heal_range_ft,
     heal_roll,
@@ -1626,10 +1627,10 @@ class Encounter:
             else:
                 if pending.owner_actor_id != target.actor_id or target.health_mode is not HealthMode.PC or target.hero_points < 1:
                     raise ValueError("save has an unavailable spell save Hero Point choice")
-                if pending.spell_id not in {"void_warp", "fear", "breathe_fire", "electric_arc", "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "caustic_blast", "gale_blast"} or check.attack_id is not None:
+                if pending.spell_id not in {"daze", "void_warp", "fear", "breathe_fire", "electric_arc", "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "caustic_blast", "gale_blast"} or check.attack_id is not None:
                     raise ValueError("save has an unsupported pending spell save")
                 save_statistic = (
-                    "will" if pending.spell_id == "fear"
+                    "will" if pending.spell_id in {"daze", "fear"}
                     else "reflex" if pending.spell_id in {"breathe_fire", "electric_arc", "tempest_surge", "caustic_blast"}
                     else "fortitude"
                 )
@@ -2081,8 +2082,9 @@ class Encounter:
                 )
             ):
                 raise ValueError("save has inconsistent Divine Lance concealment MAP state")
-            elif pending.spell_id in {"soothe", "protection", "fear", "void_warp", "guidance", "stabilize"}:
+            elif pending.spell_id in {"daze", "soothe", "protection", "fear", "void_warp", "guidance", "stabilize"}:
                 expected_actions = {
+                    "daze": 2,
                     "soothe": 2,
                     "protection": 2,
                     "fear": 2,
@@ -4452,7 +4454,7 @@ class Encounter:
                 and self._is_living_target(target)
                 and "void_healing" not in get_definition(target.definition_id).abilities
             )
-        if spell_id in {"force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
+        if spell_id in {"daze", "force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
             return target.actor_id != caster.actor_id and not target.dead and not target.defeated
         if spell_id == "vitality_lash":
             return target.actor_id != caster.actor_id and not target.dead and (
@@ -9182,6 +9184,8 @@ class Encounter:
             return events + self._complete_action(state, caster, [], dice=dice)
         if spell_id == "fear":
             return self._roll_fear_save(state, dice, caster, target, continuation)
+        if spell_id == "daze":
+            return self._roll_daze_save(state, dice, caster, target, continuation)
         if spell_id == "harm":
             if continuation.spell_actions != 2:
                 raise _Rejected("Harm is admitted only in its two-action living-target form.")
@@ -9543,9 +9547,7 @@ class Encounter:
         raw_damage = continuation.spell_damage
         if raw_damage is None:
             raise _Rejected("Gale Blast's shared damage roll is missing.")
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(raw_damage, components=(replace(raw_damage.components[0], amount=total),), total=total,
-                         adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw_damage, check.degree)
         index = int((continuation.stage or "gale:0:0").split(":")[1])
         push_ft = 10 if check.degree is DegreeOfSuccess.CRITICAL_FAILURE else 5 if check.degree is DegreeOfSuccess.FAILURE else 0
         continuation.stage = f"gale:{index}:{push_ft}"
@@ -9619,13 +9621,7 @@ class Encounter:
         raw_damage = continuation.spell_damage
         if raw_damage is None:
             raise _Rejected("Electric Arc's shared damage roll is missing.")
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(
-            raw_damage,
-            components=(replace(raw_damage.components[0], amount=total),),
-            total=total,
-            adjustment=f"basic_save:{check.degree.name.lower()}",
-        )
+        damage = basic_save_damage_result(raw_damage, check.degree)
         return [Event(
             "spell_save", caster.actor_id, target.actor_id,
             _spell_save_text(target, check, statistic="Reflex"), check=check,
@@ -9748,8 +9744,7 @@ class Encounter:
 
     def _resolve_tempest_surge_result(self, state, dice, caster, target, check, continuation):
         raw_damage = resolve_damage(DamagePacket("Tempest Surge", "electricity", 12, 1, 0), dice.draw)
-        total = basic_save_damage(raw_damage.total, check.degree)
-        damage = replace(raw_damage, components=(replace(raw_damage.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw_damage, check.degree)
         events = [Event("spell_save", caster.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Reflex"), check=check)]
         if check.degree in {DegreeOfSuccess.FAILURE, DegreeOfSuccess.CRITICAL_FAILURE}:
             occurrence = state.actor_start_counts.get(caster.actor_id, 0) + 1
@@ -9770,8 +9765,7 @@ class Encounter:
     def _resolve_vitality_lash_result(self, state, dice, caster, target, check, continuation):
         status_bonus = combine_modifiers(self._courageous_anthem_damage_modifiers(state, caster))
         raw = resolve_damage(DamagePacket("Vitality Lash", "vitality", 6, 2, status_bonus), dice.draw)
-        total = basic_save_damage(raw.total, check.degree)
-        damage = replace(raw, components=(replace(raw.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(raw, check.degree)
         events = [Event("spell_save", caster.actor_id, target.actor_id, _spell_save_text(target, check, statistic="Fortitude"), check=check)]
         if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
             occurrence = state.actor_start_counts.get(caster.actor_id, 0) + 1
@@ -10173,6 +10167,7 @@ class Encounter:
             "frostbite": self._resolve_direct_fortitude_result,
             "enfeeble": self._resolve_direct_fortitude_result,
             "void_warp": self._resolve_void_warp_result,
+            "daze": self._resolve_daze_result,
         }
         try:
             resolver = resolvers[continuation.spell_id]
@@ -10183,11 +10178,7 @@ class Encounter:
     def _resolve_harm_result(self, state, dice, caster, target, check, continuation):
         """Resolve the finite rank-one two-action Harm basic Fortitude form."""
         raw = resolve_damage(DamagePacket("Harm", "void", 8, 1, 0), dice.draw)
-        total = basic_save_damage(raw.total, check.degree)
-        damage = replace(
-            raw, components=(replace(raw.components[0], amount=total),), total=total,
-            adjustment=f"basic_save:{check.degree.name.lower()}",
-        )
+        damage = basic_save_damage_result(raw, check.degree)
         events = [Event(
             "spell_save", caster.actor_id, target.actor_id,
             _spell_save_text(target, check, statistic="Fortitude"), check=check,
@@ -10210,8 +10201,7 @@ class Encounter:
             self._record_arcane_bond_completed(caster, continuation)
             return events + self._complete_action(state, caster, [], dice=dice)
         damage = resolve_damage(DamagePacket("Frostbite", "cold", 4, 2, 0), dice.draw)
-        total = basic_save_damage(damage.total, check.degree)
-        damage = replace(damage, components=(replace(damage.components[0], amount=total),), total=total, adjustment=f"basic_save:{check.degree.name.lower()}")
+        damage = basic_save_damage_result(damage, check.degree)
         if check.degree is DegreeOfSuccess.CRITICAL_FAILURE:
             state.active_effects.append(ActiveSpellEffect(
                 effect_id=f"frostbite_weakness:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
@@ -10861,6 +10851,34 @@ class Encounter:
         ))
         return events
 
+    def _roll_daze_save(self, state, dice, caster, target, continuation):
+        """Resolve Daze's single-target basic Will save."""
+        if continuation.spell_actions != 2:
+            raise _Rejected("Daze requires its two-action cantrip form.")
+        return self._roll_spell_save(
+            state, dice, caster, target, continuation, "daze", "will",
+        )
+
+    def _resolve_daze_result(self, state, dice, caster, target, check, continuation):
+        """Apply Daze's basic mental damage and critical-failure stun."""
+        raw = resolve_damage(DamagePacket("Daze", "mental", 6, 1, 0), dice.draw)
+        damage = basic_save_damage_result(raw, check.degree)
+        events = [Event(
+            "spell_save", caster.actor_id, target.actor_id,
+            _spell_save_text(target, check, statistic="Will"), check=check,
+        )]
+        if check.degree is DegreeOfSuccess.CRITICAL_FAILURE and self._apply_stunned(
+            state, caster, target, 1,
+        ):
+            events.append(Event(
+                "condition_applied", caster.actor_id, target.actor_id,
+                f"{target.label} is stunned 1 until the start of its next turn.", check=check,
+            ))
+        return events + self._apply_spell_damage(
+            state, dice, caster, target, damage, check=check, source="daze",
+            damage_type="mental", nonlethal=True, continuation=continuation,
+        )
+
     def _roll_fear_save(self, state, dice, caster, target, continuation):
         """Roll Fear's Will save, honoring Guidance before Hero Point choice."""
         return self._roll_spell_save(
@@ -10946,6 +10964,24 @@ class Encounter:
             expires_at_world_time=state.world_time_seconds + 6 * duration_rounds,
         ))
 
+    def _apply_stunned(self, state, source, target, value: int) -> bool:
+        """Apply an admitted stunned value through the literal saved fields.
+
+        Stunned values use the strongest current value; both currently admitted
+        sources expire at the start of the target's next turn and remove the
+        target's reaction immediately.
+        """
+        if type(value) is not int or value < 1:
+            raise ValueError("stunned requires a positive whole value")
+        until_start = state.actor_start_counts.get(target.actor_id, 0) + 1
+        if target.stunned >= value and target.stunned_until_start >= until_start:
+            return False
+        target.stunned = value
+        target.stunned_source_actor_id = source.actor_id
+        target.stunned_until_start = until_start
+        target.reaction_available = False
+        return True
+
     def apply_family_damage(
         self,
         state,
@@ -10998,7 +11034,7 @@ class Encounter:
         )
 
     def _apply_spell_damage(self, state, dice, caster, target, damage, *, check, source, damage_type,
-                            attacker_critical=False, target_critical_failure=False, continuation,
+                            attacker_critical=False, target_critical_failure=False, nonlethal=False, continuation,
                             enfeebled_on_failure=0):
         if not isinstance(damage, DamageResult) or damage.total < 0:
             raise _Rejected("Spell damage must be a valid rolled damage result.")
@@ -11016,6 +11052,7 @@ class Encounter:
             damage_type=damage_type,
             check=check,
             spell_id=source,
+            nonlethal=nonlethal,
             attacker_critical=attacker_critical,
             target_critical_failure=target_critical_failure,
             continuation=continuation,
@@ -11456,11 +11493,7 @@ class Encounter:
             check=check,
         )]
         value = 3 if check.degree is DegreeOfSuccess.CRITICAL_FAILURE else 1 if check.degree is DegreeOfSuccess.FAILURE else 0
-        if value:
-            target.stunned = value
-            target.stunned_source_actor_id = monk.actor_id
-            target.stunned_until_start = state.actor_start_counts.get(target.actor_id, 0) + 1
-            target.reaction_available = False
+        if value and self._apply_stunned(state, monk, target, value):
             events.append(Event(
                 "condition_applied", monk.actor_id, target.actor_id,
                 f"{target.label} is stunned {value} until the start of its next turn.", check=check,

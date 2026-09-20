@@ -40,6 +40,25 @@ FAITHS_FLAMEKEEPER_WITCH = CreatureDefinition(
     ),
 )
 
+
+# This legal daily alternative preserves the selected Witch's five-cantrip
+# capacity while exposing the W1 Daze option through the ordinary catalog.
+FAITHS_FLAMEKEEPER_WITCH_DAZE = replace(
+    FAITHS_FLAMEKEEPER_WITCH,
+    definition_id="faiths_flamekeeper_witch_level_1_daze_prepared",
+    name="Level 1 Faith's Flamekeeper Witch (Daze prepared)",
+    prepared_spells=tuple(
+        replace(spell, slot_id="witch_daze", spell_id="daze")
+        if spell.slot_id == "witch_light" else spell
+        for spell in FAITHS_FLAMEKEEPER_WITCH.prepared_spells
+    ),
+    sheet_notes=(
+        *FAITHS_FLAMEKEEPER_WITCH.sheet_notes,
+        "Daze replaces Sigil in this alternate familiar's ten known divine cantrips and replaces Light in one ordinary prepared cantrip slot. Daze is an admitted divine two-action, 60-foot, basic Will-save mental cantrip; only a critical failure also causes stunned 1.",
+        "Source: https://2e.aonprd.com/Spells.aspx?ID=1482.",
+    ),
+)
+
 FLAMEKEEPER_FOX = CreatureDefinition(
     definition_id="faiths_flamekeeper_fox", name="Flamekeeper Fox Familiar", hp=7, ac=15, perception=5, land_speed_ft=40,
     attacks=(), kind="familiar", health_mode=HealthMode.PC, vision="low_light", size="tiny", initiative_exempt=True, familiar_owner_actor_id="witch",
@@ -89,5 +108,16 @@ FAITHS_FLAMEKEEPER_NEXT_SETUP = EncounterSetup(
         CreaturePlacement("fox", FLAMEKEEPER_FOX.definition_id, "Flamekeeper Fox", "blue", Position(1, 2)),
         CreaturePlacement("ally", FAITHS_FLAMEKEEPER_WITCH.definition_id, "Witch Ally", "blue", Position(2, 2)),
         CreaturePlacement("next_enemy", COMMAND_TARGET.definition_id, "Next Command Target", "red", Position(5, 2)),
+    ),
+)
+
+FAITHS_FLAMEKEEPER_DAZE_SETUP = EncounterSetup(
+    "faiths_flamekeeper_daze_vs_common_speaker",
+    "Faith's Flamekeeper Witch Daze versus Common Speaker",
+    15,
+    5,
+    (
+        CreaturePlacement("witch", FAITHS_FLAMEKEEPER_WITCH_DAZE.definition_id, "Flamekeeper Witch", "blue", Position(1, 2)),
+        CreaturePlacement("enemy", COMMAND_TARGET.definition_id, "Common Speaker", "red", Position(9, 2)),
     ),
 )

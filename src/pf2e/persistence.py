@@ -1789,15 +1789,24 @@ def _state_from_data(data: Any) -> EncounterState:
     for actor_id, creature in creatures.items():
         if creature.stunned:
             source = creatures.get(creature.stunned_source_actor_id or "")
+            source_definition = get_definition(source.definition_id) if source is not None else None
+            stunning_blows = (
+                source_definition is not None
+                and "stunning_blows" in source_definition.abilities
+                and creature.stunned in {1, 3}
+            )
+            daze = (
+                source is not None
+                and creature.stunned == 1
+                and any(slot.spell_id == "daze" and slot.cantrip for slot in source.prepared_slots)
+            )
             if (
-                creature.stunned not in {1, 3}
-                or source is None
-                or "stunning_blows" not in get_definition(source.definition_id).abilities
+                not (stunning_blows or daze)
                 or creature.stunned_until_start != starts_raw[actor_id] + 1
             ):
-                raise ValueError(f"saved actor {actor_id!r} has invalid Stunning Blows state")
+                raise ValueError(f"saved actor {actor_id!r} has invalid admitted stunned state")
         elif creature.stunned_until_start or creature.stunned_source_actor_id is not None:
-            raise ValueError(f"saved actor {actor_id!r} has stale Stunning Blows state")
+            raise ValueError(f"saved actor {actor_id!r} has stale admitted stunned state")
     ends_raw = data.get("actor_end_counts")
     if (
         not isinstance(ends_raw, dict)
@@ -2954,7 +2963,7 @@ def _state_from_data(data: Any) -> EncounterState:
                     or state.pending_choice.check_kind == "spell_save"
                 )
                 and state.pending_choice.spell_id in {
-                    "void_warp", "fear", "breathe_fire", "electric_arc",
+                    "daze", "void_warp", "fear", "breathe_fire", "electric_arc",
                     "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "harm",
                     "caustic_blast", "gale_blast",
                 }
@@ -3004,7 +3013,7 @@ def _validate_committed_spell_save_provenance(
         or caster is None
         or target is None
         or spell_id not in {
-            "void_warp", "fear", "breathe_fire", "electric_arc",
+            "daze", "void_warp", "fear", "breathe_fire", "electric_arc",
             "tempest_surge", "vitality_lash", "frostbite", "enfeeble", "harm",
             "caustic_blast", "gale_blast",
         }

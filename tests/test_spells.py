@@ -10,6 +10,7 @@ from pf2e.persistence import DiceSource
 from pf2e.spells import (
     SPELLS,
     basic_save_damage,
+    basic_save_damage_result,
     divine_lance_damage,
     heal_range_ft,
     heal_roll,
@@ -23,6 +24,7 @@ from pf2e.spells import (
 def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailable() -> None:
     assert set(SPELLS) == {
         "divine_lance",
+        "daze",
         "void_warp",
         "guidance",
         "stabilize",
@@ -116,6 +118,11 @@ def test_fixed_spell_metadata_is_frozen_and_marks_only_deferred_spells_unavailab
     assert SPELLS["divine_lance"].traits == frozenset(
         {"attack", "cantrip", "concentrate", "manipulate", "sanctified", "spirit"}
     )
+    assert SPELLS["daze"].action_costs == (2,)
+    assert SPELLS["daze"].range_ft == 60
+    assert SPELLS["daze"].traits == frozenset(
+        {"cantrip", "concentrate", "manipulate", "mental", "nonlethal"}
+    )
     assert "manipulate" not in SPELLS["guidance"].traits
 
 
@@ -187,6 +194,16 @@ def test_void_warp_applies_basic_save_and_critical_failure_condition(
 
 def test_basic_save_damage_keeps_positive_one_when_halved() -> None:
     assert basic_save_damage(1, DegreeOfSuccess.SUCCESS) == 1
+
+
+def test_basic_save_damage_result_preserves_one_component_and_records_degree() -> None:
+    raw = divine_lance_damage(DegreeOfSuccess.SUCCESS, lambda _sides: 4)
+    assert raw is not None and raw.total == 8
+
+    saved = basic_save_damage_result(raw, DegreeOfSuccess.SUCCESS)
+
+    assert saved.total == saved.components[0].amount == 4
+    assert saved.adjustment == "basic_save:success"
 
 
 def test_spell_helpers_accept_the_existing_dice_source_draw_method() -> None:

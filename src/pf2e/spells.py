@@ -30,7 +30,7 @@ from .space import grid_distance_feet
 # targeted spell's dim-light flat-check continuation has the same live and
 # saved validation boundary.
 CONCEALMENT_TARGETED_SPELL_IDS = frozenset({
-    "divine_lance", "heal", "soothe", "fear", "void_warp", "guidance", "stabilize",
+    "divine_lance", "daze", "heal", "soothe", "fear", "void_warp", "guidance", "stabilize",
     "runic_weapon", "runic_body", "force_bolt", "frostbite", "enfeeble",
     "telekinetic_projectile", "ignition", "gouging_claw", "tangle_vine",
     "tempest_surge",
@@ -124,6 +124,15 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 60,
                 True,
                 "https://2e.aonprd.com/Spells.aspx?ID=1498",
+            ),
+            SpellDefinition(
+                "daze",
+                "Daze",
+                (2,),
+                frozenset({"cantrip", "concentrate", "manipulate", "mental", "nonlethal"}),
+                60,
+                True,
+                "https://2e.aonprd.com/Spells.aspx?ID=1482",
             ),
             SpellDefinition(
                 "void_warp",
@@ -463,6 +472,26 @@ def basic_save_damage(total: int, degree: DegreeOfSuccess) -> int:
     if degree is DegreeOfSuccess.FAILURE:
         return total
     return total * 2
+
+
+def basic_save_damage_result(raw: DamageResult, degree: DegreeOfSuccess) -> DamageResult:
+    """Apply a basic save to one ordinary spell damage component.
+
+    The admitted single-target spell resolvers all roll one typed component
+    before their target saves.  Keeping the damage-result adjustment here
+    gives those resolvers one literal record of the basic-save outcome while
+    leaving multi-recipient and mixed-component effects explicitly owned by
+    their distinct procedures.
+    """
+    if not isinstance(raw, DamageResult) or len(raw.components) != 1:
+        raise ValueError("basic-save spell damage requires exactly one damage component")
+    total = basic_save_damage(raw.total, degree)
+    return replace(
+        raw,
+        components=(replace(raw.components[0], amount=total),),
+        total=total,
+        adjustment=f"basic_save:{degree.name.lower()}",
+    )
 
 
 def void_warp_effect(
