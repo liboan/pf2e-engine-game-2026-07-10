@@ -112,6 +112,47 @@ def test_acid_flask_variant_uses_existing_persistent_d6_and_recovery_lifecycle()
     assert not game._state.persistent_effects
 
 
+@pytest.mark.parametrize(
+    ("formula_id", "persistent_dice", "persistent_flat"),
+    (
+        ("alchemists_fire_lesser", (), 2),
+        ("acid_flask_lesser", (6, 6), 0),
+    ),
+)
+def test_critical_bomb_doubles_persistent_damage_but_not_splash_after_saved_choice(
+    formula_id: str,
+    persistent_dice: tuple[int, ...],
+    persistent_flat: int,
+    tmp_path: Path,
+) -> None:
+    game = Encounter.start(
+        get_setup("l2_bomber_far_lobber_vs_guard_dog"),
+        rolls=(20, 1, 20, 1, 1, 1),
+    )
+    _settle(game)
+    assert game.execute(QuickAlchemy("create_consumable", formula_id)).status is ResultStatus.COMPLETED
+    result = game.execute(QuickBomber("dog", formula_id))
+    assert result.status is ResultStatus.PAUSED
+    choice = result.inspection.choice
+    assert choice is not None and choice.kind == "attack_hero_reroll"
+    pending_path = tmp_path / f"critical-pending-{formula_id}.json"
+    game.save(pending_path)
+    game = Encounter.load(pending_path)
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "attack_hero_reroll"
+    assert game.execute(Choose(choice.choice_id, "keep", choice.owner_actor_id)).status is ResultStatus.COMPLETED
+    assert game._state.creatures["dog"].hp == 5  # doubled initial packet plus one undoubled splash.
+    effect = game._state.persistent_effects[0]
+    assert (effect.dice, effect.flat) == (persistent_dice, persistent_flat)
+
+    save_path = tmp_path / f"critical-{formula_id}.json"
+    game.save(save_path)
+    restored = Encounter.load(save_path)
+    assert [(item.dice, item.flat) for item in restored._state.persistent_effects] == [
+        (persistent_dice, persistent_flat),
+    ]
+
+
 def test_terminal_creates_and_throws_the_new_fire_formula() -> None:
     commands = iter((
         "2", "1",  # Keep initiative.

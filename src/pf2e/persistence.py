@@ -2452,7 +2452,9 @@ def _state_from_data(data: Any) -> EncounterState:
                 # Ignition's adjacent melee profile persists with d6s.
                 ("ignition", "fire", (6,), 0),
                 ("alchemists_fire_lesser", "fire", (), 1),
+                ("alchemists_fire_lesser", "fire", (), 2),
                 ("acid_flask_lesser", "acid", (6,), 0),
+                ("acid_flask_lesser", "acid", (6, 6), 0),
             }
             or (not row[5] and row[6] < 1)
             or row[0] in persistent_ids or (row[2], row[4]) in persistent_keys

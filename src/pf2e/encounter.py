@@ -7257,14 +7257,15 @@ class Encounter:
                      if attack.attack_id == attack_id),
                     None,
                 )
+                persistent_multiplier = 2 if resolution.attacker_critical else 1
                 self._apply_persistent_effect(
                     state,
                     attacker,
                     target,
                     bomb_formula_id or "bomber_bomb",
                     facts.persistent_damage_type,
-                    dice=facts.persistent_damage_dice,
-                    flat=facts.persistent_damage_flat,
+                    dice=facts.persistent_damage_dice * persistent_multiplier,
+                    flat=facts.persistent_damage_flat * persistent_multiplier,
                 )
                 events.append(Event(
                     "persistent_applied", attacker.actor_id, target.actor_id,
