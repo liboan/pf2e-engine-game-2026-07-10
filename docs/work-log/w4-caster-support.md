@@ -12,4 +12,4 @@ The W4 caster lane contains three distinct new feat names: Energy Ablation, Doma
 
 Primary files: `src/pf2e/model.py`, `spellshape.py`, `family_casting.py`, `witch.py`, `encounter.py`, `persistence.py`, `terminal.py`, `spells.py`, `w4_caster_content.py`, and `content.py`. Source URLs and scope boundaries are recorded in `w4_caster_content.py`.
 
-Verification complete: module compile, catalog/setup import, direct Energy Ablation cast/resistance and ineligible-cast waste, Weapon Surge cast/effect, Cackle focus/once-per-turn behavior, independent reviewer checks, and the assembled suite (1491 passed before the final repair pass).
+Verification complete: module compile, catalog/setup import, direct Energy Ablation cast/resistance and ineligible-cast waste, Weapon Surge cast/effect, Cackle focus/once-per-turn plus Restored Spirit behavior, independent reviewer checks, assembled interaction review (3 passed), and the final canonical suite (1494 passed).
