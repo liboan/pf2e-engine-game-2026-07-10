@@ -7,10 +7,10 @@ feat entries:
 - Ranger: Twin Takedown.
 - Rogue: Twin Feint.
 
-Source packet: [Exacting Strike](https://2e.aonprd.com/Feats.aspx?ID=357),
-[Double Slice](https://2e.aonprd.com/Feats.aspx?ID=356),
-[Twin Takedown](https://2e.aonprd.com/Feats.aspx?ID=494), and
-[Twin Feint](https://2e.aonprd.com/Feats.aspx?ID=552).
+Source packet: [Exacting Strike](https://2e.aonprd.com/Feats.aspx?ID=4770),
+[Double Slice](https://2e.aonprd.com/Feats.aspx?ID=4769),
+[Twin Takedown](https://2e.aonprd.com/Feats.aspx?ID=4864), and
+[Twin Feint](https://2e.aonprd.com/Feats.aspx?ID=4921).
 
 All four are genuinely new level-1 playable names in this checkout; W3
 Snagging Strike, Combat Grab, Brutish Shove and the existing Vicious Swing are
@@ -25,7 +25,8 @@ Implementation contracts:
   second-Strike menu. Double Slice is a two-action same-target pair, resets the
   second Strike to the current MAP, applies its non-agile second-Strike penalty,
   and records two attacks after completion. Twin Feint is a two-action
-  same-target pair and snapshots the target off-guard for its second Strike.
+  same-target pair and snapshots the target off-guard for its second Strike;
+  neither Twin Feint Strike is restricted to agile/finesse weapons.
 - `Encounter._start_w4_exacting_strike` reuses the ordinary Strike pipeline;
   an ordinary failure removes only that Strike's MAP increment, while a
   critical failure still counts.

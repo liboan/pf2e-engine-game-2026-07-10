@@ -2291,10 +2291,6 @@ def run_terminal(
                             or action_id != "double_slice"
                             or attack.hands_required == 1
                         )
-                        and (
-                            action_id != "twin_feint"
-                            or bool({"agile", "finesse"} & attack.traits)
-                        )
                         for attack in definition.attacks
                     )
                 )

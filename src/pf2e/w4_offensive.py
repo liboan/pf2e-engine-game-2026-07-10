@@ -4,10 +4,10 @@ This lane deliberately composes the existing Strike and paired-Strike
 transactions.  It does not create a second attack or damage resolver.
 
 Sources checked 2026-09-20:
-* https://2e.aonprd.com/Feats.aspx?ID=357 (Exacting Strike)
-* https://2e.aonprd.com/Feats.aspx?ID=494 (Twin Takedown)
-* https://2e.aonprd.com/Feats.aspx?ID=356 (Double Slice)
-* https://2e.aonprd.com/Feats.aspx?ID=552 (Twin Feint)
+* https://2e.aonprd.com/Feats.aspx?ID=4770 (Exacting Strike)
+* https://2e.aonprd.com/Feats.aspx?ID=4864 (Twin Takedown)
+* https://2e.aonprd.com/Feats.aspx?ID=4769 (Double Slice)
+* https://2e.aonprd.com/Feats.aspx?ID=4921 (Twin Feint)
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ class DoubleSlice(FamilyCommand):
 
 @dataclass(frozen=True)
 class TwinFeint(FamilyCommand):
-    """Two-action Rogue pair of different agile/finesse melee Strikes."""
+    """Two-action Rogue pair of different wielded melee Strikes."""
 
     family_id = "martial"
     strike: PairedStrikeSelection

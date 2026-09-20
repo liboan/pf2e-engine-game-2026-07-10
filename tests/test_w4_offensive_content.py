@@ -1,10 +1,10 @@
 """Focused public play checks for the W4 offensive level-1 feat lane.
 
 Sources checked 2026-09-20:
-Exacting Strike https://2e.aonprd.com/Feats.aspx?ID=357
-Double Slice https://2e.aonprd.com/Feats.aspx?ID=356
-Twin Takedown https://2e.aonprd.com/Feats.aspx?ID=494
-Twin Feint https://2e.aonprd.com/Feats.aspx?ID=552
+Exacting Strike https://2e.aonprd.com/Feats.aspx?ID=4770
+Double Slice https://2e.aonprd.com/Feats.aspx?ID=4769
+Twin Takedown https://2e.aonprd.com/Feats.aspx?ID=4864
+Twin Feint https://2e.aonprd.com/Feats.aspx?ID=4921
 """
 
 from pathlib import Path

@@ -86,10 +86,14 @@ def start_paired_strikes(
     if activity_id in {"ranger:twin_takedown", "fighter:double_slice", "rogue:twin_feint"}:
         if first_attack is None or "melee" not in first_attack.traits:
             return FamilyProcedureResult(rejection="This paired activity requires a melee first Strike.")
-        if activity_id == "fighter:double_slice" and first_attack.hands_required != 1:
-            return FamilyProcedureResult(rejection="Double Slice requires one-handed melee weapons.")
-        if activity_id == "rogue:twin_feint" and not ({"agile", "finesse"} & first_attack.traits):
-            return FamilyProcedureResult(rejection="Twin Feint requires an agile or finesse melee first Strike.")
+        if (
+            first_attack.item_id is None
+            or first_attack.item_id not in context.actor.held_items
+            or first_attack.hands_required != 1
+        ):
+            return FamilyProcedureResult(
+                rejection="This paired activity requires a wielded one-handed melee weapon in its first hand."
+            )
     hook = getattr(context.encounter, "_resolve_subordinate_strike", None)
     if not callable(hook):
         return FamilyProcedureResult(
@@ -398,13 +402,19 @@ def second_strike_options(
             if activity_id in {"ranger:twin_takedown", "fighter:double_slice", "rogue:twin_feint"}:
                 if "melee" not in attack.traits or attack.attack_id == first.attack_id:
                     continue
-                if activity_id == "fighter:double_slice" and (
-                    attack.hands_required != 1 or first.attack_id == attack.attack_id
+                first_attack = next(
+                    (candidate for candidate in context.definition.attacks if candidate.attack_id == first.attack_id),
+                    None,
+                )
+                if (
+                    attack.item_id is None
+                    or attack.item_id not in actor.held_items
+                    or attack.hands_required != 1
+                    or first_attack is None
+                    or attack.item_id == first_attack.item_id
                 ):
                     continue
                 if activity_id == "ranger:twin_takedown" and attack.attack_id == first.attack_id:
-                    continue
-                if activity_id == "rogue:twin_feint" and not ({"agile", "finesse"} & attack.traits):
                     continue
             if attack.free_hands_required and max(0, 2 - len(actor.held_items)) < attack.free_hands_required:
                 continue

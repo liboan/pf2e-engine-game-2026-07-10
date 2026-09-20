@@ -1930,6 +1930,12 @@ class Encounter:
                 and pending.attack_actions_cost == 0
                 and pending.attack_count_cost == 1
             )
+            paired_double_slice_non_agile = (
+                paired_strike_subordinate
+                and continuation.paired_strike.activity_id == "fighter:double_slice"
+                and continuation.paired_strike.next_index == 1
+                and "agile" not in attack.traits
+            )
             if (
                 pending.attack_actions_cost not in ((0, 1, 2) if (sudden_charge_strike or paired_strike_subordinate) else (1, 2))
                 or pending.attack_count_cost not in (1, 2)
@@ -1962,6 +1968,8 @@ class Encounter:
                 raise ValueError("save has impossible pending Strike count")
             attacks_before = actor.strikes_this_turn - pending.attack_count_cost
             expected_penalty = multiple_attack_penalty(attacks_before, attack.traits)
+            if paired_double_slice_non_agile:
+                expected_penalty -= 2
             expected_count = attacks_before + 1
             if (
                 pending.attack_actions_cost == 2
