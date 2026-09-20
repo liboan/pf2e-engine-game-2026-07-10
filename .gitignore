@@ -6,3 +6,8 @@ __pycache__/
 build/
 dist/
 docs/archive/
+
+# Ephemeral local validation captures and raw agent-session exports.
+/validation-results/
+/raw-thread-logs/
+/raw-session-logs/
