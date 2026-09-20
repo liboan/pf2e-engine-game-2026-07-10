@@ -58,6 +58,9 @@ class LoadoutItem:
     market_price_gp: int
     paid_price_gp: int
     granted_by: str | None = None
+    # The older curated loadouts are gp-granular. W5 may record a small
+    # sub-gp purchase without changing their positional constructor contract.
+    paid_price_sp: int = 0
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,13 @@ class BarbarianLoadout:
     @property
     def remaining_money_gp(self) -> int:
         return self.starting_money_gp - sum(item.paid_price_gp for item in self.items)
+
+    @property
+    def remaining_money_sp(self) -> int:
+        """Return the exact remainder in silver pieces for W5 ledgers."""
+        return self.starting_money_gp * 10 - sum(
+            item.paid_price_gp * 10 + item.paid_price_sp for item in self.items
+        )
 
     @property
     def total_bulk(self) -> int:
@@ -384,16 +394,16 @@ def _build_raging_thrower() -> BarbarianCharacter:
         ) + (
             "Raging Thrower applies Rage damage to authorized thrown weapon Strikes; the three daggers retain stable instance identities.",
             "Moment of Clarity remains the distinct Fury bonus feat.",
-            "Starting gear is a breastplate and three tracked mundane daggers; the coarse gp loadout ledger records 7 gp remaining after the breastplate.",
+            "Starting gear is a breastplate and three tracked mundane daggers at 2 sp each; the exact remainder is 6 gp 4 sp. The legacy gp-only loadout total is a coarse 7 gp and must not be read as free-dagger accounting.",
         ),
     )
     loadout = replace(
         base.loadout,
         items=(
             LoadoutItem("breastplate", bulk=2, market_price_gp=8, paid_price_gp=8),
-            LoadoutItem("dagger_1", bulk=0, market_price_gp=0, paid_price_gp=0),
-            LoadoutItem("dagger_2", bulk=0, market_price_gp=0, paid_price_gp=0),
-            LoadoutItem("dagger_3", bulk=0, market_price_gp=0, paid_price_gp=0),
+            LoadoutItem("dagger_1", bulk=0, market_price_gp=0, paid_price_gp=0, paid_price_sp=2),
+            LoadoutItem("dagger_2", bulk=0, market_price_gp=0, paid_price_gp=0, paid_price_sp=2),
+            LoadoutItem("dagger_3", bulk=0, market_price_gp=0, paid_price_gp=0, paid_price_sp=2),
         ),
     )
     return BarbarianCharacter(definition, base.barbarian_state, loadout)

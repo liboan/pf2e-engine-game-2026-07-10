@@ -50,6 +50,7 @@ def test_raging_thrower_applies_agile_rage_damage_and_lands_selected_dagger(tmp_
         "breastplate", "dagger_1", "dagger_2", "dagger_3"
     )
     assert loadout.remaining_money_gp == 7
+    assert loadout.remaining_money_sp == 64  # 6 gp 4 sp
     assert "dagger_thrown" in {strike.attack_id for strike in game.options().strikes}
 
     pending = game.execute(
