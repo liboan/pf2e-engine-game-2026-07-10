@@ -15,6 +15,8 @@ https://2e.aonprd.com/Spells.aspx?ID=1470.
 
 from pathlib import Path
 
+import pytest
+
 from pf2e.content import get_definition, get_setup
 from pf2e.encounter import Encounter
 from pf2e.model import Cast, EndTurn, ResultStatus
@@ -93,6 +95,31 @@ def test_wizard_learned_command_is_playable_and_saved(tmp_path: Path) -> None:
     restored = Encounter.load(tmp_path / "wizard-command.json")
     command = next(effect for effect in restored._state.condition_effects if effect.kind == "commanded")
     assert (command.value, command.command_mode, command.source_actor_id) == (3, "stand", "wizard")
+
+
+@pytest.mark.parametrize(
+    ("setup_id", "caster_id"),
+    (
+        ("faiths_flamekeeper_suppression_spells_vs_common_speaker", "witch"),
+        ("battle_magic_wizard_suppression_spells_vs_common_speaker", "wizard"),
+    ),
+)
+def test_prepared_fear_critical_failure_fleeing_round_trips(
+    tmp_path: Path,
+    setup_id: str,
+    caster_id: str,
+) -> None:
+    game = Encounter.start(get_setup(setup_id), rolls=(20, 1, 1))
+    _settle(game)
+    result = game.execute(Cast("fear", "enemy"))
+    assert result.status is ResultStatus.COMPLETED
+    assert any(effect.kind == "fleeing" for effect in game._state.active_effects)
+
+    path = tmp_path / f"{caster_id}-prepared-fear.json"
+    game.save(path)
+    restored = Encounter.load(path)
+    fleeing = next(effect for effect in restored._state.active_effects if effect.kind == "fleeing")
+    assert (fleeing.source_actor_id, fleeing.target_actor_id, fleeing.value) == (caster_id, "enemy", 1)
 
 
 def test_terminal_casts_wizard_suppression_fear() -> None:

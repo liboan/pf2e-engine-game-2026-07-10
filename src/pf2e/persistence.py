@@ -2261,9 +2261,10 @@ def _state_from_data(data: Any) -> EncounterState:
                         spell.spell_id == "fear"
                         and spell.rank == 1
                         and not spell.cantrip
-                        for spell in get_definition(
-                            creatures[row[2]].definition_id
-                        ).spontaneous_spells
+                        for spell in (
+                            *get_definition(creatures[row[2]].definition_id).prepared_spells,
+                            *get_definition(creatures[row[2]].definition_id).spontaneous_spells,
+                        )
                     )
                     or (row[2], row[3]) in fleeing_pairs
                 )
