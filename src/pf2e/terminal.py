@@ -51,6 +51,7 @@ _ACTION_LABELS = {
     "devise_stratagem": "Devise a Stratagem",
     "known_weaknesses": "Known Weaknesses + Devise",
     "vicious_swing": "Vicious Swing",
+    "sudden_charge": "Sudden Charge",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
     "hunted_shot": "Hunted Shot",
@@ -63,6 +64,7 @@ _ACTION_LABELS = {
     "raise_shield": "Raise a Shield",
     "lay_on_hands": "Lay on Hands",
     "battle_medicine": "Battle Medicine",
+    "person_of_interest": "Person of Interest",
     "suppress_aura": "Suppress Aura",
     "resume_aura": "Resume Aura",
     "trip": "Trip",
@@ -831,6 +833,24 @@ def _choose_devise_target(
         input_fn,
         output_fn,
         prompt="Devise a Stratagem target:",
+    )
+
+
+def _devise_is_free(game: "Encounter", actor_id: str, target_id: str) -> bool:
+    """Keep terminal Devise cost aligned with the engine's saved grants."""
+    from pf2e.investigator import person_of_interest_grant_allows_free_devise
+
+    actor = game._state.creatures[actor_id]
+    return (
+        (
+            bool(actor.investigator_active_cases)
+            and target_id in actor.investigator_awareness
+        )
+        or person_of_interest_grant_allows_free_devise(
+            actor.investigator_person_of_interest,
+            target_id=target_id,
+            now_seconds=game._state.world_time_seconds,
+        )
     )
 
 
@@ -1924,9 +1944,10 @@ def run_terminal(
     )
     from pf2e.skill_actions import Demoralize, Escape, Feint, Grapple, Trip, TumbleThrough
     from pf2e.barbarian import Rage
-    from pf2e.investigator import BattleMedicine, DeviseStratagem, RecallKnowledge
+    from pf2e.investigator import BattleMedicine, DeviseStratagem, PersonOfInterest, RecallKnowledge
     from pf2e.swashbuckler import ConfidentFinisher
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
+    from pf2e.fighter import SuddenCharge
 
     if input_fn is None:
         input_fn = input
@@ -2238,6 +2259,70 @@ def run_terminal(
                             ),
                             output_fn,
                         )
+            elif action_id == "sudden_charge":
+                try:
+                    first_raw = _read_line(
+                        "Sudden Charge first Stride path (for example B2 C2):",
+                        input_fn, output_fn,
+                    )
+                    second_raw = _read_line(
+                        "Sudden Charge second Stride path (for example D2 E2):",
+                        input_fn, output_fn,
+                    )
+                    first = tuple(Position(x=x, y=y) for x, y in parse_path(
+                        first_raw, width=inspection.map_width, height=inspection.map_height,
+                    ))
+                    second = tuple(Position(x=x, y=y) for x, y in parse_path(
+                        second_raw, width=inspection.map_width, height=inspection.map_height,
+                    ))
+                    # The optional subordinate Strike is made after both
+                    # paths, so the ordinary pre-move strike menu may not yet
+                    # show a target reached by the second Stride.  Offer only
+                    # the acting creature's ordinary melee attacks and all
+                    # opposing living actors; Encounter remains authoritative
+                    # for the final range/equipment validation.
+                    from pf2e.content import get_definition
+
+                    actor = next(item for item in inspection.actors if item.actor_id == inspection.turn_actor_id)
+                    attacks = [
+                        attack for attack in get_definition(
+                            game._state.creatures[actor.actor_id].definition_id
+                        ).attacks
+                        if "melee" in attack.traits
+                    ]
+                    attack_index = _choose_index(
+                        "Weapon / attack number:",
+                        [f"{attack.name} ({attack.attack_id})" for attack in attacks],
+                        input_fn, output_fn,
+                    )
+                    if attack_index is None:
+                        _run_command(game, SuddenCharge(first, second), output_fn)
+                    else:
+                        attack = attacks[attack_index]
+                        targets = tuple(
+                            item.actor_id for item in inspection.actors
+                            if item.team != actor.team and not item.defeated and not item.dead
+                        )
+                        target_index = _choose_index(
+                            f"{attack.name} target:",
+                            [f"{_actor_label(inspection, target_id)} ({target_id})" for target_id in targets],
+                            input_fn, output_fn,
+                        )
+                        if target_index is None:
+                            _run_command(game, SuddenCharge(first, second), output_fn)
+                        else:
+                            target_id = targets[target_index]
+                            intent_index = _choose_index(
+                                "Damage intent:",
+                                ("Use attack default (lethal)", "Lethal damage", "Nonlethal damage"),
+                                input_fn, output_fn,
+                            )
+                            if intent_index is None:
+                                _run_command(game, SuddenCharge(first, second), output_fn)
+                            else:
+                                _run_command(game, SuddenCharge(first, second, target_id, attack.attack_id), output_fn)
+                except ValueError as exc:
+                    output_fn(str(exc))
             elif action_id == "quick_alchemy":
                 from pf2e.alchemist_content import BOMBER_FORMULA_IDS
                 from pf2e.alchemy_content import FORMULAS_BY_ID
@@ -2283,6 +2368,7 @@ def run_terminal(
                         if recipient_id is not None:
                             _run_command(game, ActivateAlchemy(item_id, recipient_id), output_fn)
             elif action_id == "quick_bomber":
+                from pf2e.alchemy import bomber_bomb_range_increment
                 from pf2e.alchemist_content import BOMBER_FIELD_FORMULA_IDS
                 from pf2e.alchemy_content import FORMULAS_BY_ID
                 from pf2e.content import get_definition
@@ -2300,6 +2386,13 @@ def run_terminal(
                         candidate for candidate in get_definition(actor.definition_id).attacks
                         if candidate.item_id == formula_id
                     )
+                    alchemy_state = game._state.alchemy_states.get(actor.actor_id)
+                    ordinary_increment = attack.range_increment_ft or attack.range_ft
+                    max_range_ft = (
+                        bomber_bomb_range_increment(alchemy_state, ordinary_increment) * 6
+                        if alchemy_state is not None
+                        else (attack.max_range_ft or 0)
+                    )
                     target_ids = tuple(
                         candidate.actor_id for candidate in inspection.actors
                         if candidate.actor_id != actor.actor_id
@@ -2307,7 +2400,7 @@ def run_terminal(
                         and grid_distance_feet(
                             actor.position,
                             game._state.creatures[candidate.actor_id].position,
-                        ) <= (attack.max_range_ft or 0)
+                        ) <= max_range_ft
                     )
                     target_id = _choose_target(target_ids, inspection, input_fn, output_fn)
                     if target_id is not None:
@@ -2322,7 +2415,12 @@ def run_terminal(
                 if target_id is not None:
                     _run_command(
                         game,
-                        DeviseStratagem(target_id=target_id),
+                        DeviseStratagem(
+                            target_id=target_id,
+                            free_action=_devise_is_free(
+                                game, engine_options.actor_id, target_id,
+                            ),
+                        ),
                         output_fn,
                     )
             elif action_id == "known_weaknesses":
@@ -2335,7 +2433,13 @@ def run_terminal(
                 if target_id is not None:
                     _run_command(
                         game,
-                        DeviseStratagem(target_id=target_id, known_weaknesses=True),
+                        DeviseStratagem(
+                            target_id=target_id,
+                            known_weaknesses=True,
+                            free_action=_devise_is_free(
+                                game, engine_options.actor_id, target_id,
+                            ),
+                        ),
                         output_fn,
                     )
             elif action_id == "recall_knowledge":
@@ -2439,11 +2543,36 @@ def run_terminal(
                     prompt="Battle Medicine target:",
                 )
                 if target_id is not None:
+                    from pf2e.content import get_definition
+
+                    actor = game._state.creatures.get(inspection.turn_actor_id or "")
+                    definition = get_definition(actor.definition_id) if actor is not None else None
+                    use_assurance = False
+                    if definition is not None and "assurance_medicine" in definition.abilities:
+                        method = _choose_index(
+                            "Battle Medicine method:",
+                            ("Roll check", "Use Assurance (Medicine)"),
+                            input_fn,
+                            output_fn,
+                        )
+                        if method is None:
+                            continue
+                        use_assurance = method == 1
                     _run_command(
                         game,
-                        BattleMedicine(target_id=target_id),
+                        BattleMedicine(target_id=target_id, use_assurance=use_assurance),
                         output_fn,
                     )
+            elif action_id == "person_of_interest":
+                target_id = _choose_target(
+                    getattr(engine_options, "person_of_interest_targets", ()),
+                    inspection,
+                    input_fn,
+                    output_fn,
+                    prompt="Person of Interest target:",
+                )
+                if target_id is not None:
+                    _run_command(game, PersonOfInterest(target_id), output_fn)
             elif action_id == "vicious_swing":
                 strike_inputs = _choose_strike_inputs(
                     engine_options.strikes,

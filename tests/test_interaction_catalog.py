@@ -40,8 +40,16 @@ from pf2e.content import (
     SURE_STRIKE_WARPRIEST_SETUP,
     STEEL_SHIELD_TEST_SETUP,
     SETUPS,
+    L2_MARTIAL_SETUPS,
+    L2_DIVINE_DEFINITIONS,
+    L2_DIVINE_SETUPS,
+    BOMBER_ALCHEMIST_LEVEL_2,
+    BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
+    BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
+    BOMBER_ALCHEMIST_LEVEL_2_SETUP,
     get_setup,
 )
+from pf2e.investigator_content import INVESTIGATOR_SETUPS
 from pf2e.barbarian_content import (
     ANIMAL_BARBARIAN_SETUPS,
     BARBARIAN_TEST_SETUP,
@@ -55,6 +63,7 @@ from pf2e.l2_ranger_content import (
     RANGER_PRECISION_LEVEL_2,
     RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
 )
+from pf2e.l2_prepared_content import L2_PREPARED_SETUPS
 from pf2e.l2_reach_content import L2_REACH_DEFINITIONS, L2_REACH_SETUPS
 import pf2e.terminal as terminal
 
@@ -106,6 +115,16 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     l2_horizontal_ids = set(L2_HORIZONTAL_SETUPS)
     l2_ranger_ids = {RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id}
     l2_reach_ids = {setup.setup_id for setup in L2_REACH_SETUPS}
+    l2_expanded_ids = set(L2_MARTIAL_SETUPS) | {setup.setup_id for setup in L2_PREPARED_SETUPS}
+    remaining_l2_ids = (
+        set(INVESTIGATOR_SETUPS)
+        | set(L2_DIVINE_SETUPS)
+        | {
+            BOMBER_ALCHEMIST_LEVEL_2_SETUP.setup_id,
+            BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP.setup_id,
+            BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP.setup_id,
+        }
+    )
 
     assert len(S2_INTERACTION_SETUPS) == 8
     assert len(S3_INTERACTION_SETUPS) == 8
@@ -120,8 +139,9 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert defense_ids.isdisjoint(_BASE_SETUP_IDS | s2_ids | s3_ids)
     assert (
         s2_ids | s3_ids | _BASE_SETUP_IDS | dragon_ids | animal_ids | defense_ids
-        | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
-    ) == SETUPS.keys()
+            | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
+            | l2_expanded_ids | remaining_l2_ids
+        ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):
         assert get_setup(setup.setup_id) == setup
@@ -137,6 +157,9 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
     assert CREATURES[RANGER_PRECISION_LEVEL_2.definition_id] == RANGER_PRECISION_LEVEL_2
     for definition in L2_REACH_DEFINITIONS:
         assert CREATURES[definition.definition_id] == definition
+    for definition_id, definition in L2_DIVINE_DEFINITIONS.items():
+        assert CREATURES[definition_id] == definition
+    assert CREATURES[BOMBER_ALCHEMIST_LEVEL_2.definition_id] == BOMBER_ALCHEMIST_LEVEL_2
 
 
 def test_catalogued_precision_ranger_combat_setup_starts_and_round_trips(tmp_path) -> None:

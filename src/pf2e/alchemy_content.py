@@ -1,9 +1,11 @@
-"""Finite Player Core 2 common Alchemist formula and feat content.
+"""Finite Player Core 2 common Alchemist level-1/2 formula and feat content.
 
-The records below are selected level-1 catalog facts, not a crafting
-language. Definitions and prices follow the current individual entries, with
-the Spring 2026 errata applied where noted in the Alchemist rules source note.
-Every row links to its source entry.
+The records below are selected catalog facts, not a crafting language.  The
+level-two Bomber progression chooses two previously unknown common formulas
+from this finite level-one catalog, as the class permits formulas of any item
+level the Alchemist can create. Definitions and prices follow the current
+individual entries, with the Spring 2026 errata applied where noted in the
+Alchemist rules source note. Every row links to its source entry.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal
 
-from .alchemy import ALCHEMIST_LEVEL_1_FEATS, FAR_LOBBER, QUICK_BOMBER
+from .alchemy import ALCHEMIST_LEVEL_1_FEATS, ALCHEMIST_LEVEL_2_BOMBER_FEATS, FAR_LOBBER, QUICK_BOMBER
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,4 +276,13 @@ ALCHEMIST_LEVEL_1_FEATS_BY_ID = MappingProxyType(
             bomb_range_increment_ft=30,
         ),
     }
+)
+
+# A level-two Alchemist can select an eligible level-one class feat in its
+# new class-feat slot.  This finite Bomber menu therefore supports keeping
+# Quick Bomber while gaining Far Lobber, or the inverse, without pretending to
+# implement unrelated mutagen, poison-additive, or Crafting-check feats.
+ALCHEMIST_LEVEL_2_BOMBER_FEAT_MENU: tuple[str, ...] = tuple(sorted(ALCHEMIST_LEVEL_2_BOMBER_FEATS))
+ALCHEMIST_LEVEL_2_BOMBER_FEATS_BY_ID = MappingProxyType(
+    {feat_id: ALCHEMIST_LEVEL_1_FEATS_BY_ID[feat_id] for feat_id in ALCHEMIST_LEVEL_2_BOMBER_FEAT_MENU}
 )

@@ -1,4 +1,4 @@
-"""Selected level-1 Forensic Investigator sheet and first-play setup.
+"""Selected Forensic Investigator sheets and bounded first-play setups.
 
 This is one authored build for the Player Core 2 Investigator. It records the
 legal sheet facts needed by the first Devise a Stratagem, Recall Knowledge,
@@ -16,6 +16,14 @@ Sources checked 2026-09-16:
 * https://2e.aonprd.com/Feats.aspx?ID=4479 (Natural Skill)
 * https://2e.aonprd.com/Backgrounds.aspx (Detective)
 * https://2e.aonprd.com/Weapons.aspx?ID=398 (shortsword)
+
+Level-2 progression checked 2026-09-19:
+
+* https://2e.aonprd.com/Classes.aspx?ID=59
+* https://2e.aonprd.com/Methodologies.aspx?ID=7
+* https://2e.aonprd.com/Feats.aspx?ID=5121 (Assurance)
+* https://2e.aonprd.com/Actions.aspx?ID=2399 (Treat Wounds healing table used by Battle Medicine)
+* https://2e.aonprd.com/Feats.aspx?ID=5943 (Person of Interest)
 """
 
 from __future__ import annotations
@@ -620,6 +628,87 @@ FORENSIC_INVESTIGATOR = CreatureDefinition(
 )
 
 
+# Level 2 supplies one Investigator feat, one skill feat, and one skill
+# increase. Person of Interest is the selected level-2 Investigator feat;
+# Medicine receives this level's skill increase and Assurance (Medicine) is
+# the selected skill feat.
+FORENSIC_INVESTIGATOR_LEVEL_2 = CreatureDefinition(
+    definition_id="investigator_forensic_level_2_assurance_medicine",
+    name="Level 2 Forensic Investigator (Assurance Medicine)",
+    hp=26,
+    ac=18,
+    perception=7,
+    land_speed_ft=25,
+    attacks=(
+        AttackDefinition(
+            attack_id="shortsword",
+            name="Shortsword",
+            modifier=7,
+            reach_ft=5,
+            traits=frozenset({"attack", "melee", "agile", "finesse", "weapon"}),
+            damage_type="piercing",
+            damage_dice=(6,),
+            damage_modifier=0,
+            item_id="shortsword",
+            attack_attribute="dexterity",
+            damage_attribute="strength",
+        ),
+    ),
+    kind="pc",
+    health_mode=HealthMode.PC,
+    abilities=(
+        *FORENSIC_INVESTIGATOR.abilities,
+        "assurance_medicine",
+        "investigator_person_of_interest",
+    ),
+    feats=(*FORENSIC_INVESTIGATOR.feats, "Assurance (Medicine)", "Person of Interest"),
+    ability_modifiers=FORENSIC_INVESTIGATOR.ability_modifiers,
+    skills=(
+        ("society", "trained", 8),
+        ("medicine", "expert", 7),
+        ("underworld_lore", "trained", 8),
+        ("diplomacy", "trained", 4),
+        ("deception", "trained", 4),
+        ("survival", "trained", 5),
+        ("intimidation", "trained", 4),
+        ("crafting", "trained", 8),
+        ("arcana", "trained", 8),
+        ("occultism", "trained", 8),
+        ("religion", "trained", 5),
+        ("stealth", "trained", 7),
+        ("thievery", "trained", 7),
+        ("acrobatics", "trained", 7),
+        ("athletics", "trained", 4),
+    ),
+    saves=(
+        ("fortitude", "trained", 5),
+        ("reflex", "expert", 9),
+        ("will", "expert", 7),
+    ),
+    proficiencies=FORENSIC_INVESTIGATOR.proficiencies,
+    held_items=FORENSIC_INVESTIGATOR.held_items,
+    worn_items=FORENSIC_INVESTIGATOR.worn_items,
+    item_instances=FORENSIC_INVESTIGATOR.item_instances,
+    hero_points=1,
+    size="medium",
+    level=2,
+    ancestry="Human",
+    heritage="Skilled Human",
+    background="Detective",
+    class_name="Investigator",
+    languages=FORENSIC_INVESTIGATOR.languages,
+    class_dc=18,
+    sheet_notes=(
+        *FORENSIC_INVESTIGATOR.sheet_notes,
+        "Level 2: HP is 26 (17 + Investigator 8 + Constitution 1); level-based proficiency totals, AC, Perception, attacks, saves, and class DC each increase by one with no ability boosts at this level.",
+        "The level-2 skill increase raises Medicine from trained to expert. Assurance (Medicine) is the selected level-2 skill feat: it may forgo the roll for 10 + level 2 + expert 4 = 16, applying no other modifiers.",
+        "Forensic Medicine remains the methodology: a successful Battle Medicine heals 2d8 plus level 2 and gives this medic's target one-hour Battle Medicine immunity. The admitted Battle Medicine route remains DC 15; higher Treat Wounds DC options are not delivered here.",
+        "Person of Interest is the selected level-2 Investigator feat (one action, once per 10 minutes, no prerequisite): choose a visible creature not known tied to an active investigation; for one minute, Devise a Stratagem against only that target is free. The engine records the selected feat and class-local predicate; its saved target, expiry, cooldown and terminal/action-menu routing are an explicitly bounded shared integration hook.",
+        "Sources: https://2e.aonprd.com/Classes.aspx?ID=59; https://2e.aonprd.com/Methodologies.aspx?ID=7; https://2e.aonprd.com/Feats.aspx?ID=5121; https://2e.aonprd.com/Actions.aspx?ID=2399; https://2e.aonprd.com/Feats.aspx?ID=5943.",
+    ),
+)
+
+
 FORENSIC_INVESTIGATOR_VS_TWO_DOGS = EncounterSetup(
     setup_id="investigator_forensic_vs_two_guard_dogs",
     name="Forensic Investigator's Attack Stratagem",
@@ -690,12 +779,51 @@ FORENSIC_INVESTIGATOR_HEALING_SETUP = EncounterSetup(
 )
 
 
+FORENSIC_INVESTIGATOR_LEVEL_2_HEALING_SETUP = EncounterSetup(
+    setup_id="staged_investigator_forensic_level_2_assurance_medicine",
+    name="Staged Level 2 Forensic Investigator Assurance Medicine",
+    width=5,
+    height=3,
+    placements=(
+        CreaturePlacement(
+            "forensic_investigator",
+            FORENSIC_INVESTIGATOR_LEVEL_2.definition_id,
+            "Level 2 Forensic Investigator",
+            "blue",
+            Position(1, 1),
+        ),
+        CreaturePlacement(
+            "healing_ally",
+            "fighter_m_level_1",
+            "Healing Ally",
+            "blue",
+            Position(2, 1),
+        ),
+        CreaturePlacement(
+            "healing_dog",
+            "guard_dog_mc2924",
+            "Guard Dog",
+            "red",
+            Position(4, 2),
+        ),
+    ),
+    knowledge=(GUARD_DOG_KNOWLEDGE,),
+    examinations=(FORENSIC_HEALING_DOG_EXAMINATION,),
+    investigations=(INVESTIGATOR_CLUE_ROOM,),
+    streetwise=(OUTPOST_HANDLER_STREETWISE,),
+)
+
+
 INVESTIGATOR_DEFINITIONS: Mapping[str, CreatureDefinition] = MappingProxyType(
-    {FORENSIC_INVESTIGATOR.definition_id: FORENSIC_INVESTIGATOR}
+    {
+        FORENSIC_INVESTIGATOR.definition_id: FORENSIC_INVESTIGATOR,
+        FORENSIC_INVESTIGATOR_LEVEL_2.definition_id: FORENSIC_INVESTIGATOR_LEVEL_2,
+    }
 )
 INVESTIGATOR_SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
     {
         FORENSIC_INVESTIGATOR_VS_TWO_DOGS.setup_id: FORENSIC_INVESTIGATOR_VS_TWO_DOGS,
         FORENSIC_INVESTIGATOR_HEALING_SETUP.setup_id: FORENSIC_INVESTIGATOR_HEALING_SETUP,
+        FORENSIC_INVESTIGATOR_LEVEL_2_HEALING_SETUP.setup_id: FORENSIC_INVESTIGATOR_LEVEL_2_HEALING_SETUP,
     }
 )

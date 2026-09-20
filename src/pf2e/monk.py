@@ -45,6 +45,32 @@ def powerful_fist_removes_lethal_penalty(
     )
 
 
+def stunning_blows_is_eligible(
+    *,
+    abilities: tuple[str, ...],
+    first_target_id: str,
+    second_target_id: str,
+    first_hit: bool,
+    second_hit: bool,
+    first_damage: int | None,
+    second_damage: int | None,
+) -> bool:
+    """Return the source-checked trigger for the selected level-2 feat.
+
+    Stunning Blows is not a second Strike.  The paired-Strike continuation
+    remains responsible for normal MAP, reactions, damage and save/load; a
+    shared hook invokes this predicate only after both ordinary Flurry results
+    are settled.  The target must be the same and either Strike must both hit
+    and deal damage before the Fortitude save is offered.
+    """
+
+    return (
+        "stunning_blows" in abilities
+        and first_target_id == second_target_id
+        and ((first_hit and (first_damage or 0) > 0) or (second_hit and (second_damage or 0) > 0))
+    )
+
+
 def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | None:
     command = context.command
     if not isinstance(command, FlurryOfBlows):

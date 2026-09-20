@@ -34,7 +34,7 @@ CONCEALMENT_TARGETED_SPELL_IDS = frozenset({
     "runic_weapon", "runic_body", "force_bolt", "frostbite", "enfeeble",
     "telekinetic_projectile", "ignition", "gouging_claw", "tangle_vine",
     "tempest_surge",
-    "life_link", "vitality_lash",
+    "life_link", "vitality_lash", "harm", "protection",
 })
 
 
@@ -225,6 +225,24 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 "https://2e.aonprd.com/Spells.aspx?ID=1554",
             ),
             SpellDefinition(
+                "harm",
+                "Harm",
+                (2,),
+                frozenset({"concentrate", "manipulate", "void"}),
+                30,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1552",
+            ),
+            SpellDefinition(
+                "protection",
+                "Protection",
+                (2,),
+                frozenset({"concentrate", "manipulate"}),
+                5,
+                False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1641",
+            ),
+            SpellDefinition(
                 "soothe",
                 "Soothe",
                 (2,),
@@ -380,16 +398,21 @@ class HealingResult:
     total: int
 
 
-def heal_roll(actions: int, roll: Callable[[int], int]) -> HealingResult:
-    """Roll Heal's 1d8, adding 8 only for the two-action living-heal mode.
+def heal_roll(
+    actions: int, roll: Callable[[int], int], *, die_sides: int = 8,
+) -> HealingResult:
+    """Roll Heal, adding 8 only for the two-action living-heal mode.
 
     The three-action mode produces one shared roll for all selected living
-    targets. This function deliberately does not inspect or alter those targets.
+    targets. ``die_sides`` remains deliberately finite: ordinary Heal uses a
+    d8, while the admitted Healing Hands Cleric rolls d10s.
     """
     _check_heal_actions(actions)
-    face = roll(8)
-    if type(face) is not int or not 1 <= face <= 8:
-        raise ValueError("healing die result is outside the d8 range")
+    if die_sides not in {8, 10}:
+        raise ValueError("Heal supports only d8 or Healing Hands d10 dice")
+    face = roll(die_sides)
+    if type(face) is not int or not 1 <= face <= die_sides:
+        raise ValueError(f"healing die result is outside the d{die_sides} range")
     modifier = 8 if actions == 2 else 0
     return HealingResult((face,), modifier, face + modifier)
 
