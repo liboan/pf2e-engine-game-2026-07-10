@@ -3,7 +3,7 @@
 from pathlib import Path
 from pf2e.content import get_setup
 from pf2e.encounter import Encounter
-from pf2e.model import Cackle, Cast, EndTurn, EnergyAblation, Position, ResultStatus, Strike, WidenSpell
+from pf2e.model import Cackle, Cast, EndTurn, EnergyAblation, ResultStatus, Strike
 
 
 def _settle(game: Encounter) -> None:
@@ -88,25 +88,19 @@ def test_weapon_surge_targets_the_held_weapon_and_is_consumed_by_strike() -> Non
     assert not any(effect.kind == "weapon_surge" for effect in game._state.active_effects)
 
 
-def test_sorcerer_widen_spell_uses_the_existing_area_spellshape_contract() -> None:
-    game = Encounter.start(get_setup("w4_widen_sorcery_vs_guard_dog"), rolls=(20, 1, 1, 1, 1, 1, 1))
-    _take_turn(game, "sorcerer")
-    assert game.execute(WidenSpell()).status is ResultStatus.COMPLETED
-    result = game.execute(Cast("breathe_fire", actions=2, area_direction=Position(1, 0)))
-    assert result.status is ResultStatus.COMPLETED
-    assert not game._state.creatures["sorcerer"].widen_spell_pending
-
-
 def test_cackle_extends_stoke_without_spending_an_action() -> None:
     game = Encounter.start(get_setup("w4_cackle_witch"), rolls=(20, 1, 1, 1, 1, 1, 1))
     _take_turn(game, "witch")
     assert game.execute(Cast("stoke_the_heart", "ally")).status is ResultStatus.PAUSED
     _settle(game)
+    assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
+    _take_turn(game, "witch")
     actions_before = game._state.creatures["witch"].actions_remaining
     focus_before = game._state.creatures["witch"].focus_points
     assert game._state.creatures["witch"].focus_capacity == 2
     result = game.execute(Cackle())
-    assert result.status is ResultStatus.COMPLETED
+    assert result.status in {ResultStatus.PAUSED, ResultStatus.COMPLETED}
+    _settle(game)
     witch = game._state.creatures["witch"]
     assert witch.actions_remaining == actions_before
     assert witch.focus_points == focus_before - 1

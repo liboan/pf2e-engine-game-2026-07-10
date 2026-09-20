@@ -5,7 +5,6 @@ Sources checked 2026-09-20:
 * https://2e.aonprd.com/Feats.aspx?ID=5026 (Energy Ablation)
 * https://2e.aonprd.com/Feats.aspx?ID=4644 (Domain Initiate)
 * https://2e.aonprd.com/Spells.aspx?ID=1852 (Weapon Surge)
-* https://2e.aonprd.com/Feats.aspx?ID=4715 (Widen Spell)
 * https://app.demiplane.com/nexus/pathfinder2e/spells/cackle-rm (Cackle)
 
 Each entry is an alternate character sheet. The base W1-W3 sheets remain
@@ -15,7 +14,6 @@ unchanged, and no class-wide feat-selection system is implied.
 from dataclasses import replace
 
 from .model import CreatureDefinition, CreaturePlacement, EncounterSetup, Position, SpontaneousSpellDefinition
-from .sorcerer_content import ANGELIC_SORCERER_STAGED
 from .witch_content import FAITHS_FLAMEKEEPER_WITCH, FLAMEKEEPER_FOX
 from .wizard_content import BATTLE_MAGIC_WIZARD
 
@@ -62,21 +60,7 @@ def build_w4_caster_content(warpriest: CreatureDefinition):
         sheet_notes=(*warpriest.sheet_notes,
             "Domain Initiate selects Iomedae's finite zeal domain and grants Weapon Surge as the initial domain focus spell; this alternate does not claim other domain choices.",
             "Natural Ambition replaces Natural Skill, so this alternate does not retain Crafting or Society from that ancestry feat.",
-            "Sources: https://2e.aonprd.com/Feats.aspx?ID=4644; https://2e.aonprd.com/Spells.aspx?ID=1852; https://2e.aonprd.com/Feats.aspx?ID=4479.",
-        ),
-    )
-    sorcerer = replace(
-        ANGELIC_SORCERER_STAGED,
-        definition_id="sorcerer_angelic_level_1_widen_spell",
-        name="Level 1 Angelic Sorcerer (Widen Spell)",
-        skills=tuple(entry for entry in ANGELIC_SORCERER_STAGED.skills if entry[0] not in {"crafting", "survival"}),
-        spontaneous_spells=(*ANGELIC_SORCERER_STAGED.spontaneous_spells, SpontaneousSpellDefinition("breathe_fire", 1)),
-        abilities=(*ANGELIC_SORCERER_STAGED.abilities, "widen_spell"),
-        feats=("Natural Ambition", "Assurance (Athletics)", "Widen Spell"),
-        sheet_notes=(*ANGELIC_SORCERER_STAGED.sheet_notes,
-            "Natural Ambition replaces Natural Skill, so this alternate does not retain Crafting or Survival from that ancestry feat.",
-            "Widen Spell is the legal level-1 Sorcerer feat and uses the existing finite Breathe Fire cone spellshape path.",
-            "Sources: https://2e.aonprd.com/Feats.aspx?ID=4715; https://2e.aonprd.com/Spells.aspx?ID=1457; https://2e.aonprd.com/Feats.aspx?ID=4479.",
+            "Sources: https://2e.aonprd.com/Feats.aspx?ID=4644; https://2e.aonprd.com/Spells.aspx?ID=1852; https://2e.aonprd.com/Feats.aspx?ID=4478.",
         ),
     )
     witch = replace(
@@ -95,7 +79,7 @@ def build_w4_caster_content(warpriest: CreatureDefinition):
             "Source: https://app.demiplane.com/nexus/pathfinder2e/spells/cackle-rm.",
         ),
     )
-    definitions = (wizard, cleric, sorcerer, witch)
+    definitions = (wizard, cleric, witch)
     setups = (
         EncounterSetup(
             "w4_energy_ablation_vs_guard_dog", "W4 Energy Ablation Wizard", 7, 5,
@@ -106,11 +90,6 @@ def build_w4_caster_content(warpriest: CreatureDefinition):
             "w4_weapon_surge_vs_guard_dog", "W4 Weapon Surge Warpriest", 7, 5,
             (CreaturePlacement("cleric", cleric.definition_id, "Domain Warpriest", "blue", Position(1, 2)),
              CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(2, 2))),
-        ),
-        EncounterSetup(
-            "w4_widen_sorcery_vs_guard_dog", "W4 Widen Spell Sorcerer", 7, 5,
-            (CreaturePlacement("sorcerer", sorcerer.definition_id, "Widen Spell Sorcerer", "blue", Position(1, 2)),
-             CreaturePlacement("dog", "guard_dog_mc2924", "Guard Dog", "red", Position(4, 2))),
         ),
         EncounterSetup(
             "w4_cackle_witch", "W4 Cackle Witch", 7, 5,

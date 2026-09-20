@@ -142,6 +142,8 @@ def _cackle(context: FamilyProcedureContext, command: Cackle) -> FamilyProcedure
         context.state, context.actor, "cackle", frozenset({"auditory", "concentrate"})
     )
     start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+    if context.actor.witch_hex_cast_start == start:
+        return FamilyProcedureResult(rejection="A Witch can Cast only one hex each turn.")
     if context.actor.witch_cackle_used_start == start:
         return FamilyProcedureResult(rejection="Cackle can be used only once per Witch turn.")
     if context.actor.focus_points < 1:
@@ -160,15 +162,19 @@ def _cackle(context: FamilyProcedureContext, command: Cackle) -> FamilyProcedure
     if effect.sustain_expires_at_source_end <= context.state.actor_end_counts.get(context.actor.actor_id, 0):
         return FamilyProcedureResult(rejection="That Stoke the Heart has already expired.")
     context.actor.focus_points -= 1
+    context.actor.witch_hex_cast_start = start
     context.actor.witch_cackle_used_start = start
     context.state.active_effects[context.state.active_effects.index(effect)] = replace(
         effect,
         sustain_expires_at_source_end=context.state.actor_end_counts.get(context.actor.actor_id, 0) + 2,
     )
-    return FamilyProcedureResult((Event(
+    events = (Event(
         "cackle", context.actor.actor_id, effect.target_actor_id,
         f"{context.actor.label} Cackles, extending Stoke the Heart on {context.state.creatures[effect.target_actor_id].label}.",
-    ),))
+    ),)
+    return FamilyProcedureResult(tuple(context.encounter._offer_restored_spirit_choice(
+        context.state, context.actor, list(events), dice=context.dice,
+    )))
 
 
 def _familiar(context: FamilyProcedureContext, familiar_id: str):

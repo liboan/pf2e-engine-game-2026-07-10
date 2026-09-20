@@ -4345,6 +4345,7 @@ class Encounter:
             and "Cackle" in definition.feats
             and actor.focus_points > 0
             and actor.witch_cackle_used_start != state.actor_start_counts.get(actor.actor_id, 0)
+            and actor.witch_hex_cast_start != state.actor_start_counts.get(actor.actor_id, 0)
             and any(
                 effect.kind == "stoke_the_heart" and effect.source_actor_id == actor.actor_id
                 for effect in state.active_effects
