@@ -125,6 +125,30 @@ def test_overextending_feint_offers_its_replacement_after_success() -> None:
     assert any("Overextending Feint" in option.label for option in choice.options)
 
 
+@pytest.mark.parametrize("selection", ("ordinary", "overextending"))
+def test_overextending_feint_post_roll_choice_survives_save_and_load(
+    selection: str, tmp_path: Path,
+) -> None:
+    game = _ready("w4_overextending_feint_vs_guard_dog", (20, 1, 20))
+    assert game.execute(Feint("w4_enemy")).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None
+    assert game.choose(choice.choice_id, "keep", choice.owner_actor_id).status is ResultStatus.PAUSED
+    choice = game.inspect().choice
+    assert choice is not None and choice.kind == "family_action"
+    assert {option.option_id for option in choice.options} == {"ordinary", "overextending"}
+
+    path = tmp_path / f"feint-{selection}.json"
+    game.save(path)
+    loaded = Encounter.load(path)
+    choice = loaded.inspect().choice
+    assert choice is not None and choice.kind == "family_action"
+    assert loaded.choose(choice.choice_id, selection, choice.owner_actor_id).status is ResultStatus.COMPLETED
+    assert loaded._state.creatures["w4_actor"].actions_remaining == 2
+    assert bool(loaded._state.overextending_feint_effects) == (selection == "overextending")
+    assert bool(loaded._state.feint_off_guard_effects) == (selection == "ordinary")
+
+
 def test_reactive_shield_save_rejects_a_forged_attack_modifier(tmp_path: Path) -> None:
     game = _ready("w4_reactive_shield_vs_guard_dog", (20, 1, 12))
     assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
