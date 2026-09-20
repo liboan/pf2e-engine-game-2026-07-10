@@ -39,6 +39,7 @@ def _strong_arm_attacks() -> tuple[AttackDefinition, ...]:
     )
     thrown = replace(
         dagger, attack_id="dagger_thrown", name="Dagger (Thrown)", reach_ft=0,
+        damage_modifier=0, damage_attribute="strength",
         traits=frozenset({"attack", "ranged", "agile", "finesse", "thrown", "weapon"}),
     )
     return dagger, thrown, THIEF_ROGUE_LEVEL_2.attacks[1]
