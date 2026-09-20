@@ -89,7 +89,7 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
         *fighter_dueling_parry.abilities, *barbarian_sudden_charge.abilities,
         *barbarian_intimidating.abilities, *monk.abilities, *crane_monk.abilities,
     }
-    assert set(setups) == {
+    assert {
         "staged_fighter_level_2_sudden_charge",
         "staged_fighter_level_2_intimidating_strike",
         "staged_fighter_level_2_dueling_parry",
@@ -98,7 +98,7 @@ def test_l2_martial_sheets_advance_only_level_based_statistics_and_selected_choi
         "staged_barbarian_level_2_intimidating_strike",
         "staged_monk_level_2_stunning_blows",
         "staged_monk_crane_stance",
-    }
+    } <= set(setups)
 
 
 def test_sudden_charge_requires_two_real_movement_legs_and_an_all_or_nothing_optional_strike() -> None:

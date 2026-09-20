@@ -669,9 +669,41 @@ class Encounter:
             self._validate_no_escape_follow(state, current)
             current = current.parent_continuation
 
+    def _validate_committed_strike_rider_effects(self, state: EncounterState) -> None:
+        """Fail closed for saved effects created by the finite W3 rider seam."""
+        for effect in state.condition_effects:
+            if not effect.effect_id.startswith(("snagging_strike:", "combat_grab:", "brutish_shove:")):
+                continue
+            source = state.creatures.get(effect.source_actor_id)
+            target = state.creatures.get(effect.target_actor_id)
+            if source is None or target is None:
+                raise ValueError("save has a Fighter rider with a missing creature")
+            abilities = get_definition(source.definition_id).abilities
+            if effect.effect_id.startswith("snagging_strike:"):
+                if (
+                    "snagging_strike" not in abilities or effect.kind != "off_guard" or effect.value != 1
+                    or effect.expiration != EffectExpiration(source.actor_id, "start", state.actor_start_counts.get(source.actor_id, 0) + 1)
+                    or grid_distance_feet(source.position, target.position) > 5
+                ):
+                    raise ValueError("save has invalid Snagging Strike effect")
+            elif effect.effect_id.startswith("combat_grab:"):
+                if (
+                    "combat_grab" not in abilities or effect.kind != "grabbed" or effect.value != 1
+                    or effect.expiration.boundary != "end" or effect.expiration.anchor_actor_id != source.actor_id
+                    or effect.dc != self._skill_dc(state, source.actor_id, "athletics")
+                    or effect.expiration.occurrence > state.actor_end_counts.get(source.actor_id, 0) + 2
+                ):
+                    raise ValueError("save has invalid Combat Grab effect")
+            elif (
+                "brutish_shove" not in abilities or effect.kind != "off_guard" or effect.value != 1
+                or effect.expiration != EffectExpiration(source.actor_id, "end", state.actor_end_counts.get(source.actor_id, 0) + 1)
+            ):
+                raise ValueError("save has invalid Brutish Shove effect")
+
     def _validate_pending_context(self) -> None:
         """Reject saved choices whose continuation no longer matches engine state."""
         state = self._state
+        self._validate_committed_strike_rider_effects(state)
         pending = state.pending_choice
         if pending is None:
             return
@@ -4033,6 +4065,35 @@ class Encounter:
                 for attack in usable
             )
         )
+        free_hand_targets = any(
+            grid_distance_feet(actor.position, state.creatures[target_id].position) <= 5
+            for attack in usable if "melee" in attack.traits
+            for target_id in self._strike_targets(actor, state, attack)
+        )
+        can_snagging_strike = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "snagging_strike" in definition.abilities
+            and self._free_hands(state, definition, actor) >= 1
+            and free_hand_targets
+            and self._action_permitted(state, actor, "snagging_strike", frozenset({"attack"}))
+        )
+        can_combat_grab = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "combat_grab" in definition.abilities and actor.strikes_this_turn >= 1
+            and self._free_hands(state, definition, actor) >= 1
+            and free_hand_targets
+            and self._action_permitted(state, actor, "combat_grab", frozenset({"attack", "press"}))
+        )
+        can_brutish_shove = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "brutish_shove" in definition.abilities and actor.strikes_this_turn >= 1
+            and any(
+                "melee" in attack.traits and attack.hands_required >= 2
+                and self._strike_targets(actor, state, attack)
+                for attack in usable
+            )
+            and self._action_permitted(state, actor, "brutish_shove", frozenset({"attack", "press"}))
+        )
         can_sudden_charge = (
             can_act and actions >= 2 and not actor.must_leave_occupied
             and "sudden_charge" in definition.abilities
@@ -4297,6 +4358,9 @@ class Encounter:
             can_strike = False
             can_vicious = False
             can_intimidating_strike = False
+            can_snagging_strike = False
+            can_combat_grab = False
+            can_brutish_shove = False
             can_sudden_charge = False
             can_flurry = False
             can_hunt_prey = False
@@ -4340,6 +4404,9 @@ class Encounter:
                 ("known_weaknesses", known_weaknesses_available),
                 ("vicious_swing", can_vicious),
                 ("intimidating_strike", can_intimidating_strike),
+                ("snagging_strike", can_snagging_strike),
+                ("combat_grab", can_combat_grab),
+                ("brutish_shove", can_brutish_shove),
                 ("sudden_charge", can_sudden_charge),
                 ("dueling_parry", can_dueling_parry),
                 ("crane_stance", can_crane_stance),
@@ -4660,8 +4727,10 @@ class Encounter:
         # guard whose equipment facts no longer qualify; a later retrieve or
         # draw cannot reactivate that same use of the feat.
         from .martial_defense import end_dueling_parries_with_broken_requirements
+        from .fighter import end_snagging_strikes_out_of_reach
 
         end_dueling_parries_with_broken_requirements(draft)
+        end_snagging_strikes_out_of_reach(draft)
 
         self._state = draft
         self._dice = dice
@@ -5486,21 +5555,113 @@ class Encounter:
 
         if not isinstance(command, IntimidatingStrike):
             return FamilyProcedureResult(rejection="Intimidating Strike needs its fighter command.")
+        return self._start_committed_strike_rider(context, command, "intimidating_strike")
+
+    def _start_committed_strike_rider(self, context, command, kind):
+        """Commit the finite Fighter result-rider family to one Strike path."""
+        from .fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike
+
+        if kind not in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove"}:
+            return FamilyProcedureResult(rejection="Unsupported committed Strike rider.")
+        if not isinstance(command, (IntimidatingStrike, SnaggingStrike, CombatGrab, BrutishShove)):
+            return FamilyProcedureResult(rejection="Fighter rider needs its matching command.")
+        target = context.state.creatures.get(command.target_id)
+        attack = self._select_attack(context.state, context.actor, command.attack_id, item_id=command.item_id)
+        if target is None or attack is None:
+            return FamilyProcedureResult(rejection="Fighter rider requires an active target and held attack.")
+        if "melee" not in attack.traits:
+            return FamilyProcedureResult(rejection="Fighter Strike riders require a melee Strike.")
+        if kind in {"snagging_strike", "combat_grab"}:
+            if grid_distance_feet(context.actor.position, target.position) > 5:
+                return FamilyProcedureResult(rejection="This feat requires the target within reach of the Fighter's free hand.")
+        if kind == "brutish_shove":
+            if attack.hands_required < 2:
+                return FamilyProcedureResult(rejection="Brutish Shove requires a two-handed melee weapon.")
+            sizes = {"tiny": 0, "small": 1, "medium": 2, "large": 3, "huge": 4, "gargantuan": 5}
+            if sizes.get(get_definition(target.definition_id).size, 99) > sizes.get(context.definition.size, -1):
+                return FamilyProcedureResult(rejection="Brutish Shove only affects a target your size or smaller.")
+            destination = command.shove_destination
+            if (
+                not in_bounds(destination, context.state.map_width, context.state.map_height)
+                or grid_distance_feet(target.position, destination) != 5
+                or self._occupant_at(context.state, destination, except_actor=target.actor_id) is not None
+            ):
+                return FamilyProcedureResult(rejection="Brutish Shove needs an open adjacent horizontal destination.")
         parent = ActionContinuation(
-            kind="intimidating_strike",
+            kind=kind,
             actor_id=context.actor.actor_id,
             target_id=command.target_id,
             attack_id=command.attack_id,
+            path=((command.shove_destination,) if isinstance(command, BrutishShove) else ()),
+            mode=("failure_effect" if isinstance(command, BrutishShove) and command.failure_effect else ("follow" if isinstance(command, BrutishShove) and command.follow else None)),
         )
         events = self._start_strike(
             context.state, context.dice, context.actor,
             command.target_id, command.attack_id, command.item_id,
             command.damage_type, command.nonlethal,
-            actions_cost=2, attack_count_cost=1, vicious_swing=False,
+            actions_cost=2 if kind == "intimidating_strike" else 1, attack_count_cost=1, vicious_swing=False,
             melee_required=True,
             parent=parent,
         )
         return FamilyProcedureResult(events=tuple(events))
+
+    @staticmethod
+    def _committed_rider_parent(continuation):
+        """Find a Fighter rider through a temporary Justice reaction wrapper."""
+        current = continuation
+        while current is not None:
+            if current.kind in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove"}:
+                return current
+            current = current.parent_continuation
+        return None
+
+    def _apply_committed_strike_rider(
+        self, state, dice, actor, target, continuation, *, damage: int, critical: bool, hit: bool,
+    ) -> list[Event]:
+        """Resolve the admitted Fighter result rider after the Strike is final."""
+        from .fighter import apply_committed_strike_rider_for_kind
+
+        parent = self._committed_rider_parent(continuation)
+        if parent is None:
+            return []
+        if parent.kind != "brutish_shove" and not hit:
+            return []
+        if parent.kind == "brutish_shove" and not hit and critical:
+            return []
+        context = FamilyProcedureContext(
+            self, state, dice, actor, get_definition(actor.definition_id), "martial"
+        )
+        events = list(apply_committed_strike_rider_for_kind(
+            context, kind=parent.kind, target_id=target.actor_id, damage=damage,
+            critical=critical, hit=hit,
+        ))
+        if parent.kind != "brutish_shove" or not hit or parent.mode == "failure_effect":
+            return events
+        if not parent.path:
+            raise _Rejected("Brutish Shove lost its committed destination.")
+        origin, destination = target.position, parent.path[0]
+        if grid_distance_feet(origin, destination) != 5 or self._occupant_at(
+            state, destination, except_actor=target.actor_id
+        ) is not None:
+            events.append(Event("brutish_shove_blocked", actor.actor_id, target.actor_id, "Brutish Shove's chosen destination is no longer open."))
+            return events
+        target.position = destination
+        if critical:
+            dx, dy = destination.x - origin.x, destination.y - origin.y
+            second = Position(destination.x + dx, destination.y + dy)
+            if in_bounds(second, state.map_width, state.map_height) and self._occupant_at(
+                state, second, except_actor=target.actor_id
+            ) is None:
+                target.position = second
+        events.append(Event(
+            "brutish_shove", actor.actor_id, target.actor_id,
+            f"{actor.label}'s Brutish Shove moves {target.label} from {_coord(origin)} to {_coord(target.position)} without triggering reactions.",
+            position=target.position,
+        ))
+        if parent.mode == "follow" and self._occupant_at(state, origin, except_actor=actor.actor_id) is None:
+            actor.position = origin
+            events.append(Event("brutish_shove_follow", actor.actor_id, target.actor_id, f"{actor.label} follows the Shoved target without triggering reactions.", position=origin))
+        return events
 
     def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
         if not isinstance(target_id, str):
@@ -6124,6 +6285,10 @@ class Encounter:
                 if state.pending_choice is not None:
                     raise _Unsupported("A bomb splash that pauses for a defense choice after a miss is not yet admitted.")
             if continuation is not None:
+                events.extend(self._apply_committed_strike_rider(
+                    state, dice, actor, target, continuation, damage=0,
+                    critical=False, hit=False,
+                ))
                 if not is_reaction:
                     self._record_paired_outcome(
                         continuation,
@@ -7337,21 +7502,10 @@ class Encounter:
 
         if outcome.defeated:
             events.append(Event("defeated", attacker.actor_id, target.actor_id, f"{target.label} is defeated."))
-        if (
-            resolution.source_kind == "strike"
-            and resolution.continuation is not None
-            and resolution.continuation.kind == "intimidating_strike"
-        ):
-            from .fighter import apply_intimidating_strike_frightened
-
-            context = FamilyProcedureContext(
-                self, state, dice, attacker, get_definition(attacker.definition_id), "martial"
-            )
-            events.append(apply_intimidating_strike_frightened(
-                context,
-                target_id=target.actor_id,
-                damage=damage.total,
-                critical=resolution.attacker_critical,
+        if resolution.source_kind == "strike" and resolution.continuation is not None:
+            events.extend(self._apply_committed_strike_rider(
+                state, dice, attacker, target, resolution.continuation,
+                damage=damage.total, critical=resolution.attacker_critical, hit=True,
             ))
         if resolution.source_kind == "strike":
             bomb_facts = self._admitted_bomber_bomb_facts_for_attack(attacker, resolution.attack_id)
@@ -11743,10 +11897,10 @@ class Encounter:
                 "sudden_charge_complete", actor.actor_id, continuation.target_id,
                 f"{actor.label} completes Sudden Charge.",
             )], dice=dice)
-        if continuation.kind == "intimidating_strike":
+        if continuation.kind in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove"}:
             return self._complete_action(state, actor, [Event(
-                "intimidating_strike_complete", actor.actor_id, continuation.target_id,
-                f"{actor.label} completes Intimidating Strike.",
+                f"{continuation.kind}_complete", actor.actor_id, continuation.target_id,
+                f"{actor.label} completes {continuation.kind.replace('_', ' ')}.",
             )], dice=dice)
         if continuation.finisher:
             if critical:
