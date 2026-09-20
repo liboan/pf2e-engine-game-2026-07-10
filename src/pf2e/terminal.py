@@ -2972,21 +2972,9 @@ def run_terminal(
                     output_fn,
                 )
                 if target_id is not None:
-                    use_overextending = False
-                    acting_actor = next(
-                        (actor for actor in inspection.actors if actor.actor_id == engine_options.actor_id),
-                        None,
-                    )
-                    if acting_actor is not None and "Overextending Feint" in getattr(acting_actor, "feats", ()):
-                        answer = _read_line(
-                            "Use Overextending Feint? [y/N]:",
-                            input_fn,
-                            output_fn,
-                        ).strip().casefold()
-                        use_overextending = answer in {"y", "yes"}
                     _run_command(
                         game,
-                        Feint(target_id=target_id, use_overextending=use_overextending),
+                        Feint(target_id=target_id),
                         output_fn,
                     )
             elif action_id == "interact":

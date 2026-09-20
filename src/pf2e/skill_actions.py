@@ -2127,7 +2127,13 @@ def _feint_step_options(destinations: tuple[Position, ...]) -> tuple[ChoiceOptio
     )
 
 
-def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context) -> FamilyProcedureResult:
+def _finish_feint(
+    context: FamilyProcedureContext,
+    command: Feint,
+    check_context,
+    *,
+    offer_overextending: bool = True,
+) -> FamilyProcedureResult:
     if check_context.result is None:
         return FamilyProcedureResult(rejection="The saved Feint check has not been resolved.")
     try:
@@ -2152,6 +2158,36 @@ def _finish_feint(context: FamilyProcedureContext, command: Feint, check_context
         wielding_agile_or_finesse_melee_weapon=_wielding_agile_or_finesse_melee_weapon(context),
     )
     events = [_event_check("feint", context.actor, target, outcome.check)]
+    if (
+        offer_overextending
+        and not command.use_overextending
+        and "Overextending Feint" in context.definition.feats
+        and outcome.check.degree >= DegreeOfSuccess.SUCCESS
+    ):
+        continuation = ActionContinuation(
+            kind="family_action",
+            actor_id=context.actor.actor_id,
+            target_id=target.actor_id,
+            stage="feint_overextending_choice",
+        )
+        context.present_choice(
+            "skill_actions:feint:overextending",
+            context.actor.actor_id,
+            f"{context.actor.label} may replace the successful Feint with Overextending Feint.",
+            (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            ),
+            continuation,
+            target_id=target.actor_id,
+            saved_check=check_context,
+            family_command=command,
+        )
+        events.append(Event(
+            "choice_offered", context.actor.actor_id, target.actor_id,
+            "Choose ordinary Feint or Overextending Feint.", check=outcome.check,
+        ))
+        return FamilyProcedureResult(events=tuple(events))
     if command.use_overextending and outcome.check.degree >= DegreeOfSuccess.SUCCESS:
         effect_id = f"overextending_feint:{context.actor.actor_id}:{target.actor_id}:{context.state.round_number}:{len(context.state.overextending_feint_effects) + 1}"
         context.state.overextending_feint_effects.append(OverextendingFeintEffect(
@@ -2356,6 +2392,30 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult:
             return FamilyProcedureResult(rejection="Choose whether to keep or reroll the concealment check.")
         events.extend(_finish_skill_targeting(context, command, saved, continuation, check))
         return FamilyProcedureResult(events=tuple(events))
+    if pending.procedure_id == "skill_actions:feint:overextending":
+        command = pending.family_command
+        saved = pending.saved_check
+        if (
+            not isinstance(command, Feint)
+            or saved is None
+            or saved.result is None
+            or continuation.stage != "feint_overextending_choice"
+            or pending.target_id != command.target_id
+            or "Overextending Feint" not in context.definition.feats
+            or saved.result.degree < DegreeOfSuccess.SUCCESS
+            or pending.options != (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            )
+        ):
+            return FamilyProcedureResult(rejection="The saved Overextending Feint choice is incomplete.")
+        if choice.option_id == "ordinary":
+            selected = replace(command, use_overextending=False)
+        elif choice.option_id == "overextending":
+            selected = replace(command, use_overextending=True)
+        else:
+            return FamilyProcedureResult(rejection="Choose ordinary Feint or Overextending Feint.")
+        return _finish_feint(context, selected, saved, offer_overextending=False)
     if pending.procedure_id == "skill_actions:feint:scoundrel_step":
         command = pending.family_command
         saved = pending.saved_check
@@ -2579,6 +2639,29 @@ def validate_pending(context: FamilyProcedureContext) -> None:
             or pending.options != _feint_step_options(destinations)
         ):
             raise ValueError("save has an invalid Scoundrel Step continuation")
+        return
+    if pending.procedure_id == "skill_actions:feint:overextending":
+        command = pending.family_command
+        continuation = pending.continuation
+        saved = pending.saved_check
+        if (
+            not isinstance(command, Feint)
+            or continuation is None
+            or continuation.stage != "feint_overextending_choice"
+            or pending.family_id != "martial"
+            or pending.actor_id != context.actor.actor_id
+            or pending.owner_actor_id != context.actor.actor_id
+            or pending.target_id != command.target_id
+            or saved is None
+            or saved.result is None
+            or saved.result.degree < DegreeOfSuccess.SUCCESS
+            or "Overextending Feint" not in context.definition.feats
+            or pending.options != (
+                ChoiceOption("ordinary", "Use ordinary Feint"),
+                ChoiceOption("overextending", "Use Overextending Feint"),
+            )
+        ):
+            raise ValueError("save has an invalid Overextending Feint choice")
         return
     if pending.procedure_id.endswith(":guidance") or pending.procedure_id.endswith(":hero_point"):
         command = pending.family_command
