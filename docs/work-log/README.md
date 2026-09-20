@@ -2,7 +2,7 @@
 
 ## Start here
 
-The selected level-1 Braggart Swashbuckler is accepted and public after the first Terra/high implementation delivery. Use ACTIVE for latest evidence, model routing and next assignments; completed records below are reference material.
+Content W1 continues from the accepted representative L1/L2 milestone. Use ACTIVE for latest evidence, model routing and next assignments; completed records below are reference material.
 
 [Current work and recovery table](ACTIVE.md) is the single source for current ownership, blockers, executable checkpoint and next action. It is the normal entry point after interruption or compaction.
 
