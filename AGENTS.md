@@ -1,6 +1,6 @@
 # Working rules
 
-W2 is accepted. The user authorizes a materially larger W3 and, after its acceptance, committing and pushing accepted W2/W3 code, tests and guidance to an appropriate codex/ delivery branch. No force-push, main merge or overwrite of other work; verify accepted ancestry, remote head and clean checkout. A new PR is optional, not required.
+W2 and W3 are accepted. Their code, tests and guidance are authorized for publication on the codex/pf2e-content-w2-w3-delivery branch. The W3 execution heartbeat is paused; no follow-on wave is authorized. See docs/work-log/ACTIVE.md for final publication verification. No force-push, main merge or overwrite of other work; verify accepted ancestry, remote head and clean checkout. A new PR is optional, not required.
 
 ## Direction, ownership and checkouts
 
