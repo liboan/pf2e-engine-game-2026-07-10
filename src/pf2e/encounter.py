@@ -1152,7 +1152,7 @@ class Encounter:
                 or pending.owner_actor_id != target.actor_id
                 or continuation.actor_id != attacker.actor_id
                 or continuation.target_id != target.actor_id
-                or continuation.kind not in {"strike", "reaction_strike"}
+                or continuation.kind != "reactive_shield"
                 or "melee" not in attack.traits or "ranged" in attack.traits
                 or not self._reactive_shield_available(state, attacker, target)
                 or pending.options != (
@@ -6321,20 +6321,6 @@ class Encounter:
                 actor.actor_id,
                 f"{target.label} may use Nimble Dodge before {actor.label}'s attack roll.",
             )]
-        if (
-            not context.reactive_shield_decided
-            and "melee" in attack.traits
-            and "ranged" not in attack.traits
-            and self._reactive_shield_available(state, actor, target)
-        ):
-            context.parent_continuation = parent
-            self._present_reactive_shield(state, actor, target, context)
-            return [Event(
-                "reactive_shield_choice",
-                target.actor_id,
-                actor.actor_id,
-                f"{target.label} may use Reactive Shield before {actor.label}'s melee attack roll.",
-            )]
         if context.overextending_feint_penalty == 0:
             from .skill_actions import overextending_feint_penalty
 
@@ -6672,6 +6658,34 @@ class Encounter:
                 and not self._free_devise_target_ids(state, actor)
             ):
                 events.extend(self._end_turn(state, actor, early=False, dice=dice))
+            return events
+
+        if (
+            check.degree in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS}
+            and continuation is None
+            and not is_reaction
+            and "melee" in attack.traits
+            and "ranged" not in attack.traits
+            and self._reactive_shield_available(state, actor, target)
+        ):
+            self._present_reactive_shield_after_hit(
+                state, actor, target, attack, check,
+                damage_type=damage_type or attack.damage_type,
+                nonlethal=nonlethal,
+                damage_bonus_dice=damage_bonus_dice,
+                attack_target_off_guard=attack_target_off_guard,
+                item_id=item_id,
+                investigator_strategic_strike=investigator_strategic_strike,
+                investigator_use_intelligence=investigator_use_intelligence,
+                bomber_only_primary_splash=bomber_only_primary_splash,
+            )
+            events.append(Event(
+                "reactive_shield_choice",
+                target.actor_id,
+                actor.actor_id,
+                f"{target.label} was hit by {actor.label}'s melee Strike and may use Reactive Shield.",
+                check=check,
+            ))
             return events
 
         pack_bonus = 1 if "pack_attack" in get_definition(actor.definition_id).abilities and self._pack_attack_applies(state, actor, target) else 0
@@ -8798,13 +8812,25 @@ class Encounter:
             continuation=continuation,
         )
 
-    def _present_reactive_shield(self, state, attacker, target, continuation) -> None:
-        continuation.reactive_shield_decided = False
+    def _present_reactive_shield_after_hit(
+        self, state, attacker, target, attack, check, *, damage_type,
+        nonlethal, damage_bonus_dice, attack_target_off_guard, item_id,
+        investigator_strategic_strike, investigator_use_intelligence,
+        bomber_only_primary_splash,
+    ) -> None:
+        continuation = ActionContinuation(
+            kind="reactive_shield",
+            actor_id=attacker.actor_id,
+            target_id=target.actor_id,
+            attack_id=attack.attack_id,
+            attack_penalty=check.map_penalty,
+            attack_count=check.attack_count or 1,
+        )
         self._set_pending(
             state,
             kind="reactive_shield",
             owner_actor_id=target.actor_id,
-            prompt=f"{target.label} may use Reactive Shield before {attacker.label}'s melee attack roll.",
+            prompt=f"{target.label} was hit by {attacker.label}'s melee Strike and may use Reactive Shield.",
             options=(
                 ChoiceOption("use", "Use Reactive Shield (+2 AC)"),
                 ChoiceOption("decline", "Decline"),
@@ -8815,18 +8841,16 @@ class Encounter:
             ),
             actor_id=attacker.actor_id,
             target_id=target.actor_id,
-            attack_id=continuation.attack_id,
-            attack_penalty=continuation.attack_penalty,
-            attack_count=continuation.attack_count,
-            damage_type=continuation.damage_type,
-            nonlethal=continuation.nonlethal,
-            attack_actions_cost=continuation.attack_actions_cost,
-            attack_count_cost=continuation.attack_count_cost,
-            ranged_penalty=continuation.ranged_penalty,
-            feint_off_guard_applied=continuation.feint_off_guard_applied,
-            attack_target_off_guard=continuation.attack_target_off_guard,
-            nimble_dodge_used=continuation.nimble_dodge_used,
-            is_reaction=continuation.kind == "reaction_strike",
+            attack_id=attack.attack_id,
+            attack_penalty=check.map_penalty,
+            attack_count=check.attack_count or 1,
+            check=check,
+            item_id=item_id,
+            damage_type=damage_type,
+            nonlethal=nonlethal,
+            damage_bonus_dice=damage_bonus_dice,
+            attack_target_off_guard=attack_target_off_guard,
+            damage_context=("bomber_only_primary" if bomber_only_primary_splash else None),
             continuation=continuation,
         )
 
@@ -12250,6 +12274,15 @@ class Encounter:
         raised = state.raised_shields.get(actor.actor_id)
         if raised is not None and raised.instance_id == command.item_id:
             state.raised_shields.pop(actor.actor_id, None)
+        from .martial_defense import point_blank_stance_is_active
+
+        if point_blank_stance_is_active(state, actor.actor_id):
+            definition = get_definition(actor.definition_id)
+            if not any(
+                "ranged" in attack.traits and attack.item_id in actor.held_items
+                for attack in definition.attacks
+            ):
+                state.martial_stances.pop(actor.actor_id, None)
         state.ground_items.setdefault(actor.position, []).append(command.item_id)
         actor.witch_turn_activity_start = state.actor_start_counts.get(actor.actor_id, 0)
         return [Event("release", actor.actor_id, None, f"{actor.label} releases {command.item_id} onto {_coord(actor.position)}.", position=actor.position)]
@@ -15606,6 +15639,7 @@ class Encounter:
             events.extend(self._run_family_action(
                 state, dice, attacker,
                 Demoralize(target_id=target_id, youre_next_reaction=True),
+                youre_next_trigger=True,
             ))
             if state.pending_choice is not None:
                 raise _Rejected("You're Next must resolve its bounded Demoralize check without another choice.")
@@ -15626,7 +15660,6 @@ class Encounter:
                 or not self._reactive_shield_available(state, attacker, target)
             ):
                 raise _Rejected("Reactive Shield is no longer available.")
-            continuation.reactive_shield_decided = True
             if command.option_id == "use":
                 target.reaction_available = False
                 clear_pending_spellshape(target)
@@ -15652,10 +15685,35 @@ class Encounter:
                 )
             else:
                 raise _Rejected("Choose whether to use Reactive Shield.")
-            events = [event, *self._roll_strike(
-                state, dice, attacker, target, attack, continuation,
-                parent=continuation.parent_continuation,
-            )]
+            check = pending.check
+            if check is None:
+                raise _Rejected("The pending Reactive Shield attack check is incomplete.")
+            if command.option_id == "use":
+                check = replace(
+                    resolve_check(
+                        check.die,
+                        check.modifier,
+                        self._attack_dc(state, attacker, target, attack),
+                        attack_id=check.attack_id,
+                        attack_count=check.attack_count,
+                        map_penalty=check.map_penalty,
+                        traits=check.traits,
+                    ),
+                    modifier_breakdown=check.modifier_breakdown,
+                    dice=check.dice,
+                )
+            events = [event]
+            events.extend(self._resolve_attack_result(
+                state, dice, attacker, target, attack, check,
+                damage_type=pending.damage_type or attack.damage_type,
+                nonlethal=pending.nonlethal,
+                damage_bonus_dice=pending.damage_bonus_dice,
+                attack_target_off_guard=pending.attack_target_off_guard,
+                is_reaction=pending.is_reaction,
+                continuation=None,
+                item_id=pending.item_id,
+                bomber_only_primary_splash=pending.damage_context == "bomber_only_primary",
+            ))
             return events
 
         if pending.kind == "concealment_hero_reroll":
@@ -16969,7 +17027,8 @@ class Encounter:
         return None
 
     def _run_family_action(
-        self, state, dice, actor, command: FamilyCommand, *, quick_tempered_trigger: bool = False
+        self, state, dice, actor, command: FamilyCommand, *, quick_tempered_trigger: bool = False,
+        youre_next_trigger: bool = False,
     ) -> list[Event]:
         if type(command).__module__.endswith(".skill_actions"):
             from . import skill_actions
@@ -16998,6 +17057,7 @@ class Encounter:
             self, state, dice, actor, get_definition(actor.definition_id),
             command.family_id, command=command,
             quick_tempered_trigger=quick_tempered_trigger,
+            youre_next_trigger=youre_next_trigger,
         )
         result = handler.handle_action(context)
         events = self._family_result_events(result, command.family_id)

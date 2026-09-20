@@ -52,7 +52,10 @@ def build_w4_defensive_content(
         name="W4 Level 1 Rogue (Overextending Feint)",
         abilities=(*rogue.abilities, "overextending_feint"),
         feats=tuple("Overextending Feint" if feat == "Nimble Dodge" else feat for feat in rogue.feats),
-        sheet_notes=(*rogue.sheet_notes, "W4 lane 2: Overextending Feint is the selected level-1 class feat."),
+        sheet_notes=tuple(
+            note.replace("and Nimble Dodge.", "and Overextending Feint.").replace("ID=4916", "ID=4917")
+            for note in rogue.sheet_notes
+        ) + ("W4 lane 2: Overextending Feint is the selected level-1 class feat.",),
     )
     youre_next = replace(
         rogue,
@@ -60,7 +63,10 @@ def build_w4_defensive_content(
         name="W4 Level 1 Rogue (You're Next)",
         abilities=(*rogue.abilities, "youre_next"),
         feats=tuple("You're Next" if feat == "Nimble Dodge" else feat for feat in rogue.feats),
-        sheet_notes=(*rogue.sheet_notes, "W4 lane 2: You're Next is the selected level-1 class feat."),
+        sheet_notes=tuple(
+            note.replace("and Nimble Dodge.", "and You're Next.").replace("ID=4916", "ID=4922")
+            for note in rogue.sheet_notes
+        ) + ("W4 lane 2: You're Next is the selected level-1 class feat.",),
     )
     definitions = (reactive_shield, point_blank, overextending, youre_next)
     setups = (

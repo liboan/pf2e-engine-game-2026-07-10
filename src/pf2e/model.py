@@ -1512,6 +1512,7 @@ class FamilyProcedureContext:
     pending: PendingChoice | None = None
     choice: Choose | None = None
     quick_tempered_trigger: bool = False
+    youre_next_trigger: bool = False
 
     @property
     def rage_source_id(self) -> str | None:

@@ -1929,6 +1929,8 @@ def _escape_stride_destinations(context: FamilyProcedureContext):
 
 
 def _demoralize(context: FamilyProcedureContext, command: Demoralize) -> FamilyProcedureResult:
+    if command.youre_next_reaction and not context.youre_next_trigger:
+        return FamilyProcedureResult(rejection="You're Next requires its post-defeat reaction trigger.")
     if not command.youre_next_reaction and context.actor.actions_remaining < DEMORALIZE.action_cost:
         return FamilyProcedureResult(rejection="Demoralize requires one action.")
     if not command.youre_next_reaction and context.actor.must_leave_occupied:
