@@ -1704,7 +1704,10 @@ def _finish_trip(context: FamilyProcedureContext, command: Trip, check_context) 
     if outcome.target_falls_prone:
         target.prone = True
         events.append(Event("condition_applied", context.actor.actor_id, target.actor_id, f"{target.label} falls prone.", check=outcome.check))
-    if outcome.user_falls_prone and profile is not None:
+    # Only a physical maneuver weapon can be dropped to convert the printed
+    # critical failure.  Unarmed Wolf Jaws still uses the ordinary Trip
+    # critical-failure outcome: the user falls prone without a saved choice.
+    if outcome.user_falls_prone and profile is not None and profile.item_id is not None:
         continuation = ActionContinuation(
             kind="family_action",
             actor_id=context.actor.actor_id,

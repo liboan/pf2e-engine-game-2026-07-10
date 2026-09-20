@@ -8008,6 +8008,7 @@ class Encounter:
                 attack=self._find_attack(state, attacker, resolution.attack_id or ""),
                 damage=damage,
                 check=resolution.check,
+                continuation=resolution.continuation,
             )
             if hook_event is not None:
                 events.append(hook_event)
@@ -8153,6 +8154,11 @@ class Encounter:
                 nonlethal=resolution.nonlethal,
                 hit=True,
             )
+        # A post-mitigation GM choice belongs to this already-resolved
+        # Strike. Preserve its parent continuation until the choice is made;
+        # resuming the paired activity here would overwrite that choice.
+        if state.pending_choice is not None:
+            return events
         retaliation_events, retaliation_started = self._justice_retaliation(
             state, dice, resolution
         )
@@ -11158,31 +11164,24 @@ class Encounter:
 
     def _apply_persistent_effect(self, state, caster, target, spell_id, damage_type, *, dice=(), flat=0) -> None:
         """Install one comparable persistent type, replacing only a weaker one."""
-        # These are the only admitted non-blood-bearing profiles.  Keep this
-        # finite fact here until creature physiology becomes a first-class
-        # sheet field; Gouging Claw's initial damage still resolves normally.
-        if damage_type == "bleed" and target.definition_id in {
-            "skeleton_guard_mc3193", "zombie_shambler_mc3249",
-        }:
-            return
-        previous = next(
-            (effect for effect in state.persistent_effects
-             if effect.target_actor_id == target.actor_id and effect.damage_type == damage_type),
-            None,
+        # The shared helper owns same-type comparison and finite installation;
+        # this legacy wrapper preserves the spell/alchemy API and its explicit
+        # rejection when an incomparable source needs a GM ruling.
+        from .persistent_effects import install_persistent_effect
+
+        installed, previous = install_persistent_effect(
+            state,
+            source_actor_id=caster.actor_id,
+            target_actor_id=target.actor_id,
+            source_id=spell_id,
+            damage_type=damage_type,
+            dice=tuple(dice),
+            flat=flat,
         )
-        if previous is not None:
-            # The selected spells only compare flat bleed amounts.  Do not
-            # invent a cross-die strength ordering: that needs a GM ruling.
-            if bool(previous.dice) != bool(dice) or previous.dice != tuple(dice):
-                raise _Unsupported("Replacing incomparable persistent damage needs an explicit GM ruling.")
-            if flat <= previous.flat:
-                return
-            state.persistent_effects.remove(previous)
-        state.persistent_effects.append(PersistentDamageEffect(
-            f"persistent:{spell_id}:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
-            caster.actor_id, target.actor_id, spell_id, damage_type, tuple(dice), flat,
-            state.world_time_seconds + 60,
-        ))
+        if previous is not None and installed is None and (
+            bool(previous.dice) != bool(dice) or previous.dice != tuple(dice)
+        ):
+            raise _Unsupported("Replacing incomparable persistent damage needs an explicit GM ruling.")
 
     def _roll_persistent_attack_spell(self, state, dice, caster, target, continuation):
         spell_id = continuation.spell_id
@@ -13388,6 +13387,16 @@ class Encounter:
         if not tiger_step_enabled(state, actor.actor_id, speed):
             return tuple(paths)
         for first in self._step_destinations_without_tiger(actor, state):
+            # Tiger's extended Step cannot enter or cross an occupied square;
+            # keep advertised paths narrower than legacy ally-sharing movement.
+            if self._occupant_at(state, first, except_actor=actor.actor_id) is not None:
+                continue
+            try:
+                _first_cost, first_diagonal_count = step_cost(
+                    actor.position, first, actor.diagonals_this_turn
+                )
+            except ValueError:
+                continue
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1):
                     if not dx and not dy:
@@ -13398,7 +13407,10 @@ class Encounter:
                     if final == actor.position:
                         continue
                     try:
-                        cost, _ = step_cost(first, final, actor.diagonals_this_turn)
+                        cost, _ = step_cost(
+                            first, final,
+                            actor.diagonals_this_turn + first_diagonal_count,
+                        )
                     except ValueError:
                         continue
                     if cost > 5 or self._occupant_at(state, final, except_actor=actor.actor_id) is not None:

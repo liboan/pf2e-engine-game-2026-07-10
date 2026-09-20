@@ -36,11 +36,13 @@ def committed_first_weapon_attempt(state, *, actor, attack):
     return None
 
 
-def post_mitigation_damaging_critical(state, *, attacker, target, attack, damage, check):
+def post_mitigation_damaging_critical(
+    state, *, attacker, target, attack, damage, check, continuation=None
+):
     """Notify the narrow critical-rider adopters after final mitigation."""
     from .monk_stances import post_mitigation_tiger_bleed
 
     return post_mitigation_tiger_bleed(
         state, attacker=attacker, target=target, attack=attack,
-        damage=damage, check=check,
+        damage=damage, check=check, continuation=continuation,
     )

@@ -122,23 +122,54 @@ def validate_pending(context: FamilyProcedureContext) -> None:
     if pending is None or pending.procedure_id != "monk_stances:tiger_bleed":
         raise ValueError("Monk stances have an invalid saved choice")
     continuation = pending.continuation
+    target = context.state.creatures.get(pending.target_id or "")
+    tiger_attack = next(
+        (attack for attack in context.definition.attacks if attack.attack_id == "tiger_claws"),
+        None,
+    )
+    existing = next(
+        (
+            effect for effect in context.state.persistent_effects
+            if effect.target_actor_id == (target.actor_id if target is not None else "")
+            and effect.damage_type == "bleed"
+        ),
+        None,
+    )
     if (
-        continuation is None or continuation.stage != "tiger_bleed_choice"
+        pending.kind != "family_action"
+        or pending.family_id != "martial"
+        or pending.owner_actor_id != context.actor.actor_id
+        or pending.actor_id != context.actor.actor_id
+        or pending.target_id == context.actor.actor_id
+        or pending.attack_id != "tiger_claws"
+        or pending.options != (
+            ChoiceOption("existing", "Keep existing bleed"),
+            ChoiceOption("incoming", "Use Tiger's 1d4 bleed"),
+        )
+        or continuation is None or continuation.stage != "tiger_bleed_choice"
         or continuation.actor_id != context.actor.actor_id
-        or pending.target_id not in context.state.creatures
+        or continuation.target_id != pending.target_id
+        or continuation.attack_id != "tiger_claws"
+        or tiger_attack is None
+        or target is None or target.dead
         or not tiger_stance_is_active(context.state, context.actor.actor_id)
+        or "Tiger Stance" not in context.definition.feats
+        or existing is None
+        or (bool(existing.dice) and existing.dice == (4,))
     ):
         raise ValueError("save has an invalid Tiger bleed choice")
 
 
-def post_mitigation_tiger_bleed(state, *, attacker, target, attack, damage, check):
+def post_mitigation_tiger_bleed(
+    state, *, attacker, target, attack, damage, check, continuation=None
+):
     """Install Tiger's exactly-one-d4 critical bleed after defenses."""
     if (
         attack is None
         or "Tiger Stance" not in _definition(attacker).feats
         or not tiger_stance_is_active(state, attacker.actor_id)
         or attack.attack_id != "tiger_claws"
-        or target.dead
+        or target.defeated
         or target.definition_id in {"skeleton_guard_mc3193", "zombie_shambler_mc3249"}
     ):
         return None
@@ -159,6 +190,7 @@ def post_mitigation_tiger_bleed(state, *, attacker, target, attack, damage, chec
             kind="family_action", actor_id=attacker.actor_id,
             target_id=target.actor_id, attack_id=attack.attack_id,
             stage="tiger_bleed_choice",
+            parent_continuation=continuation,
         )
         state.pending_choice = PendingChoice(
             choice_id=state.next_choice_id,
@@ -218,7 +250,24 @@ def handle_choice(context: FamilyProcedureContext) -> FamilyProcedureResult | No
         text = f"{context.actor.label} keeps Tiger's 1d4 persistent bleed on {target.label}."
     else:
         text = f"{context.actor.label} keeps the existing persistent bleed on {target.label}."
-    return FamilyProcedureResult(events=(Event("persistent_choice", context.actor.actor_id, target.actor_id, text),))
+    events = [Event("persistent_choice", context.actor.actor_id, target.actor_id, text)]
+    continuation = pending.continuation
+    if continuation is None:
+        raise ValueError("Tiger bleed choice has no continuation")
+    parent = continuation.parent_continuation
+    if parent is None:
+        events.extend(
+            context.encounter._complete_action(
+                context.state, context.actor, [], dice=context.dice
+            )
+        )
+    else:
+        events.extend(
+            context.encounter._resume_continuation(
+                context.state, context.dice, parent, critical=False
+            )
+        )
+    return FamilyProcedureResult(events=tuple(events))
 
 
 def _definition(actor):
