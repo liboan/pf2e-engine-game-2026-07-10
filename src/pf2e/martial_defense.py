@@ -50,19 +50,19 @@ class DismissCraneStance(FamilyCommand):
     family_id = "martial"
 
 
-def _held_attack_matches(state, actor, attack) -> bool:
+def _held_attack_matches(item_instances, actor, attack) -> bool:
     """Return whether the single held object is this attack's weapon."""
 
     if attack.item_id is None or len(actor.held_items) != 1:
         return False
     held_id = actor.held_items[0]
-    instance = state.item_instances.get(held_id)
+    instance = item_instances.get(held_id)
     return held_id == attack.item_id or (
         instance is not None and instance.definition_id == attack.item_id
     )
 
 
-def dueling_parry_requirements_met(state, actor, definition, attack=None) -> bool:
+def dueling_parry_requirements_met(item_instances, actor, definition, attack=None) -> bool:
     """Check the printed one-weapon, otherwise-empty hands requirement."""
 
     attacks = (attack,) if attack is not None else definition.attacks
@@ -71,7 +71,7 @@ def dueling_parry_requirements_met(state, actor, definition, attack=None) -> boo
         and candidate.item_id is not None
         and candidate.hands_required == 1
         and "melee" in candidate.traits
-        and _held_attack_matches(state, actor, candidate)
+        and _held_attack_matches(item_instances, actor, candidate)
         for candidate in attacks
     )
 
@@ -81,7 +81,7 @@ def dueling_parry_is_active(state, actor, definition) -> bool:
 
     return (
         "dueling_parry" in definition.abilities
-        and dueling_parry_requirements_met(state, actor, definition)
+        and dueling_parry_requirements_met(state.item_instances, actor, definition)
         and any(
             effect.kind == "dueling_parry"
             and effect.source_actor_id == actor.actor_id
@@ -124,7 +124,9 @@ def end_dueling_parries_with_broken_requirements(state) -> None:
         if effect.kind != "dueling_parry"
         or (
             (actor := state.creatures.get(effect.source_actor_id)) is not None
-            and dueling_parry_requirements_met(state, actor, get_definition(actor.definition_id))
+            and dueling_parry_requirements_met(
+                state.item_instances, actor, get_definition(actor.definition_id)
+            )
         )
     ]
 
@@ -156,7 +158,7 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | No
             context.state, context.actor, command.attack_id, item_id=command.item_id,
         )
         if attack is None or not dueling_parry_requirements_met(
-            context.state, context.actor, context.definition, attack,
+            context.state.item_instances, context.actor, context.definition, attack,
         ):
             return FamilyProcedureResult(
                 rejection="Dueling Parry requires one held one-handed melee weapon and empty other hands."

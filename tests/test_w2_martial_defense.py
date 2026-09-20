@@ -7,8 +7,11 @@ p. 118, https://2e.aonprd.com/Feats.aspx?ID=5976).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
+
+import pytest
 
 from pf2e import EndTurn, Interact, Release, Strike
 import pf2e.content as content
@@ -79,6 +82,23 @@ def test_dueling_parry_has_live_hand_requirements_save_recovery_and_turn_expiry(
     fighter = expired._state.creatures["fighter"]
     assert expired.inspect().turn_actor_id == "fighter"
     assert expired._effective_ac(fighter, state=expired._state) == 19
+
+
+def test_dueling_parry_save_rejects_a_forged_broken_hand_requirement(tmp_path: Path) -> None:
+    game = Encounter.start(get_setup("staged_fighter_level_2_dueling_parry"), rolls=(20, 1))
+    _settle_initiative(game)
+    assert game.execute(DuelingParry("longsword")).status is ResultStatus.COMPLETED
+    save_path = tmp_path / "forged-dueling-parry.json"
+    game.save(save_path)
+    payload = json.loads(save_path.read_text(encoding="utf-8"))
+    state = payload["state"]
+    fighter = state["creatures"]["fighter"]
+    fighter["held_items"].remove("longsword")
+    state["ground_items"].append({"position": fighter["position"], "items": ["longsword"]})
+    save_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid active spell effect"):
+        Encounter.load(save_path)
 
 
 def test_crane_stance_restricts_strikes_serializes_and_is_limited_to_one_stance_action_per_round(

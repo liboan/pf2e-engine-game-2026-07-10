@@ -43,6 +43,7 @@ from .model import (
 from .conditions import CheckContext, ConditionValue, effective_condition_value
 from .health import HealthState, HealthTransition
 from .items import ItemInstance, STEEL_SHIELD, runtime_item_instance_id
+from .martial_defense import dueling_parry_requirements_met
 from .rune_content import ITEM_CATEGORIES, weapon_rune_profile_for_item
 from .checks import (
     CheckResult,
@@ -2113,6 +2114,10 @@ def _state_from_data(data: Any) -> EncounterState:
                     or "dueling_parry" not in get_definition(
                         creatures[row[2]].definition_id
                     ).abilities
+                    or not dueling_parry_requirements_met(
+                        item_instances, creatures[row[2]],
+                        get_definition(creatures[row[2]].definition_id),
+                    )
                     or row[2] in dueling_parry_sources
                 )
             )

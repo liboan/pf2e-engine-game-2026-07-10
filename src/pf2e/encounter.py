@@ -4053,7 +4053,7 @@ class Encounter:
         can_dueling_parry = (
             can_act and actions >= 1 and not actor.must_leave_occupied
             and "dueling_parry" in definition.abilities
-            and dueling_parry_requirements_met(state, actor, definition)
+            and dueling_parry_requirements_met(state.item_instances, actor, definition)
             and self._action_permitted(state, actor, "dueling_parry", frozenset())
         )
         can_crane_stance = (
