@@ -1,6 +1,6 @@
 # Content W5 working model
 
-W4 is independently accepted at code/test head `1f4d09315a86f6fc9d71e51eef607e83eb68967c`, integrated with owner evidence at `ed8e86fe4d02b4e4e3bace40918d3fc3f9b86c8d`. Publish it before dispatching W5. [ACTIVE](../work-log/ACTIVE.md) records publication and exact assignments; [accepted-W4 handoff](08-content-w5-handoff.md) supplies the fresh-team baseline. W1–W4 guidance archives are historical. W5 is already authorized; no routine user approval round is required.
+W4 is independently accepted at code/test head `1f4d09315a86f6fc9d71e51eef607e83eb68967c`, integrated with owner evidence at `ed8e86fe4d02b4e4e3bace40918d3fc3f9b86c8d`. W4 publication is verified at `120fa82267bae82abdba43042f9a2b1f0e99b489` on `codex/pf2e-content-w4-delivery`. [ACTIVE](../work-log/ACTIVE.md) records publication and exact assignments; [accepted-W4 handoff](08-content-w5-handoff.md) supplies the fresh-team baseline. W1–W4 guidance archives are historical. W5 is already authorized; no routine user approval round is required.
 
 ## Authority and fresh team
 
@@ -13,6 +13,12 @@ Start with a fresh bounded full Astra/high planning task in a fresh isolated wor
 The planner may inspect relevant implementation and rules sources. It owns concrete named roster selection, real helper reuse/proportional refactors, cohesive file boundaries, ownership/API contracts/dependencies and consequential source/rules decisions including grants, resources, expiry and persistence. Return a brief actionable plan with named batches, exact symbols/analogous tests, reuse rationale, a few source-grounded public/save/terminal/adverse acceptance cases and explicit unsupported cases. No exhaustive inventory, old transcript reconstruction or large work packet. Coordinator adopts the plan and dispatches without routine user approval. Reuse the planner only for substantial unresolved decisions, not ordinary debugging or status. Fresh Sol reviewers independently verify planning assumptions and complete runnable results.
 
 Prioritize materially wider genuinely new playable level-1 class feats across classes; worthwhile inexpensive spell/item reuse is allowed. Existing-name configurations, definitions and placeholders earn no new-content credit. One owner delivers a substantial coherent family through grants/runtime/terminal/persistence/tests. Split unwieldy modules and simplify touched branching proportionally; shared mechanisms need actual adopters and explicit ownership. No infrastructure-only wave or speculative universal framework. Coordinate shared semantic/file boundaries directly with affected peers; separate worktrees do not remove semantic conflicts.
+
+## Adopted W5 execution
+
+The [bounded planner handoff](../work-log/w5-planning.md), original commit `55a5f39cc8810add5702cba66961354cc61eaf12`, is adopted for dispatch. It selects eight new feats across seven classes (seven L1 plus explicitly L2 Strong Arm), with Gravity Weapon and Hymn of Healing spells. No new-name credit for existing configurations or incidental unplayed grants. Reviewers independently verify the plan’s source/fixture assumptions.
+
+Three fresh Luna/high owners: A Monk stances, B Arms/parry and integration, C Focus/font. Each has a fresh Sol/high group reviewer; a fourth separate fresh Sol/high reviewer handles final assembled interaction acceptance. Exact peer IDs live in ACTIVE. B establishes the small shared Strike hook contract, owns save-version decision and integration order B→A→C. A owns stance/Step/Trip/persistent contracts; C owns composition/sustain/typed-status contracts. Follow the plan’s narrow modules and backward-compatible public constructors; no competing broad shared-file rewrites. Actual groups and final assembly require public/save/terminal/adverse/performance evidence. The planner is now idle unless a substantial unresolved decision arises.
 
 ## Checks and independent acceptance
 
