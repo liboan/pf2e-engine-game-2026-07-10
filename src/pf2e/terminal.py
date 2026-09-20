@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from pf2e.model import Cackle, EnergyAblation, Position
+from pf2e.w5_focus_terminal import W5_FOCUS_ACTION_LABELS
 
 if TYPE_CHECKING:
     from pf2e.encounter import Encounter
@@ -120,6 +121,7 @@ _ACTION_LABELS = {
     "daily_prepare": "Daily Preparation",
     "spell_substitution": "Spell Substitution (10 minutes)",
     "interrupt_spell_substitution": "Interrupt Spell Substitution",
+    **W5_FOCUS_ACTION_LABELS,
 }
 
 PROTOTYPE_NOTICE = (
@@ -1690,6 +1692,23 @@ def _choose_cast_inputs(
             return None
     if spell_mode is not None:
         return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {"spell_mode": spell_mode}
+    if spell.spell_id == "hymn_of_healing" and target_id is not None:
+        recipient = next(
+            (actor for actor in inspection.actors if actor.actor_id == target_id),
+            None,
+        )
+        if recipient is not None and getattr(recipient, "temporary_hp", 0) > 0:
+            choice_index = _choose_index(
+                "Hymn temporary HP:",
+                ("Keep existing temporary HP", "Gain 2 temporary HP"),
+                input_fn,
+                output_fn,
+            )
+            if choice_index is None:
+                return None
+            return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {
+                "temporary_hp_choice": ("keep_existing", "gain_new")[choice_index],
+            }
     if use_arcane_bond:
         return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {"use_arcane_bond": True}
     return spell.spell_id, target_id, target_mode.actions, slot_id, include_self
@@ -1756,14 +1775,24 @@ def _choose_light_sustain_inputs(
     output_fn: Callable[[str], object],
 ) -> tuple[str, Position | None, str | None] | None:
     """Collect one orb and optional Sustain point/carrier intent."""
-    orb_id = _choose_light_orb(
-        inspection,
-        input_fn,
-        output_fn,
-        prompt="Light orb to Sustain:",
-    )
-    if orb_id is None:
+    light_choices = _light_orb_choices(inspection, getattr(inspection, "turn_actor_id", None))
+    choices = list(light_choices)
+    for actor in getattr(inspection, "actors", ()):
+        if getattr(actor, "actor_id", None) != getattr(inspection, "turn_actor_id", None):
+            continue
+        for effect in getattr(actor, "effects", ()):
+            if getattr(effect, "kind", None) == "hymn_of_healing" and getattr(effect, "effect_id", None):
+                choices.append((effect.effect_id, f"{effect.effect_id} (Hymn of Healing)"))
+    if not choices:
+        output_fn("The engine did not provide an active Light orb or Hymn of Healing owned by this actor.")
         return None
+    prompt = "Light orb to Sustain:" if len(choices) == len(light_choices) else "Light or composition to Sustain:"
+    index = _choose_index(prompt, [label for _id, label in choices], input_fn, output_fn)
+    if index is None:
+        return None
+    orb_id = choices[index][0]
+    if any(item_id == orb_id for item_id, _label in choices if item_id == orb_id and "Hymn of Healing" in _label):
+        return orb_id, None, None
     raw_point = _read_line(
         "Sustain point (press Enter to keep current point or detach carrier):",
         input_fn,
@@ -3164,6 +3193,7 @@ def run_terminal(
                     area_direction = None
                     use_arcane_bond = False
                     spell_mode = None
+                    temporary_hp_choice = None
                     if len(cast_inputs) == 10:
                         (
                             spell_id,
@@ -3211,6 +3241,8 @@ def run_terminal(
                         elif isinstance(special_input, dict) and special_input.get("spell_mode") in {"ranged", "melee", "piercing", "slashing", "visible", "invisible"}:
                             spell_mode = special_input["spell_mode"]
                             item_id = special_input.get("item_id")
+                        elif isinstance(special_input, dict) and "temporary_hp_choice" in special_input:
+                            temporary_hp_choice = special_input["temporary_hp_choice"]
                         elif special_input == {"use_arcane_bond": True}:
                             use_arcane_bond = True
                         else:
@@ -3234,6 +3266,7 @@ def run_terminal(
                             area_direction=area_direction,
                             use_arcane_bond=use_arcane_bond,
                             spell_mode=spell_mode,
+                            temporary_hp_choice=temporary_hp_choice,
                         ),
                         output_fn,
                     )

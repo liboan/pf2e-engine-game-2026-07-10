@@ -110,6 +110,7 @@ from .w3_caster_content import W3_CASTER_DEFINITIONS, W3_CASTER_SETUPS
 from .w4_caster_content import build_w4_caster_content
 from .w4_defensive_content import build_w4_defensive_content
 from .w5_arms_content import W5_ARMS_DEFINITIONS, W5_ARMS_SETUPS
+from .w5_focus_content import build_w5_focus_content
 
 
 # The Witch's L2 class-local sheet is deliberately held in staging until its
@@ -651,6 +652,7 @@ W4_CASTER_DEFINITIONS, W4_CASTER_SETUPS = build_w4_caster_content(WARPRIEST_C)
 W4_CASTER_DEFINITION_MAP = {
     definition.definition_id: definition for definition in W4_CASTER_DEFINITIONS
 }
+W5_FOCUS_DEFINITIONS, W5_FOCUS_SETUPS = build_w5_focus_content(WARPRIEST_C)
 
 # Soothe is a shared rank-1 spell for the future Bard and Life Oracle slices.
 # This remains a staged occult prepared-caster fixture: it exercises the spell
@@ -1124,6 +1126,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         },
         **W5_ARMS_DEFINITIONS,
         **W5_STANCE_DEFINITIONS,
+        **W5_FOCUS_DEFINITIONS,
     }
 )
 
@@ -1538,6 +1541,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         },
         **W5_ARMS_SETUPS,
         **W5_STANCE_SETUPS,
+        **W5_FOCUS_SETUPS,
     }
 )
 

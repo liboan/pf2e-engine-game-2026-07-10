@@ -32,7 +32,19 @@ def final_check_outcome(state, *, attacker, target, attack, check):
 
 
 def committed_first_weapon_attempt(state, *, actor, attack):
-    """Reserved adopter hook for Gravity Weapon's first weapon attempt."""
+    """Commit Gravity Weapon to the first held-weapon attempt this round."""
+    if attack.item_id is None:
+        return None
+    if not any(
+        effect.kind == "gravity_weapon"
+        and effect.source_actor_id == actor.actor_id
+        and effect.target_actor_id == actor.actor_id
+        and (effect.expires_at_world_time is None or effect.expires_at_world_time > state.world_time_seconds)
+        for effect in state.active_effects
+    ) or actor.gravity_weapon_used_round == state.round_number:
+        return None
+    actor.gravity_weapon_used_round = state.round_number
+    actor.gravity_weapon_bonus_attack_id = attack.attack_id
     return None
 
 

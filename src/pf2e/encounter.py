@@ -3927,7 +3927,8 @@ class Encounter:
                         EffectView(effect.kind, effect.source_actor_id,
                                    effect.target_actor_id, effect.value,
                                    effect.expires_at_source_start,
-                                   effect.expires_at_world_time)
+                                   effect.expires_at_world_time,
+                                   effect.effect_id)
                         for effect in state.active_effects
                         if effect.target_actor_id == creature.actor_id
                     ),
@@ -4660,7 +4661,7 @@ class Encounter:
                 ("lingering_composition", can_act and actor.focus_points > 0 and "lingering_composition" in definition.abilities),
                 ("drain_bonded_item", can_arcane_bond),
                 ("cast", any(not spell.unavailable_reason and (spell.cantrip or spell.slots) for spell in spells)),
-                ("sustain_light", can_act and self._light_control_available(state, actor, "sustain")),
+                ("sustain_light", can_act and (self._light_control_available(state, actor, "sustain") or self._hymn_control_available(state, actor))),
                 ("dismiss_light", can_act and self._light_control_available(state, actor, "dismiss")),
                 ("dismiss_life_link", self._active_life_link(state, actor) is not None),
                 ("rage", rage_available),
@@ -4786,7 +4787,7 @@ class Encounter:
                         traits=tuple(sorted(spell_traits(spell_id, actions))),
                     ))
                     continue
-                if spell_id in {"angelic_halo", "courageous_anthem", "shield", "detect_magic", "weapon_surge"}:
+                if spell_id in {"angelic_halo", "courageous_anthem", "shield", "detect_magic", "weapon_surge", "gravity_weapon"}:
                     target_options.append(SpellTargetOption(
                         actions, (),
                         traits=tuple(sorted(spell_traits(spell_id, actions))),
@@ -4884,6 +4885,8 @@ class Encounter:
                 and self._is_living_target(target)
                 and "void_healing" not in get_definition(target.definition_id).abilities
             )
+        if spell_id == "hymn_of_healing":
+            return target.team == caster.team and self._is_living_target(target)
         if spell_id in {"daze", "force_bolt", "force_barrage", "electric_arc", "tempest_surge", "telekinetic_projectile", "frostbite", "enfeeble", "ignition", "gouging_claw", "caustic_blast", "tangle_vine"}:
             return target.actor_id != caster.actor_id and not target.dead and not target.defeated
         if spell_id == "vitality_lash":
@@ -6236,6 +6239,8 @@ class Encounter:
             from .strike_hooks import committed_first_weapon_attempt
 
             committed_first_weapon_attempt(state, actor=actor, attack=attack)
+        gravity_weapon_bonus = actor.gravity_weapon_bonus_attack_id == attack.attack_id
+        actor.gravity_weapon_bonus_attack_id = None
         if vicious_swing:
             actor.flourish_used_round = state.round_number
         selected_item_id = self._held_attack_item_id(state, actor, attack, item_id=item_id)
@@ -6254,6 +6259,7 @@ class Encounter:
             attack_actions_cost=actions_cost,
             attack_count_cost=attack_count_cost,
             damage_bonus_dice=1 if vicious_swing else 0,
+            gravity_weapon_bonus=gravity_weapon_bonus,
             vicious_swing=vicious_swing,
             finisher=finisher,
             hunter_aim_intent=hunter_aim_intent,
@@ -6560,6 +6566,7 @@ class Encounter:
                 damage_type=context.damage_type,
                 nonlethal=context.nonlethal,
                 damage_bonus_dice=context.damage_bonus_dice,
+                gravity_weapon_bonus=context.gravity_weapon_bonus,
                 attack_actions_cost=context.attack_actions_cost,
                 attack_count_cost=context.attack_count_cost,
                 ranged_penalty=context.ranged_penalty,
@@ -6595,6 +6602,7 @@ class Encounter:
             is_reaction=context.kind == "reaction_strike",
             continuation=context if context.finisher else parent,
             item_id=context.item_id,
+            gravity_weapon_bonus=context.gravity_weapon_bonus,
             investigator_strategic_strike=bool(stratagem_roll is not None and context.use_intelligence),
             investigator_use_intelligence=bool(stratagem_roll is not None and context.use_intelligence),
             bomber_only_primary_splash=context.bomber_only_primary_splash,
@@ -6650,7 +6658,7 @@ class Encounter:
         nonlethal=False, damage_bonus_dice=0, is_reaction=False, continuation=None,
         attack_target_off_guard=False, item_id=None,
         investigator_strategic_strike=False, investigator_use_intelligence=False,
-        bomber_only_primary_splash=False,
+        bomber_only_primary_splash=False, gravity_weapon_bonus=False,
     ) -> list[Event]:
         events = [self._attack_event(actor, target, check)]
         from .strike_hooks import final_check_outcome
@@ -6790,6 +6798,7 @@ class Encounter:
                 damage_type=damage_type or attack.damage_type,
                 nonlethal=nonlethal,
                 damage_bonus_dice=damage_bonus_dice,
+                gravity_weapon_bonus=gravity_weapon_bonus,
                 attack_target_off_guard=attack_target_off_guard,
                 item_id=item_id,
                 investigator_strategic_strike=investigator_strategic_strike,
@@ -6818,6 +6827,7 @@ class Encounter:
             use_intelligence=investigator_use_intelligence,
             finisher=finisher,
             weapon_surge=weapon_surge,
+            gravity_weapon_bonus=gravity_weapon_bonus,
         )
         if weapon_surge:
             self._consume_weapon_surge(state, actor)
@@ -7116,6 +7126,7 @@ class Encounter:
         use_intelligence=False,
         finisher=False,
         weapon_surge=False,
+        gravity_weapon_bonus=False,
     ):
         modifier = self._damage_modifier(state, actor, attack)
         from .martial_defense import point_blank_stance_damage_bonus
@@ -7133,6 +7144,14 @@ class Encounter:
                 rune_profile,
                 striking_applies=attack.striking_applies,
                 unarmed="unarmed" in attack.traits,
+            )
+        from .focus_buffs import gravity_weapon_modifier
+        gravity_modifier = gravity_weapon_modifier(
+            state, actor, attack, tuple(weapon_dice), applies=gravity_weapon_bonus,
+        )
+        if gravity_modifier is not None:
+            modifier = self._damage_modifier(
+                state, actor, attack, extra_status_modifiers=(gravity_modifier,)
             )
         terms = [DamageTerm(
             source=attack.attack_id,
@@ -8487,7 +8506,7 @@ class Encounter:
             attack.item_id, character_level=get_definition(actor.definition_id).level,
         )
 
-    def _damage_modifier(self, state, actor, attack):
+    def _damage_modifier(self, state, actor, attack, *, extra_status_modifiers=()):
         if attack.damage_attribute is None:
             return attack.damage_modifier
         modifiers = condition_modifiers(
@@ -8499,7 +8518,7 @@ class Encounter:
         # avoids the old Strength-only subtraction and prevents double
         # application when an active spell effect is present.
         anthem = self._courageous_anthem_damage_modifiers(state, actor)
-        return attack.damage_modifier + combine_modifiers((*modifiers, *anthem))
+        return attack.damage_modifier + combine_modifiers((*modifiers, *anthem, *extra_status_modifiers))
 
     @staticmethod
     def _courageous_anthem_damage_modifiers(state, actor):
@@ -8953,7 +8972,7 @@ class Encounter:
         self, state, attacker, target, attack, check, *, damage_type,
         nonlethal, damage_bonus_dice, attack_target_off_guard, item_id,
         investigator_strategic_strike, investigator_use_intelligence,
-        bomber_only_primary_splash, parent_continuation,
+        bomber_only_primary_splash, parent_continuation, gravity_weapon_bonus=False,
     ) -> None:
         if parent_continuation is not None:
             parent_continuation.reactive_shield_decided = True
@@ -8990,6 +9009,7 @@ class Encounter:
             damage_type=damage_type,
             nonlethal=nonlethal,
             damage_bonus_dice=damage_bonus_dice,
+            gravity_weapon_bonus=gravity_weapon_bonus,
             attack_target_off_guard=attack_target_off_guard,
             damage_context=("bomber_only_primary" if bomber_only_primary_splash else None),
             continuation=continuation,
@@ -9272,6 +9292,14 @@ class Encounter:
             )
         )
 
+    def _hymn_control_available(self, state, actor) -> bool:
+        return any(
+            effect.kind == "hymn_of_healing"
+            and effect.source_actor_id == actor.actor_id
+            and effect.sustain_limit_source_start > state.actor_start_counts.get(actor.actor_id, 0)
+            for effect in state.active_effects
+        ) and self._action_permitted(state, actor, "sustain_hymn_of_healing", frozenset({"concentrate"}))
+
     def _light_orb_index_for_control(
         self, state: EncounterState, actor: CreatureState, orb_id: str
     ) -> int:
@@ -9292,6 +9320,37 @@ class Encounter:
         self, state: EncounterState, dice: DiceSource, actor: CreatureState, command: Sustain
     ) -> list[Event]:
         """Spend one action to move, detach, or offer attachment of a Light orb."""
+        hymn_effect = next(
+            (effect for effect in state.active_effects
+             if effect.effect_id == command.orb_id
+             and effect.source_actor_id == actor.actor_id
+             and effect.kind == "hymn_of_healing"),
+            None,
+        )
+        if hymn_effect is not None:
+            if command.point is not None or command.attachment_actor_id is not None:
+                raise _Rejected("Sustain Hymn of Healing takes no movement or attachment selection.")
+            start = state.actor_start_counts.get(actor.actor_id, 0)
+            if start >= hymn_effect.sustain_limit_source_start:
+                raise _Rejected("Hymn of Healing has reached its four-round sustain limit.")
+            self._require_action_permitted(state, actor, "sustain_hymn_of_healing", frozenset({"concentrate"}))
+            actor.actions_remaining -= 1
+            refreshed = replace(
+                hymn_effect,
+                expires_at_source_start=min(hymn_effect.sustain_limit_source_start, start + 1),
+                expires_at_world_time=min(hymn_effect.sustain_limit_world_time or state.world_time_seconds + 6, state.world_time_seconds + 6),
+                sustain_expires_at_source_end=state.actor_end_counts.get(actor.actor_id, 0) + 2,
+            )
+            hymn_index = state.active_effects.index(hymn_effect)
+            state.active_effects[hymn_index] = refreshed
+            events = []
+            if hymn_effect.glue_removal_actions != start:
+                refreshed = replace(refreshed, glue_removal_actions=start)
+                state.active_effects[hymn_index] = refreshed
+                target = state.creatures[refreshed.target_actor_id]
+                events.extend(self._grant_hymn_temp_hp(state, actor, target, refreshed))
+            events.append(Event("hymn_sustained", actor.actor_id, refreshed.target_actor_id, f"{actor.label} sustains Hymn of Healing."))
+            return self._complete_action(state, actor, events, dice=dice)
         hex_effect = next(
             (effect for effect in state.active_effects
              if effect.effect_id == command.orb_id
@@ -10295,6 +10354,26 @@ class Encounter:
             if caster.witch_restored_spirit_used_start == start:
                 return self._complete_action(state, caster, events, dice=dice)
             return self._offer_restored_spirit_choice(state, caster, events, dice=dice)
+        if spell_id == "gravity_weapon":
+            if continuation.spell_source_kind != "focus" or continuation.spell_actions != 1:
+                raise _Rejected("Gravity Weapon requires its one-action focus form.")
+            state.active_effects[:] = [
+                effect for effect in state.active_effects
+                if not (effect.kind == "gravity_weapon" and effect.source_actor_id == caster.actor_id)
+            ]
+            start = state.actor_start_counts.get(caster.actor_id, 0)
+            state.active_effects.append(ActiveSpellEffect(
+                f"gravity_weapon:{caster.actor_id}:{state.next_choice_id}",
+                "gravity_weapon", caster.actor_id, caster.actor_id, 1,
+                start + 10, state.world_time_seconds + 60,
+            ))
+            continuation.stage = "done"
+            return self._complete_action(state, caster, [Event(
+                "gravity_weapon", caster.actor_id, caster.actor_id,
+                f"{caster.label} casts Gravity Weapon; the first held-weapon Strike each round gains a status bonus equal to twice its weapon damage dice.",
+            )], dice=dice)
+        if spell_id == "hymn_of_healing":
+            return self._resolve_hymn_of_healing(state, dice, caster, continuation)
         if spell_id == "command":
             target = state.creatures.get(continuation.target_id or "")
             if target is None or target.dead or target.defeated:
@@ -10342,22 +10421,13 @@ class Encounter:
             source_start = state.actor_start_counts.get(caster.actor_id, 0)
             active_actor_id = state.initiative_order[state.active_index] if state.initiative_order else None
             active_start = state.actor_start_counts.get(active_actor_id or "", 0)
-            if (
-                caster.composition_cast_at_start == source_start
-                or active_actor_id is None
-                or (caster.composition_cast_turn_actor_id, caster.composition_cast_turn_start) == (active_actor_id, active_start)
-            ):
+            from .bard_compositions import clear_prior_compositions, composition_cast_allowed
+            if not composition_cast_allowed(caster, state, active_actor_id=active_actor_id, active_start=active_start):
                 raise _Rejected("Only one composition spell can be cast each turn.")
             # This literal procedure owns the only admitted composition today.
             # Removing a source's prior effect retains the Composition trait's
             # replacement rule without introducing a general aura subsystem.
-            state.active_effects[:] = [
-                effect for effect in state.active_effects
-                if not (
-                    effect.kind == "courageous_anthem"
-                    and effect.source_actor_id == caster.actor_id
-                )
-            ]
+            clear_prior_compositions(state, source_actor_id=caster.actor_id)
             caster.composition_cast_at_start = source_start
             caster.composition_cast_turn_actor_id = active_actor_id
             caster.composition_cast_turn_start = active_start
@@ -11425,9 +11495,8 @@ class Encounter:
         clear_pending_spellshape(bard)
         bard.focus_points -= 1
         bard.composition_cast_turn_actor_id, bard.composition_cast_turn_start = active_actor_id, active_start
-        state.active_effects[:] = [effect for effect in state.active_effects if not (
-            effect.kind == "courageous_anthem" and effect.source_actor_id == bard.actor_id
-        )]
+        from .bard_compositions import clear_prior_compositions
+        clear_prior_compositions(state, source_actor_id=bard.actor_id)
         performance = replace(resolve_check(dice.draw(20), performance_modifier, original.dc),
             modifier_breakdown=(Modifier(performance_modifier, "untyped", "printed Performance modifier"),))
         events = [Event("counter_performance_cast", bard.actor_id, target.actor_id,
@@ -11489,7 +11558,8 @@ class Encounter:
 
     def _resolve_harm_result(self, state, dice, caster, target, check, continuation):
         """Resolve the finite rank-one two-action Harm basic Fortitude form."""
-        raw = resolve_damage(DamagePacket("Harm", "void", 8, 1, 0), dice.draw)
+        die_sides = 10 if "harming_hands" in get_definition(caster.definition_id).abilities else 8
+        raw = resolve_damage(DamagePacket("Harm", "void", die_sides, 1, 0), dice.draw)
         damage = basic_save_damage_result(raw, check.degree)
         events = [Event(
             "spell_save", caster.actor_id, target.actor_id,
@@ -11499,6 +11569,60 @@ class Encounter:
             state, dice, caster, target, damage, check=check, source="harm",
             damage_type="void", continuation=continuation,
         )
+
+    def _resolve_hymn_of_healing(self, state, dice, caster, continuation):
+        target = state.creatures.get(continuation.target_id or "")
+        if (
+            continuation.spell_source_kind != "focus"
+            or continuation.spell_actions != 2
+            or target is None
+            or target.dead
+            or target.team != caster.team
+            or not self._is_living_target(target)
+            or grid_distance_feet(caster.position, target.position) > 30
+        ):
+            return [Event("action_stopped", caster.actor_id, continuation.target_id, "Hymn of Healing's recipient is no longer eligible.")]
+        from .bard_compositions import clear_prior_compositions, composition_cast_allowed
+        active_actor_id = state.initiative_order[state.active_index] if state.initiative_order else None
+        active_start = state.actor_start_counts.get(active_actor_id or "", 0)
+        if not composition_cast_allowed(caster, state, active_actor_id=active_actor_id, active_start=active_start):
+            raise _Rejected("Only one composition spell can be cast each turn.")
+        clear_prior_compositions(state, source_actor_id=caster.actor_id)
+        source_start = state.actor_start_counts.get(caster.actor_id, 0)
+        caster.composition_cast_at_start = source_start
+        caster.composition_cast_turn_actor_id = active_actor_id
+        caster.composition_cast_turn_start = active_start
+        effect = ActiveSpellEffect(
+            f"hymn_of_healing:{caster.actor_id}:{target.actor_id}:{state.next_choice_id}",
+            "hymn_of_healing", caster.actor_id, target.actor_id, 2,
+            source_start + 1, state.world_time_seconds + 6,
+            sustain_limit_source_start=source_start + 4,
+            sustain_limit_world_time=state.world_time_seconds + 24,
+            sustain_expires_at_source_end=state.actor_end_counts.get(caster.actor_id, 0) + 2,
+        )
+        state.active_effects.append(effect)
+        events = self._grant_hymn_temp_hp(
+            state, caster, target, effect,
+            choice=continuation.temporary_hp_choice,
+        )
+        continuation.stage = "done"
+        events.append(Event("hymn_of_healing", caster.actor_id, target.actor_id, f"{caster.label} starts Hymn of Healing on {target.label}; fast healing 2 begins at the recipient's next turn start."))
+        return events + self._complete_action(state, caster, [], dice=dice)
+
+    def _grant_hymn_temp_hp(self, state, caster, target, effect, *, choice=None):
+        if target.temporary_hp >= 2 and target.temporary_hp_source_id != effect.effect_id:
+            if choice == "gain_new":
+                target.temporary_hp = 2
+                target.temporary_hp_source_id = effect.effect_id
+                target.temporary_hp_expires_at_seconds = None
+                target.temporary_hp_expires_at_source_start = state.actor_start_counts.get(caster.actor_id, 0) + 1
+                return [Event("temporary_hp_replaced", caster.actor_id, target.actor_id, f"{target.label} replaces existing temporary HP with Hymn of Healing's 2 temporary HP.")]
+            return [Event("temporary_hp_kept", caster.actor_id, target.actor_id, f"{target.label} keeps existing temporary HP instead of Hymn of Healing's 2 temporary HP.")]
+        target.temporary_hp = 2
+        target.temporary_hp_source_id = effect.effect_id
+        target.temporary_hp_expires_at_seconds = None
+        target.temporary_hp_expires_at_source_start = state.actor_start_counts.get(caster.actor_id, 0) + 1
+        return [Event("temporary_hp", caster.actor_id, target.actor_id, f"{target.label} gains 2 temporary HP from Hymn of Healing.")]
 
     def _resolve_direct_fortitude_result(self, state, dice, caster, target, check, continuation):
         spell_id = continuation.spell_id
@@ -13699,6 +13823,26 @@ class Encounter:
         starts = state.actor_start_counts
         assert starts is not None
         starts[actor.actor_id] = starts.get(actor.actor_id, 0) + 1
+        for hymn in tuple(state.active_effects):
+            if (
+                hymn.kind == "hymn_of_healing"
+                and hymn.target_actor_id == actor.actor_id
+                and hymn.expires_at_world_time is not None
+                and hymn.expires_at_world_time > state.world_time_seconds
+                and hymn.life_link_used_round != starts[actor.actor_id]
+            ):
+                target = state.creatures.get(hymn.target_actor_id)
+                if target is not None and self._is_living_target(target):
+                    if target.health_mode is HealthMode.PC:
+                        self._apply_health_transition(
+                            state, target, pc_healing(self._health_state(target), 2)
+                        )
+                    else:
+                        target.hp = min(get_definition(target.definition_id).hp, target.hp + 2)
+                        target.unconscious = False
+                    state.active_effects[state.active_effects.index(hymn)] = replace(
+                        hymn, life_link_used_round=starts[actor.actor_id]
+                    )
         for item_id, infused in tuple(state.infused_alchemy_items.items()):
             if (infused.creator_actor_id == actor.actor_id
                 and infused.activation_deadline == "creator_next_turn_start"
@@ -15907,6 +16051,7 @@ class Encounter:
                 damage_type=pending.damage_type or attack.damage_type,
                 nonlethal=pending.nonlethal,
                 damage_bonus_dice=pending.damage_bonus_dice,
+                gravity_weapon_bonus=pending.gravity_weapon_bonus,
                 attack_target_off_guard=pending.attack_target_off_guard,
                 is_reaction=pending.is_reaction,
                 continuation=continuation.parent_continuation,
@@ -16649,6 +16794,7 @@ class Encounter:
                 damage_type=pending.damage_type or attack.damage_type,
                 nonlethal=pending.nonlethal,
                 damage_bonus_dice=pending.damage_bonus_dice,
+                gravity_weapon_bonus=pending.gravity_weapon_bonus,
                 attack_target_off_guard=pending.attack_target_off_guard,
                 is_reaction=pending.is_reaction,
                 continuation=(

@@ -84,6 +84,16 @@ SPELLS: Mapping[str, SpellDefinition] = MappingProxyType(
                 "https://2e.aonprd.com/Spells.aspx?ID=1896",
             ),
             SpellDefinition(
+                "gravity_weapon", "Gravity Weapon", (1,),
+                frozenset({"concentrate", "focus", "manipulate", "primal"}), 0, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1863",
+            ),
+            SpellDefinition(
+                "hymn_of_healing", "Hymn of Healing", (2,),
+                frozenset({"composition", "concentrate", "focus", "healing", "manipulate", "vitality"}), 30, False,
+                "https://2e.aonprd.com/Spells.aspx?ID=1768",
+            ),
+            SpellDefinition(
                 "tempest_surge", "Tempest Surge", (2,),
                 frozenset({"air", "concentrate", "druid", "electricity", "focus", "manipulate", "uncommon"}), 30, False,
                 "https://2e.aonprd.com/Spells.aspx?ID=1860",

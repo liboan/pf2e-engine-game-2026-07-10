@@ -90,6 +90,7 @@ from .alchemy_content import FORMULAS_BY_ID
 from .spells import CONCEALMENT_TARGETED_SPELL_IDS, SPELLS
 from .preparation import has_variable_preparations, prepared_slot_rejection
 from .w5_arms_persistence import W5_ARMS_ACTIVE_EFFECT_KINDS
+from .w5_focus_persistence import W5_FOCUS_ACTIVE_EFFECT_KINDS
 
 
 SAVE_VERSION = 18
@@ -486,6 +487,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 ],
                 "focus_points": creature.focus_points,
                 "focus_capacity": creature.focus_capacity,
+                "gravity_weapon_used_round": creature.gravity_weapon_used_round,
                 "flourish_used_round": creature.flourish_used_round,
                 "composition_cast_at_start": creature.composition_cast_at_start,
                 "composition_cast_turn_actor_id": creature.composition_cast_turn_actor_id,
@@ -1096,6 +1098,9 @@ def _state_from_data(data: Any) -> EncounterState:
             or (focus_capacity > 0 and not definition.focus_spells)
         ):
             raise ValueError(f"saved actor {actor_id!r} has focus capacity outside its reviewed definition")
+        gravity_weapon_used_round = raw.get("gravity_weapon_used_round", 0)
+        if type(gravity_weapon_used_round) is not int or gravity_weapon_used_round < 0:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Gravity Weapon marker")
         flourish_used_round = _required_int(raw, "flourish_used_round")
         composition_cast_at_start = _required_int(raw, "composition_cast_at_start")
         composition_cast_turn_actor_id = raw.get("composition_cast_turn_actor_id")
@@ -1481,6 +1486,7 @@ def _state_from_data(data: Any) -> EncounterState:
             spontaneous_slots=spontaneous_slots,
             focus_points=focus_points,
             focus_capacity=focus_capacity,
+            gravity_weapon_used_round=gravity_weapon_used_round,
             flourish_used_round=flourish_used_round,
             composition_cast_at_start=composition_cast_at_start,
             composition_cast_turn_actor_id=composition_cast_turn_actor_id,
@@ -2261,14 +2267,14 @@ def _state_from_data(data: Any) -> EncounterState:
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
             or type(row[12]) is not int or row[12] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", *W5_ARMS_ACTIVE_EFFECT_KINDS, "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", *W5_ARMS_ACTIVE_EFFECT_KINDS, *W5_FOCUS_ACTIVE_EFFECT_KINDS, "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "extravagant_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "extravagant_parry", *W5_FOCUS_ACTIVE_EFFECT_KINDS, "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
                 and row[6] is not None
             )
             or (
@@ -2312,7 +2318,7 @@ def _state_from_data(data: Any) -> EncounterState:
                 )
             )
             or (
-                row[1] != "alchemy_glue_bomb_lesser"
+                row[1] not in {"alchemy_glue_bomb_lesser", "hymn_of_healing"}
                 and row[12] != 0
             )
             or (
@@ -3656,6 +3662,7 @@ def _pending_to_data(pending) -> dict[str, Any] | None:
         "damage_type": pending.damage_type,
         "nonlethal": pending.nonlethal,
         "damage_bonus_dice": pending.damage_bonus_dice,
+        "gravity_weapon_bonus": pending.gravity_weapon_bonus,
         "attack_actions_cost": pending.attack_actions_cost,
         "attack_count_cost": pending.attack_count_cost,
         "ranged_penalty": pending.ranged_penalty,
@@ -4128,6 +4135,9 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
     concealment_checked = _required_bool(data, "concealment_checked")
     is_reaction = _required_bool(data, "is_reaction")
     damage_bonus_dice = _required_int(data, "damage_bonus_dice")
+    gravity_weapon_bonus = data.get("gravity_weapon_bonus", False)
+    if type(gravity_weapon_bonus) is not bool:
+        raise ValueError("save has invalid pending Gravity Weapon marker")
     attack_actions_cost = _required_int(data, "attack_actions_cost")
     attack_count_cost = _required_int(data, "attack_count_cost")
     damage_type = data.get("damage_type")
@@ -4265,6 +4275,7 @@ def _pending_from_data(data: Any) -> PendingChoice | None:
         damage_type=damage_type,
         nonlethal=nonlethal,
         damage_bonus_dice=damage_bonus_dice,
+        gravity_weapon_bonus=gravity_weapon_bonus,
         attack_actions_cost=attack_actions_cost,
         attack_count_cost=attack_count_cost,
         ranged_penalty=ints["ranged_penalty"],
@@ -4318,6 +4329,7 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "damage_type": continuation.damage_type,
         "nonlethal": continuation.nonlethal,
         "damage_bonus_dice": continuation.damage_bonus_dice,
+        "gravity_weapon_bonus": continuation.gravity_weapon_bonus,
         "attack_actions_cost": continuation.attack_actions_cost,
         "attack_count_cost": continuation.attack_count_cost,
         "attack_penalty": continuation.attack_penalty,
@@ -4347,6 +4359,7 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         ],
         "widen_spell_area_length_ft": continuation.widen_spell_area_length_ft,
         "spell_mode": continuation.spell_mode,
+        "temporary_hp_choice": continuation.temporary_hp_choice,
         "hunter_aim_intent": (
             None if continuation.hunter_aim_intent is None else [
                 continuation.hunter_aim_intent.target_actor_id,
@@ -4427,7 +4440,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has invalid interrupted movement path")
     kind = _required_str(data, "kind")
     optional_strings = {}
-    for key in ("mode", "item_id", "target_id", "attack_id", "damage_type", "movement_kind", "reaction_trigger", "spell_id", "spell_target_id", "spell_target_item_id", "spell_target_wielder_id", "slot_id", "stage", "spell_source_kind", "blood_magic_recipient_id", "light_control", "light_color", "light_attachment_actor_id", "light_replacement_orb_id", "light_orb_id", "spell_mode"):
+    for key in ("mode", "item_id", "target_id", "attack_id", "damage_type", "movement_kind", "reaction_trigger", "spell_id", "spell_target_id", "spell_target_item_id", "spell_target_wielder_id", "slot_id", "stage", "spell_source_kind", "blood_magic_recipient_id", "light_control", "light_color", "light_attachment_actor_id", "light_replacement_orb_id", "light_orb_id", "spell_mode", "temporary_hp_choice"):
         value = data.get(key)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"save has invalid interrupted action {key}")
@@ -4436,6 +4449,9 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         key: _required_int(data, key)
         for key in ("next_step", "damage_bonus_dice", "attack_actions_cost", "attack_count_cost", "attack_penalty", "attack_count", "spell_actions", "ranged_penalty", "guidance_bonus")
     }
+    gravity_weapon_bonus = data.get("gravity_weapon_bonus", False)
+    if type(gravity_weapon_bonus) is not bool:
+        raise ValueError("save has invalid interrupted Gravity Weapon marker")
     overextending_feint_penalty = data.get("overextending_feint_penalty", 0)
     if type(overextending_feint_penalty) is not int or overextending_feint_penalty not in {0, -2}:
         raise ValueError("save has invalid Overextending Feint penalty")
@@ -4710,6 +4726,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         damage_type=optional_strings["damage_type"],
         nonlethal=_required_bool(data, "nonlethal"),
         damage_bonus_dice=integers["damage_bonus_dice"],
+        gravity_weapon_bonus=gravity_weapon_bonus,
         attack_actions_cost=integers["attack_actions_cost"],
         attack_count_cost=integers["attack_count_cost"],
         attack_penalty=integers["attack_penalty"],
@@ -4727,6 +4744,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         slot_id=optional_strings["slot_id"],
         spell_actions=integers["spell_actions"],
         include_self=include_self,
+        temporary_hp_choice=optional_strings["temporary_hp_choice"],
         spell_source_kind=optional_strings["spell_source_kind"],
         sorcerous_potency=sorcerous_potency,
         blood_magic_recipient_id=optional_strings["blood_magic_recipient_id"],
