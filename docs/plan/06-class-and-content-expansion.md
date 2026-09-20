@@ -26,7 +26,15 @@ W3 is accepted and closed. The retained team delivered Widen Spell for Wizard/Dr
 
 Independent reviewers accepted all families and final assembled continuous play, save/resume and terminal interactions. The final integrated gate passed **1,457 tests**; accepted setup/creature counts are **105/83**, staged **24/12**, save version **18**. Same owners repaired reviewed semantics, item lifecycle and immunity without replacement tasks. Exact commits, performance evidence, retained identities and supported limits are in [W3 acceptance](../work-log/archive/content-w3-accepted.md).
 
-The coordinator paused the W3 heartbeat and completed the explicitly authorized W2/W3 publication to `codex/pf2e-content-w2-w3-delivery`; [ACTIVE](../work-log/ACTIVE.md) records publication verification. No force-push, main merge, unrelated overwrite or new PR requirement. No follow-on wave is authorized. The [working model](04-delivery-and-checks.md) preserves broader coherent ownership, proactive simplification, strict acceptance, direct peer routing and end-turn requirements for future authorized work.
+The coordinator paused the W3 heartbeat and completed the explicitly authorized W2/W3 publication to `codex/pf2e-content-w2-w3-delivery`; [ACTIVE](../work-log/ACTIVE.md) records publication verification. No force-push, main merge, unrelated overwrite or new PR requirement. W4 is separately authorized below. The [working model](04-delivery-and-checks.md) preserves broader coherent ownership, proactive simplification, strict acceptance, direct peer routing and end-turn requirements for future authorized work.
+
+## Content W4: broad level-1 feat reuse
+
+W4 is authorized from the published W3 checkpoint. Use the existing Astra/high coordinator and fresh full Luna/high implementation tasks plus fresh full Sol/high reviewers, each in a fresh isolated worktree. Fresh teams per substantial milestone are now the default; retain owners/reviewers throughout the milestone's ordinary repairs. This supersedes historical Terra routing and retained-W1-worker rules.
+
+Prioritize substantially broader new playable class feats, especially level1, grouped across classes by actual shared mechanics; include similarly inexpensive new spells/items. Brief feasibility chooses the actual roster and owners then implement without routine approval. Target materially beyond W3's five distinct feat names and two items; existing configurations do not pad the count. Three substantial coherent lanes cover offense, defense/mobility/skill-linked feats, and caster/support feats with integration. Preserve proportional simplification, source/legal-grant correctness, runtime/terminal/persistence/play evidence, independent group review and separate final assembled review/canonical gate.
+
+Current assignments and scope are in [ACTIVE](../work-log/ACTIVE.md), [working model](04-delivery-and-checks.md) and [startup handoff](07-content-w4-handoff.md). Strongly minimize traffic and coordinator activations. Publish accepted W4 through the established non-force codex/ workflow, preserve accepted history and leave a compact next-team checkpoint. All remaining supported boundaries below still apply.
 
 ## Goal and approved scope
 
