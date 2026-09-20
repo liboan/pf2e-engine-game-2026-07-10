@@ -359,11 +359,12 @@ def _build_raging_thrower() -> BarbarianCharacter:
     dagger = AttackDefinition(
         "dagger", "Dagger", 7, 5,
         frozenset({"attack", "melee", "agile", "finesse", "thrown", "weapon"}),
-        "piercing", (4,), 2, item_id="dagger", attack_attribute="dexterity",
+        "piercing", (4,), 4, item_id="dagger", attack_attribute="strength",
         damage_attribute="strength", range_increment_ft=10, max_range_ft=60,
     )
     thrown = replace(
-        dagger, attack_id="dagger_thrown", name="Dagger (Thrown)", reach_ft=0,
+        dagger, attack_id="dagger_thrown", name="Dagger (Thrown)", modifier=4,
+        attack_attribute="dexterity", reach_ft=0,
         traits=frozenset({"attack", "ranged", "agile", "finesse", "thrown", "weapon"}),
     )
     definition = replace(

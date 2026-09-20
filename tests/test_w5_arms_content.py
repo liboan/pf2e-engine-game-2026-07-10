@@ -39,6 +39,11 @@ def test_raging_thrower_applies_agile_rage_damage_and_lands_selected_dagger(tmp_
     _settle(game, accept_quick_tempered=True)
     actor = game._state.creatures["raging_thrower"]
     assert actor.barbarian_state is not None and actor.barbarian_state.rage is not None
+    definition = get_definition(actor.definition_id)
+    dagger = next(attack for attack in definition.attacks if attack.attack_id == "dagger")
+    thrown = next(attack for attack in definition.attacks if attack.attack_id == "dagger_thrown")
+    assert (dagger.modifier, dagger.damage_modifier, dagger.attack_attribute) == (7, 4, "strength")
+    assert (thrown.modifier, thrown.damage_modifier, thrown.attack_attribute) == (4, 4, "dexterity")
     assert "dagger_thrown" in {strike.attack_id for strike in game.options().strikes}
 
     pending = game.execute(
@@ -52,6 +57,8 @@ def test_raging_thrower_applies_agile_rage_damage_and_lands_selected_dagger(tmp_
     damage_event = next(event for event in result.events if event.damage is not None)
     rage_parts = [part for part in damage_event.damage.components if "Rage" in part.source]
     assert len(rage_parts) == 1 and rage_parts[0].modifier == 1
+    weapon_parts = [part for part in damage_event.damage.components if part.source == "dagger_thrown"]
+    assert len(weapon_parts) == 1 and weapon_parts[0].modifier == 4
     assert "raging_thrower:dagger_1" in game._state.ground_items[game._state.creatures["raging_thrower_guard"].position]
 
 
