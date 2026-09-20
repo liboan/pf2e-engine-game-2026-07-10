@@ -104,6 +104,7 @@ from .l2_reach_content import L2_REACH_DEFINITIONS, L2_REACH_SETUPS
 from .l2_martial_content import build_l2_martial_content
 from .l2_prepared_content import L2_PREPARED_DEFINITIONS, L2_PREPARED_SETUPS
 from .l2_divine_content import build_l2_divine_content
+from .w3_caster_content import W3_CASTER_DEFINITIONS, W3_CASTER_SETUPS
 
 
 # The Witch's L2 class-local sheet is deliberately held in staging until its
@@ -1058,6 +1059,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         **L2_HORIZONTAL_DEFINITIONS,
         RANGER_PRECISION_LEVEL_2.definition_id: RANGER_PRECISION_LEVEL_2,
         **{definition.definition_id: definition for definition in L2_REACH_DEFINITIONS},
+        **{definition.definition_id: definition for definition in W3_CASTER_DEFINITIONS},
         **L2_MARTIAL_DEFINITIONS,
         **L2_DIVINE_DEFINITIONS,
         **{
@@ -1453,6 +1455,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         **L2_HORIZONTAL_SETUPS,
         RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id: RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
         **{setup.setup_id: setup for setup in L2_REACH_SETUPS},
+        **{setup.setup_id: setup for setup in W3_CASTER_SETUPS},
         **L2_MARTIAL_SETUPS,
         **L2_DIVINE_SETUPS,
         **{

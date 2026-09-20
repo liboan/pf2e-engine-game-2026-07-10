@@ -31,9 +31,12 @@ from .model import (
     PreparedSlotState,
     Position,
     ReachSpell,
+    WidenSpell,
 )
+from .spellshape import clear_pending_spellshape, has_pending_spellshape
 from .spells import SPELLS, spell_traits, telekinetic_projectile_object_profile
 from .space import grid_distance_feet, in_bounds
+from .widen_spell import widened_cone_length
 
 
 def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedureResult:
@@ -163,11 +166,15 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     # touch and Heal modes and delegates the actual arithmetic to
     # ``reach_spell.effective_spell_range``.
     reach_spell_ready = context.actor.reach_spell_pending
+    widen_spell_ready = context.actor.widen_spell_pending
     reach_spell_effective_range_ft = context.encounter._effective_reach_spell_range(
         spell.spell_id, actions, reach_ready=reach_spell_ready
     )
     committed_reach_spell_range_ft = (
         reach_spell_effective_range_ft if reach_spell_ready else None
+    )
+    committed_widen_spell_area_length_ft = (
+        widened_cone_length(spell, spell_actions=actions) if widen_spell_ready else None
     )
 
     if sigil:
@@ -606,8 +613,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     # A cast is the only direct successor that can consume Reach Spell.  It
     # consumes the marker even for a no-range spell; only a legal ranged/touch
     # mode receives a durable committed range on its continuation.
-    if reach_spell_ready:
-        context.actor.reach_spell_pending = False
+    if reach_spell_ready or widen_spell_ready:
+        clear_pending_spellshape(context.actor)
     if command.use_arcane_bond:
         context.actor.arcane_bond_recast_until_start = 0
         context.actor.arcane_bond_eligible_slots.discard(permission.selection.resource_id or "")
@@ -645,10 +652,16 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             command.target_ids if force_barrage else
             command.target_ids if electric_arc else
             command.target_ids[1:] if forbidding_ward else
-            context.encounter._breathe_fire_targets(context.state, context.actor, command.area_direction)
+            context.encounter._breathe_fire_targets(
+                context.state,
+                context.actor,
+                command.area_direction,
+                length_ft=committed_widen_spell_area_length_ft or 15,
+            )
             if breathe_fire else ()
         ),
         spell_area_direction=command.area_direction if breathe_fire else None,
+        widen_spell_area_length_ft=committed_widen_spell_area_length_ft,
         spell_mode=command.spell_mode,
     )
     events = [Event(
@@ -704,6 +717,8 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult:
     command = context.command
     if isinstance(command, ReachSpell):
         return _begin_reach_spell(context)
+    if isinstance(command, WidenSpell):
+        return _begin_widen_spell(context)
     from . import wizard
     return wizard.handle_action(context)
 
@@ -720,8 +735,8 @@ def _begin_reach_spell(context: FamilyProcedureContext) -> FamilyProcedureResult
         return FamilyProcedureResult(rejection="A pending choice must be resolved before Reach Spell.")
     if "reach_spell" not in context.definition.abilities or "Reach Spell" not in context.definition.feats:
         return FamilyProcedureResult(rejection=f"{actor.label} has no admitted Reach Spell feat.")
-    if actor.reach_spell_pending:
-        return FamilyProcedureResult(rejection="Reach Spell is already waiting for the next eligible cast.")
+    if has_pending_spellshape(actor):
+        return FamilyProcedureResult(rejection="A spellshape is already waiting for the next eligible cast.")
     if actor.actions_remaining < 1:
         return FamilyProcedureResult(rejection="Reach Spell requires 1 action.")
     context.encounter._require_action_permitted(
@@ -733,6 +748,40 @@ def _begin_reach_spell(context: FamilyProcedureContext) -> FamilyProcedureResult
         "reach_spell_ready", actor.actor_id, None,
         f"{actor.label} shapes their next eligible ranged or touch spell with Reach Spell.",
     ),))
+
+
+def _begin_widen_spell(context: FamilyProcedureContext) -> FamilyProcedureResult:
+    """Spend one action to ready the next qualifying no-duration area cast."""
+    actor = context.actor
+    if context.state.pending_choice is not None:
+        return FamilyProcedureResult(rejection="A pending choice must be resolved before Widen Spell.")
+    if "widen_spell" not in context.definition.abilities or "Widen Spell" not in context.definition.feats:
+        return FamilyProcedureResult(rejection=f"{actor.label} has no admitted Widen Spell feat.")
+    if has_pending_spellshape(actor):
+        return FamilyProcedureResult(rejection="A spellshape is already waiting for the next eligible cast.")
+    if actor.actions_remaining < 1:
+        return FamilyProcedureResult(rejection="Widen Spell requires 1 action.")
+    context.encounter._require_action_permitted(
+        context.state, actor, "widen_spell", frozenset({"manipulate", "spellshape"})
+    )
+    actor.actions_remaining -= 1
+    continuation = ActionContinuation(
+        kind="family_action",
+        actor_id=actor.actor_id,
+        movement_kind="manipulate",
+        must_disrupt_on_critical=True,
+        stage="widen_spell",
+    )
+    # Widen Spell has the manipulate trait. Its ready marker applies only
+    # after the ordinary Reactive Strike / Grabbed interruption boundary.
+    events = [Event(
+        "widen_spell_started", actor.actor_id, None,
+        f"{actor.label} begins shaping their next eligible area spell with Widen Spell.",
+    )]
+    events.extend(context.encounter._advance_continuation(
+        context.state, context.dice, continuation,
+    ))
+    return FamilyProcedureResult(tuple(events))
 
 
 def validate_pending(context: FamilyProcedureContext) -> None:

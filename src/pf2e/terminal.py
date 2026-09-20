@@ -94,6 +94,7 @@ _ACTION_LABELS = {
     "cast": "Cast",
     "lingering_composition": "Lingering Composition",
     "reach_spell": "Reach Spell",
+    "widen_spell": "Widen Spell",
     "sustain_light": "Sustain Light",
     "dismiss_light": "Dismiss Light",
     "dismiss_life_link": "Dismiss Life Link",
@@ -3088,6 +3089,10 @@ def run_terminal(
                 from pf2e.reach_spell_terminal import command as reach_spell_command
 
                 _run_command(game, reach_spell_command(), output_fn)
+            elif action_id == "widen_spell":
+                from pf2e.widen_spell_terminal import command as widen_spell_command
+
+                _run_command(game, widen_spell_command(), output_fn)
             elif action_id == "end_turn":
                 _run_command(game, EndTurn(), output_fn)
             elif action_id == "refocus":

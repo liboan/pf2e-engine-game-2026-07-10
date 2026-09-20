@@ -488,6 +488,7 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
                 "composition_cast_turn_start": creature.composition_cast_turn_start,
                 "lingering_composition_pending": creature.lingering_composition_pending,
                 "reach_spell_pending": creature.reach_spell_pending,
+                "widen_spell_pending": creature.widen_spell_pending,
                 "must_leave_occupied": creature.must_leave_occupied,
                 "temporary_hp": creature.temporary_hp,
                 "temporary_hp_source_id": creature.temporary_hp_source_id,
@@ -1023,6 +1024,9 @@ def _state_from_data(data: Any) -> EncounterState:
         reach_spell_pending = raw.get("reach_spell_pending", False)
         if type(reach_spell_pending) is not bool:
             raise ValueError(f"saved actor {actor_id!r} has invalid Reach Spell state")
+        widen_spell_pending = raw.get("widen_spell_pending", False)
+        if type(widen_spell_pending) is not bool:
+            raise ValueError(f"saved actor {actor_id!r} has invalid Widen Spell state")
         must_leave_occupied = _required_bool(raw, "must_leave_occupied")
         temporary_hp = _required_int(raw, "temporary_hp")
         temporary_hp_source_id = raw.get("temporary_hp_source_id")
@@ -1393,6 +1397,7 @@ def _state_from_data(data: Any) -> EncounterState:
             composition_cast_turn_start=composition_cast_turn_start,
             lingering_composition_pending=lingering_composition_pending,
             reach_spell_pending=reach_spell_pending,
+            widen_spell_pending=widen_spell_pending,
             must_leave_occupied=must_leave_occupied,
             temporary_hp=temporary_hp,
             temporary_hp_source_id=temporary_hp_source_id,
@@ -1906,21 +1911,36 @@ def _state_from_data(data: Any) -> EncounterState:
     ):
         raise ValueError("save has invalid Lingering Composition spellshape state")
     for creature in creatures.values():
-        if not creature.reach_spell_pending:
-            continue
-        definition = get_definition(creature.definition_id)
-        if (
-            "reach_spell" not in definition.abilities
-            or "Reach Spell" not in definition.feats
-            or not in_progress
-            or not initiative_finalized
-            or active_actor_id != creature.actor_id
-            # Reach Spell is a one-action activity. Its saved marker must
-            # prove that action has already been committed, but can remain
-            # at zero actions until the current turn ends.
-            or not 0 <= creature.actions_remaining <= 2
-        ):
-            raise ValueError("save has invalid Reach Spell spellshape state")
+        if creature.reach_spell_pending and creature.widen_spell_pending:
+            raise ValueError("save has overlapping spellshape markers")
+        if creature.reach_spell_pending:
+            definition = get_definition(creature.definition_id)
+            if (
+                "reach_spell" not in definition.abilities
+                or "Reach Spell" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                # Reach Spell is a one-action activity. Its saved marker must
+                # prove that action has already been committed, but can remain
+                # at zero actions until the current turn ends.
+                or not 0 <= creature.actions_remaining <= 2
+            ):
+                raise ValueError("save has invalid Reach Spell spellshape state")
+        if creature.widen_spell_pending:
+            definition = get_definition(creature.definition_id)
+            if (
+                "widen_spell" not in definition.abilities
+                or "Widen Spell" not in definition.feats
+                or not in_progress
+                or not initiative_finalized
+                or active_actor_id != creature.actor_id
+                # Widen Spell is a one-action activity. Its saved marker must
+                # prove that action has already been committed, but can remain
+                # at zero actions until the current turn ends.
+                or not 0 <= creature.actions_remaining <= 2
+            ):
+                raise ValueError("save has invalid Widen Spell spellshape state")
     weakness_raw = data.get("investigator_weakness_bonuses", [])
     if not isinstance(weakness_raw, list):
         raise ValueError("save has invalid Investigator Known Weaknesses bonuses")
@@ -4088,6 +4108,7 @@ def _continuation_to_data(continuation: ActionContinuation | None) -> dict[str, 
         "spell_area_direction": None if continuation.spell_area_direction is None else [
             continuation.spell_area_direction.x, continuation.spell_area_direction.y
         ],
+        "widen_spell_area_length_ft": continuation.widen_spell_area_length_ft,
         "spell_mode": continuation.spell_mode,
         "hunter_aim_intent": (
             None if continuation.hunter_aim_intent is None else [
@@ -4234,6 +4255,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
     include_self = data.get("include_self")
     spell_save_degree = data.get("spell_save_degree")
     reach_spell_effective_range_ft = data.get("reach_spell_effective_range_ft")
+    widen_spell_area_length_ft = data.get("widen_spell_area_length_ft")
     if include_self is not None and type(include_self) is not bool:
         raise ValueError("save has invalid interrupted spell self-inclusion")
     if spell_save_degree is not None and (type(spell_save_degree) is not int or not 0 <= spell_save_degree <= 3):
@@ -4244,6 +4266,14 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         raise ValueError("save has invalid committed Reach Spell range")
     if reach_spell_effective_range_ft is not None and kind != "cast":
         raise ValueError("save has Reach Spell range on a non-cast continuation")
+    if widen_spell_area_length_ft is not None and (
+        type(widen_spell_area_length_ft) is not int or widen_spell_area_length_ft <= 0
+    ):
+        raise ValueError("save has invalid committed Widen Spell area")
+    if widen_spell_area_length_ft is not None and (
+        kind != "cast" or optional_strings["spell_id"] != "breathe_fire"
+    ):
+        raise ValueError("save has Widen Spell area on an invalid continuation")
     if (
         integers["next_step"] < 0
         or integers["damage_bonus_dice"] < 0
@@ -4463,6 +4493,7 @@ def _continuation_from_data(data: Any) -> ActionContinuation | None:
         spell_save_degree=spell_save_degree,
         target_ids=tuple(target_ids),
         spell_area_direction=spell_area_direction,
+        widen_spell_area_length_ft=widen_spell_area_length_ft,
         spell_mode=optional_strings["spell_mode"],
         hunter_aim_intent=hunter_aim_intent,
         reach_spell_effective_range_ft=reach_spell_effective_range_ft,

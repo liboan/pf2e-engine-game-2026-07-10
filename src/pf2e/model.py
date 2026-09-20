@@ -418,6 +418,13 @@ class ReachSpell(FamilyCommand):
 
 
 @dataclass(frozen=True)
+class WidenSpell(FamilyCommand):
+    """Ready the selected caster's next eligible burst, cone, or line spell."""
+
+    family_id = "casting"
+
+
+@dataclass(frozen=True)
 class LayOnHands(FamilyCommand):
     """One-action living-target devotion healing."""
 
@@ -742,6 +749,9 @@ class CreatureState:
     # Reach Spell is a distinct one-spell spellshape marker.  The cast keeps
     # its committed range separately on ActionContinuation.
     reach_spell_pending: bool = False
+    # Widen Spell uses the same immediate-cast lifecycle while carrying its
+    # committed area length only on the cast continuation.
+    widen_spell_pending: bool = False
     must_leave_occupied: bool = False
     temporary_hp: int = 0
     temporary_hp_source_id: str | None = None
@@ -959,6 +969,9 @@ class ActionContinuation:
     spell_save_degree: int | None = None
     target_ids: tuple[str, ...] = ()
     spell_area_direction: Position | None = None
+    # A positive length is the immutable widened Breathe Fire cone committed
+    # by Widen Spell; it is never recomputed from a transient marker.
+    widen_spell_area_length_ft: int | None = None
     spell_mode: str | None = None
     # Hunter's Aim is a Ranger-procedure-only attack intent.  It remains
     # typed through reaction and saved-decision continuations.

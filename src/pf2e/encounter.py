@@ -62,6 +62,7 @@ from .model import (
     Cast,
     LingeringComposition,
     ReachSpell,
+    WidenSpell,
     Sustain,
     Dismiss,
     Command,
@@ -118,6 +119,7 @@ from .model import (
     is_combat_capable,
 )
 from .persistence import DiceSource, DiceSourceError, load_encounter, save_encounter
+from .spellshape import clear_pending_spellshape, has_pending_spellshape
 from .space import (
     flanking_geometry,
     grid_distance_feet,
@@ -450,7 +452,7 @@ class Encounter:
             caster is None
             or continuation.kind != "cast"
             or continuation.spell_id not in SPELLS
-            or caster.reach_spell_pending
+            or has_pending_spellshape(caster)
         ):
             raise ValueError("save has invalid committed Reach Spell range")
         definition = get_definition(caster.definition_id)
@@ -468,6 +470,35 @@ class Encounter:
             or committed != expected
         ):
             raise ValueError("save has forged or unsupported committed Reach Spell range")
+
+    def _validate_committed_widen_spell_area(
+        self, state: EncounterState, continuation: ActionContinuation
+    ) -> None:
+        """Reject a saved cast whose widened cone was not actually committed."""
+        committed = continuation.widen_spell_area_length_ft
+        if committed is None:
+            return
+        caster = state.creatures.get(continuation.actor_id)
+        if (
+            caster is None
+            or continuation.kind != "cast"
+            or continuation.spell_id not in SPELLS
+            or has_pending_spellshape(caster)
+        ):
+            raise ValueError("save has invalid committed Widen Spell area")
+        definition = get_definition(caster.definition_id)
+        from .widen_spell import widened_cone_length
+
+        expected = widened_cone_length(
+            SPELLS[continuation.spell_id], spell_actions=continuation.spell_actions,
+        )
+        if (
+            "widen_spell" not in definition.abilities
+            or "Widen Spell" not in definition.feats
+            or expected is None
+            or committed != expected
+        ):
+            raise ValueError("save has forged or unsupported committed Widen Spell area")
 
     def _validate_tumble_through_continuation(
         self, state: EncounterState, continuation: ActionContinuation
@@ -632,6 +663,7 @@ class Encounter:
             seen.add(id(current))
             self._validate_quick_jump_continuation(state, current)
             self._validate_committed_reach_spell_range(state, current)
+            self._validate_committed_widen_spell_area(state, current)
             self._validate_tumble_through_continuation(state, current)
             self._validate_sudden_charge_continuation(state, current)
             self._validate_no_escape_follow(state, current)
@@ -1104,7 +1136,7 @@ class Encounter:
             ) and not (
                 continuation.kind == "family_action"
                 and continuation.reaction_trigger == "manipulate"
-                and continuation.stage == "battle_medicine_check"
+                and continuation.stage in {"battle_medicine_check", "widen_spell"}
             ):
                 raise ValueError("save has a pending reaction for an inconsistent continuation")
             if continuation.kind == "cast" and continuation.spell_id == "runic_weapon":
@@ -1732,9 +1764,16 @@ class Encounter:
                 or pending.owner_actor_id != actor.actor_id
                 or actor.health_mode is not HealthMode.PC or actor.hero_points < 1
                 or continuation.actor_id != actor.actor_id
-                or continuation.kind not in {"cast", "interact", "ranged_strike"}
+                or continuation.kind not in {"cast", "interact", "ranged_strike", "family_action"}
                 or continuation.movement_kind not in {"manipulate", "ranged"}
-                or continuation.stage != "grabbed_manipulate_flat_check"
+                or (
+                    continuation.kind != "family_action"
+                    and continuation.stage != "grabbed_manipulate_flat_check"
+                )
+                or (
+                    continuation.kind == "family_action"
+                    and continuation.stage != "widen_spell_grabbed_flat_check"
+                )
                 or check.modifier != 0 or check.dc != 5
                 or check.attack_id is not None or check.map_penalty != 0
                 or check.modifier_breakdown
@@ -1788,6 +1827,7 @@ class Encounter:
                 "stand": "stand",
                 "ranged_strike": "ranged",
                 "cast": "manipulate",
+                "family_action": "manipulate",
             }
             justice_retaliation = (
                 continuation is not None
@@ -1797,6 +1837,10 @@ class Encounter:
             if continuation is None or (
                 not justice_retaliation
                 and expected_reaction_parent.get(continuation.kind) != continuation.reaction_trigger
+            ) or (
+                continuation is not None
+                and continuation.kind == "family_action"
+                and continuation.stage != "widen_spell"
             ):
                 raise ValueError("save has a pending reaction Strike without its parent action")
             if continuation.must_disrupt_on_critical != (continuation.reaction_trigger == "manipulate"):
@@ -4057,11 +4101,22 @@ class Encounter:
             can_act
             and actions >= 1
             and not actor.must_leave_occupied
-            and not actor.reach_spell_pending
+            and not has_pending_spellshape(actor)
             and "reach_spell" in definition.abilities
             and "Reach Spell" in definition.feats
             and self._action_permitted(
                 state, actor, "reach_spell", frozenset({"concentrate", "spellshape"})
+            )
+        )
+        can_widen_spell = (
+            can_act
+            and actions >= 1
+            and not actor.must_leave_occupied
+            and not has_pending_spellshape(actor)
+            and "widen_spell" in definition.abilities
+            and "Widen Spell" in definition.feats
+            and self._action_permitted(
+                state, actor, "widen_spell", frozenset({"manipulate", "spellshape"})
             )
         )
         from .martial_defense import crane_stance_is_active, dueling_parry_requirements_met
@@ -4248,6 +4303,7 @@ class Encounter:
             can_hunted_shot = False
             can_hunters_aim = False
             can_reach_spell = False
+            can_widen_spell = False
             can_dueling_parry = False
             can_crane_stance = False
             can_dismiss_crane_stance = False
@@ -4293,6 +4349,7 @@ class Encounter:
                 ("hunted_shot", can_hunted_shot),
                 ("hunter_aim", can_hunters_aim),
                 ("reach_spell", can_reach_spell),
+                ("widen_spell", can_widen_spell),
                 ("interact", bool(interact_options)),
                 ("release", can_release),
                 ("stand", can_stand),
@@ -4555,8 +4612,12 @@ class Encounter:
             return self._is_living_target(target)
         return not target.dead and not target.defeated
 
-    def _breathe_fire_targets(self, state, caster, direction: Position) -> tuple[str, ...]:
-        cells = cone_cells(Footprint(caster.position), direction, 15)
+    def _breathe_fire_targets(
+        self, state, caster, direction: Position, *, length_ft: int = 15
+    ) -> tuple[str, ...]:
+        if type(length_ft) is not int or length_ft not in {15, 20}:
+            raise ValueError("Breathe Fire has an unsupported cone length")
+        cells = cone_cells(Footprint(caster.position), direction, length_ft)
         return tuple(
             target.actor_id
             for target in state.creatures.values()
@@ -4632,11 +4693,11 @@ class Encounter:
             raise _Rejected("There is no active actor.")
         actor = state.creatures[actor_id]
         self._refresh_barbarian_state(state, actor)
-        # Reach Spell is spent by the next eligible Cast; every other action
-        # (including a free action or End Turn) invalidates its pending marker.
+        # A spellshape is spent by the next Cast; every other action (including
+        # a free action or End Turn) invalidates its pending marker.
         # Rejected commands remain atomic because this is the draft state.
-        if actor.reach_spell_pending and not isinstance(command, (Cast, ReachSpell)):
-            actor.reach_spell_pending = False
+        if has_pending_spellshape(actor) and not isinstance(command, (Cast, ReachSpell, WidenSpell)):
+            clear_pending_spellshape(actor)
         lingering = actor.lingering_composition_pending
         fleeing = self._active_fleeing_effect(state, actor)
         if fleeing is not None and not isinstance(command, Flee):
@@ -10351,7 +10412,7 @@ class Encounter:
         if performance_modifier is None:
             raise _Rejected("Counter Performance requires an admitted Performance modifier.")
         bard.reaction_available = False
-        bard.reach_spell_pending = False
+        clear_pending_spellshape(bard)
         bard.focus_points -= 1
         bard.composition_cast_turn_actor_id, bard.composition_cast_turn_start = active_actor_id, active_start
         state.active_effects[:] = [effect for effect in state.active_effects if not (
@@ -11489,6 +11550,23 @@ class Encounter:
             except ValueError as error:
                 raise _Rejected(str(error)) from error
             return events
+        if (
+            continuation.kind == "family_action"
+            and continuation.stage in {"widen_spell", "widen_spell_grabbed_checked"}
+        ):
+            definition = get_definition(actor.definition_id)
+            if (
+                "widen_spell" not in definition.abilities
+                or "Widen Spell" not in definition.feats
+                or has_pending_spellshape(actor)
+            ):
+                raise _Rejected("Widen Spell is no longer available.")
+            actor.widen_spell_pending = True
+            events.append(Event(
+                "widen_spell_ready", actor.actor_id, None,
+                f"{actor.label} shapes their next eligible area spell with Widen Spell.",
+            ))
+            return self._complete_action(state, actor, events, dice=dice)
         if continuation.kind == "stand":
             events.append(Event("stand", actor.actor_id, None, f"{actor.label} is no longer prone."))
             return self._complete_action(state, actor, events, dice=dice)
@@ -11556,7 +11634,13 @@ class Encounter:
         state: EncounterState, actor: CreatureState, continuation: ActionContinuation
     ) -> bool:
         return (
-            continuation.kind in {"cast", "interact", "ranged_strike"}
+            (
+                continuation.kind in {"cast", "interact", "ranged_strike"}
+                or (
+                    continuation.kind == "family_action"
+                    and continuation.stage in {"widen_spell", "widen_spell_grabbed_flat_check"}
+                )
+            )
             and continuation.movement_kind in {"manipulate", "ranged"}
             and continuation.stage != "grabbed_manipulate_checked"
             and any(
@@ -11570,7 +11654,11 @@ class Encounter:
     ) -> list[Event]:
         """Resolve Grabbed after reactions and before the manipulate effect."""
         check = resolve_check(dice.draw(20), 0, 5)
-        continuation.stage = "grabbed_manipulate_flat_check"
+        continuation.stage = (
+            "widen_spell_grabbed_flat_check"
+            if continuation.kind == "family_action" and continuation.stage == "widen_spell"
+            else "grabbed_manipulate_flat_check"
+        )
         events = [Event(
             "grabbed_manipulate_flat_check",
             actor.actor_id,
@@ -11605,7 +11693,14 @@ class Encounter:
     def _finish_grabbed_manipulate_check(
         self, state, dice, actor, continuation: ActionContinuation, check
     ) -> list[Event]:
-        continuation.stage = "grabbed_manipulate_checked"
+        continuation.stage = (
+            "widen_spell_grabbed_checked"
+            if (
+                continuation.kind == "family_action"
+                and continuation.stage == "widen_spell_grabbed_flat_check"
+            )
+            else "grabbed_manipulate_checked"
+        )
         if check.degree < DegreeOfSuccess.SUCCESS:
             return [Event(
                 "action_lost",
@@ -11967,7 +12062,7 @@ class Encounter:
 
     def _perform_reaction(self, state, dice, reactor, target, continuation, attack, damage_type, nonlethal, item_id=None):
         reactor.reaction_available = False
-        reactor.reach_spell_pending = False
+        clear_pending_spellshape(reactor)
         feint_off_guard_applied = self._commit_feint_strike(state, reactor, target, attack)
         target_off_guard = self._attacker_off_guard(
             state, reactor, target, attack, feint_off_guard=feint_off_guard_applied
@@ -12711,7 +12806,7 @@ class Encounter:
             )
         ]
         actor.finisher_used_this_turn = False
-        actor.reach_spell_pending = False
+        clear_pending_spellshape(actor)
         if (
             actor.panache
             and actor.panache_expires_at_end is not None
@@ -14489,7 +14584,7 @@ class Encounter:
             ):
                 raise _Rejected("The raised shield or reaction is no longer available.")
             if command.option_id == "block":
-                target.reach_spell_pending = False
+                clear_pending_spellshape(target)
                 record = (
                     self._apply_magic_shield_block(state, target, damage)
                     if magic else self._apply_shield_block(state, target, resolution, damage, shield)
@@ -14527,7 +14622,7 @@ class Encounter:
             continuation.nimble_dodge_decided = True
             if command.option_id == "use":
                 target.reaction_available = False
-                target.reach_spell_pending = False
+                clear_pending_spellshape(target)
                 continuation.nimble_dodge_used = True
                 event = Event(
                     "nimble_dodge_used",
@@ -14687,7 +14782,7 @@ class Encounter:
                     if not reactor.reaction_available or reactor.unconscious or reactor.dead:
                         raise _Rejected("Retributive Strike is no longer available.")
                     reactor.reaction_available = False
-                    reactor.reach_spell_pending = False
+                    clear_pending_spellshape(reactor)
                     resolution = replace(resolution, justice_protected=True)
                     choice_event = Event(
                         "retributive_strike_protection",
