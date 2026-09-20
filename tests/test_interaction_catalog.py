@@ -49,6 +49,8 @@ from pf2e.content import (
     L2_DIVINE_SETUPS,
     BOMBER_ALCHEMIST_LEVEL_2,
     BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
+    BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP,
+    BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_SETUP,
     get_setup,
@@ -133,6 +135,8 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
             BOMBER_ALCHEMIST_LEVEL_2_SETUP.setup_id,
             BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP.setup_id,
             BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP.setup_id,
+            BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP.setup_id,
+            BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP.setup_id,
         }
     )
 
