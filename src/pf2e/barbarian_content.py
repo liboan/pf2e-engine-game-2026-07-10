@@ -32,6 +32,7 @@ from .barbarian import (
     GIANT_WEAPONS_BY_ID,
     INSTINCT_IDS,
     MOMENT_OF_CLARITY,
+    RAGING_THROWER,
     RAGING_INTIMIDATION,
     SPIRIT_INSTINCT,
     SUPERSTITION_INSTINCT,
@@ -57,6 +58,9 @@ class LoadoutItem:
     market_price_gp: int
     paid_price_gp: int
     granted_by: str | None = None
+    # The older curated loadouts are gp-granular. W5 may record a small
+    # sub-gp purchase without changing their positional constructor contract.
+    paid_price_sp: int = 0
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,13 @@ class BarbarianLoadout:
     @property
     def remaining_money_gp(self) -> int:
         return self.starting_money_gp - sum(item.paid_price_gp for item in self.items)
+
+    @property
+    def remaining_money_sp(self) -> int:
+        """Return the exact remainder in silver pieces for W5 ledgers."""
+        return self.starting_money_gp * 10 - sum(
+            item.paid_price_gp * 10 + item.paid_price_sp for item in self.items
+        )
 
     @property
     def total_bulk(self) -> int:
@@ -344,6 +355,60 @@ def build_barbarian(
     return BarbarianCharacter(definition, state, loadout)
 
 
+def _build_raging_thrower() -> BarbarianCharacter:
+    """The selected Fury alternate with three tracked mundane daggers."""
+    from dataclasses import replace
+    from .items import ItemInstance
+
+    base = build_barbarian(
+        instinct_id=FURY_INSTINCT,
+        class_feat_id=RAGING_THROWER,
+        bonus_feat_id=MOMENT_OF_CLARITY,
+        actor_definition_id="barbarian_fury_raging_thrower",
+    )
+    dagger = AttackDefinition(
+        "dagger", "Dagger", 7, 5,
+        frozenset({"attack", "melee", "agile", "finesse", "thrown", "weapon", "versatile-s"}),
+        "piercing", (4,), 4, item_id="dagger", attack_attribute="strength",
+        damage_attribute="strength", range_increment_ft=10, max_range_ft=60,
+    )
+    thrown = replace(
+        dagger, attack_id="dagger_thrown", name="Dagger (Thrown)", modifier=4,
+        attack_attribute="dexterity", reach_ft=0,
+        traits=frozenset({"attack", "ranged", "agile", "finesse", "thrown", "weapon", "versatile-s"}),
+    )
+    definition = replace(
+        base.definition,
+        name="Level 1 Fury Barbarian (Raging Thrower)",
+        attacks=(dagger, thrown, base.definition.attacks[1]),
+        held_items=("dagger_1",), stowed_items=("dagger_2", "dagger_3"),
+        item_instances=(
+            ItemInstance("dagger_1", "dagger"),
+            ItemInstance("dagger_2", "dagger"),
+            ItemInstance("dagger_3", "dagger"),
+        ),
+        carried_item_bulk=(("dagger_1", 0), ("dagger_2", 0), ("dagger_3", 0), ("breastplate", 2)),
+        sheet_notes=tuple(
+            note for note in base.definition.sheet_notes
+            if not note.startswith("Starting money remaining after breastplate and weapon:")
+        ) + (
+            "Raging Thrower applies Rage damage to authorized thrown weapon Strikes; the three daggers retain stable instance identities.",
+            "Moment of Clarity remains the distinct Fury bonus feat.",
+            "Starting gear is a breastplate and three tracked mundane daggers at 2 sp each; the exact remainder is 6 gp 4 sp. The legacy gp-only loadout total is a coarse 7 gp and must not be read as free-dagger accounting.",
+        ),
+    )
+    loadout = replace(
+        base.loadout,
+        items=(
+            LoadoutItem("breastplate", bulk=2, market_price_gp=8, paid_price_gp=8),
+            LoadoutItem("dagger_1", bulk=0, market_price_gp=0, paid_price_gp=0, paid_price_sp=2),
+            LoadoutItem("dagger_2", bulk=0, market_price_gp=0, paid_price_gp=0, paid_price_sp=2),
+            LoadoutItem("dagger_3", bulk=0, market_price_gp=0, paid_price_gp=0, paid_price_sp=2),
+        ),
+    )
+    return BarbarianCharacter(definition, base.barbarian_state, loadout)
+
+
 DRAGON_BARBARIAN_CHARACTERS: Mapping[str, BarbarianCharacter] = MappingProxyType(
     {
         dragon.dragon_id: build_barbarian(
@@ -396,6 +461,7 @@ BARBARIAN_SAMPLE_CHARACTERS: Mapping[str, BarbarianCharacter] = MappingProxyType
         "giant": build_barbarian(instinct_id=GIANT_INSTINCT, giant_weapon_id="giant_large_longsword"),
         "spirit": build_barbarian(instinct_id=SPIRIT_INSTINCT),
         "superstition": build_barbarian(instinct_id=SUPERSTITION_INSTINCT),
+        "raging_thrower": _build_raging_thrower(),
     }
 )
 
@@ -406,12 +472,14 @@ BARBARIAN_DEFINITIONS: tuple[CreatureDefinition, ...] = (
     BARBARIAN_SLICE1_CHARACTER.definition,
     *DRAGON_BARBARIAN_DEFINITIONS,
     *ANIMAL_BARBARIAN_DEFINITIONS,
+    BARBARIAN_SAMPLE_CHARACTERS["raging_thrower"].definition,
 )
 BARBARIAN_INITIAL_STATES: Mapping[str, BarbarianState] = MappingProxyType(
     {
         BARBARIAN_SLICE1_CHARACTER.definition.definition_id: BARBARIAN_SLICE1_CHARACTER.barbarian_state,
         **DRAGON_BARBARIAN_INITIAL_STATES,
         **ANIMAL_BARBARIAN_INITIAL_STATES,
+        BARBARIAN_SAMPLE_CHARACTERS["raging_thrower"].definition.definition_id: BARBARIAN_SAMPLE_CHARACTERS["raging_thrower"].barbarian_state,
     }
 )
 BARBARIAN_LOADOUTS: Mapping[str, BarbarianLoadout] = MappingProxyType(
@@ -421,6 +489,7 @@ BARBARIAN_LOADOUTS: Mapping[str, BarbarianLoadout] = MappingProxyType(
             *BARBARIAN_SAMPLE_CHARACTERS.values(),
             *DRAGON_BARBARIAN_CHARACTERS.values(),
             *ANIMAL_BARBARIAN_CHARACTERS.values(),
+            BARBARIAN_SAMPLE_CHARACTERS["raging_thrower"],
         )
     }
 )

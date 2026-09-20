@@ -49,8 +49,9 @@ SPIRIT_INSTINCT = "spirit"
 SUPERSTITION_INSTINCT = "superstition"
 RAGING_INTIMIDATION = "raging_intimidation"
 MOMENT_OF_CLARITY = "moment_of_clarity"
+RAGING_THROWER = "raging_thrower"
 NO_ESCAPE = "no_escape"
-BARBARIAN_FEAT_IDS = frozenset({RAGING_INTIMIDATION, MOMENT_OF_CLARITY})
+BARBARIAN_FEAT_IDS = frozenset({RAGING_INTIMIDATION, MOMENT_OF_CLARITY, RAGING_THROWER})
 KEEP_EXISTING_TEMP_HP = "keep_existing"
 GAIN_NEW_RAGE_TEMP_HP = "gain_new"
 RAGE_TEMP_HP_CHOICES = frozenset({KEEP_EXISTING_TEMP_HP, GAIN_NEW_RAGE_TEMP_HP})
@@ -658,9 +659,14 @@ def rage_damage_bonus(
     target_actor_id: str | None = None,
     now_seconds: int | None = None,
 ) -> int:
-    """Return the instinct's flat Rage bonus for one actual melee Strike."""
+    """Return the instinct's flat Rage bonus for one actual Strike."""
     rage = state.rage
-    if rage is None or not is_melee:
+    raging_thrower = (
+        not is_melee
+        and RAGING_THROWER in {state.class_feat_id, state.bonus_feat_id}
+        and {"ranged", "thrown", "weapon"} <= attack_traits
+    )
+    if rage is None or (not is_melee and not raging_thrower):
         return 0
     agile = "agile" in attack_traits
     instinct = state.instinct_id

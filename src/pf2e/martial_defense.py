@@ -41,6 +41,15 @@ class DuelingParry(FamilyCommand):
 
 
 @dataclass(frozen=True)
+class ExtravagantParry(FamilyCommand):
+    """Use one action to raise Braggart's flexible weapon guard."""
+
+    family_id = "martial"
+    attack_id: str | None = None
+    item_id: str | None = None
+
+
+@dataclass(frozen=True)
 class CraneStance(FamilyCommand):
     """Enter the selected Monk's Crane Stance."""
 
@@ -104,18 +113,89 @@ def dueling_parry_is_active(state, actor, definition) -> bool:
     )
 
 
+def extravagant_parry_requirements_met(state, actor, definition) -> tuple[bool, int]:
+    """Return (legal, guard bonus) from current held weapon facts."""
+    item_instances = getattr(state, "item_instances", state)
+    if "Extravagant Parry" not in definition.feats:
+        return False, 0
+    one_handed = tuple(
+        attack for attack in definition.attacks
+        if attack.hands_required == 1
+        and "weapon" in attack.traits
+        and ("melee" in attack.traits or "parry" in attack.traits)
+        and any(
+            held_id == attack.item_id
+            or (
+                item_instances.get(held_id) is not None
+                and item_instances[held_id].definition_id == attack.item_id
+            )
+            for held_id in actor.held_items
+        )
+    )
+    if not one_handed:
+        return False, 0
+    # A literal empty hand is the authored +2 case. A parry weapon is also +2.
+    has_free_hand = len(actor.held_items) < 2
+    has_parry_weapon = any("parry" in attack.traits for attack in one_handed)
+    return True, 2 if has_free_hand or has_parry_weapon else 1
+
+
+def extravagant_parry_is_active(state, actor, definition) -> bool:
+    legal, _ = extravagant_parry_requirements_met(state, actor, definition)
+    return legal and any(
+        effect.kind == "extravagant_parry"
+        and effect.source_actor_id == actor.actor_id
+        and effect.target_actor_id == actor.actor_id
+        and effect.expires_at_source_start > state.actor_start_counts.get(actor.actor_id, 0)
+        for effect in state.active_effects
+    )
+
+
+def end_extravagant_parries_with_broken_requirements(state) -> None:
+    """End Parry immediately when its held-weapon requirement is lost."""
+    from .content import get_definition
+
+    retained = []
+    for effect in state.active_effects:
+        if effect.kind != "extravagant_parry":
+            retained.append(effect)
+            continue
+        actor = state.creatures.get(effect.source_actor_id)
+        if actor is not None and extravagant_parry_requirements_met(
+            state, actor, get_definition(actor.definition_id)
+        )[0]:
+            retained.append(effect)
+    state.active_effects[:] = retained
+
+
+def apply_extravagant_parry_miss(state, *, attacker, target, attack, check) -> str | None:
+    """Apply Parry's temporary panache rider after a resolved enemy miss."""
+    if attacker.team == target.team:
+        return None
+    from .content import get_definition
+    legal, _ = extravagant_parry_requirements_met(
+        state, target, get_definition(target.definition_id)
+    )
+    if not legal or not extravagant_parry_is_active(state, target, get_definition(target.definition_id)):
+        return None
+    from .swashbuckler import apply_temporary_panache
+
+    return apply_temporary_panache(
+        target, current_end_count=state.actor_end_counts.get(target.actor_id, 0)
+    )
+
+
 def crane_stance_is_active(state, actor_id: str) -> bool:
     stance = state.martial_stances.get(actor_id)
     return stance is not None and stance.stance_id == "crane_stance"
 
 
 def crane_stance_attack_permitted(state, actor_id: str, attack_id: str) -> bool:
-    """Keep Crane Wing unavailable outside the stance and exclusive inside it."""
+    """Backward-compatible entry point for the finite stance policy."""
 
-    active = crane_stance_is_active(state, actor_id)
-    if attack_id == "crane_wing":
-        return active
-    return not active
+    from .monk_stances import stance_attack_permitted
+
+    return stance_attack_permitted(state, actor_id, attack_id)
 
 
 def crane_stance_leap_bonus(state, actor_id: str) -> int:
@@ -182,6 +262,13 @@ def ac_modifiers(state, actor, definition) -> tuple[Modifier, ...]:
         modifiers.append(Modifier(2, "circumstance", "Dueling Parry"))
     if crane_stance_is_active(state, actor.actor_id):
         modifiers.append(Modifier(1, "circumstance", "Crane Stance"))
+    if extravagant_parry_is_active(state, actor, definition):
+        effect = next(
+            effect for effect in state.active_effects
+            if effect.kind == "extravagant_parry"
+            and effect.source_actor_id == actor.actor_id
+        )
+        modifiers.append(Modifier(effect.value, "circumstance", "Extravagant Parry"))
     return tuple(modifiers)
 
 
@@ -216,6 +303,35 @@ def handle_action(context: FamilyProcedureContext) -> FamilyProcedureResult | No
         return FamilyProcedureResult(events=(Event(
             "dueling_parry", context.actor.actor_id, context.actor.actor_id,
             f"{context.actor.label} uses Dueling Parry; +2 circumstance AC until their next turn starts while holding only that weapon.",
+        ),))
+    if isinstance(command, ExtravagantParry):
+        if "Extravagant Parry" not in context.definition.feats:
+            return FamilyProcedureResult(rejection="Extravagant Parry is not admitted for this creature.")
+        context.require_action_permitted("extravagant_parry", frozenset())
+        legal, bonus = extravagant_parry_requirements_met(
+            context.state, context.actor, context.definition
+        )
+        if not legal:
+            return FamilyProcedureResult(
+                rejection="Extravagant Parry requires one or more held one-handed weapons."
+            )
+        context.encounter._commit_family_action(context, actions=1)
+        context.state.active_effects[:] = [
+            effect for effect in context.state.active_effects
+            if not (
+                effect.kind == "extravagant_parry"
+                and effect.source_actor_id == context.actor.actor_id
+            )
+        ]
+        start = context.state.actor_start_counts.get(context.actor.actor_id, 0)
+        context.state.active_effects.append(ActiveSpellEffect(
+            f"extravagant_parry:{context.actor.actor_id}:{start}",
+            "extravagant_parry", context.actor.actor_id, context.actor.actor_id,
+            bonus, start + 1,
+        ))
+        return FamilyProcedureResult(events=(Event(
+            "extravagant_parry", context.actor.actor_id, context.actor.actor_id,
+            f"{context.actor.label} uses Extravagant Parry; +{bonus} circumstance AC until their next turn starts.",
         ),))
     if isinstance(command, CraneStance):
         if "crane_stance" not in context.definition.abilities:

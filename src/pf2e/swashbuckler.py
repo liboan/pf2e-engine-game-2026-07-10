@@ -130,17 +130,27 @@ def apply_bravado_result(
         actor.panache_expires_at_end = None
         return "panache_refreshed" if was_panache else "panache_gained"
     if degree is DegreeOfSuccess.FAILURE:
-        if not actor.panache:
-            actor.panache = True
-            actor.panache_expires_at_end = current_end_count + 2
-            return "panache_gained_temporarily"
-        if actor.panache_expires_at_end is not None:
-            actor.panache_expires_at_end = max(
-                actor.panache_expires_at_end,
-                current_end_count + 2,
+        if not actor.panache or actor.panache_expires_at_end is not None:
+            return apply_temporary_panache(
+                actor, current_end_count=current_end_count
             )
-            return "panache_extended"
     return None
+
+
+def apply_temporary_panache(
+    actor: CreatureState, *, current_end_count: int
+) -> str:
+    """Grant the finite through-next-turn panache used by defensive feats."""
+    if not actor.panache:
+        actor.panache = True
+        actor.panache_expires_at_end = current_end_count + 2
+        return "panache_gained_temporarily"
+    if actor.panache_expires_at_end is not None:
+        actor.panache_expires_at_end = max(
+            actor.panache_expires_at_end, current_end_count + 2
+        )
+        return "panache_extended"
+    return "panache_preserved"
 
 
 def precise_strike_damage_term(

@@ -85,6 +85,8 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
     detect_magic = spell.spell_id == "detect_magic"
     sigil = spell.spell_id == "sigil"
     weapon_surge = spell.spell_id == "weapon_surge"
+    gravity_weapon = spell.spell_id == "gravity_weapon"
+    hymn_of_healing = spell.spell_id == "hymn_of_healing"
     energy_ablation_type = context.actor.energy_ablation_pending
     energy_ablation_qualifies = spell.spell_id in _ENERGY_ABLATION_DAMAGE_SPELLS
     if energy_ablation_type is not None:
@@ -94,6 +96,27 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         return FamilyProcedureResult(
             rejection="Counter Performance is available only as its saved reaction to an auditory or visual effect."
         )
+    if gravity_weapon or hymn_of_healing:
+        if (gravity_weapon and "gravity_weapon" not in context.definition.abilities) or (
+            hymn_of_healing and "hymn_of_healing" not in context.definition.abilities
+        ):
+            return FamilyProcedureResult(rejection="This Focus spell is not admitted for the selected source.")
+        if gravity_weapon and (command.actions not in {None, 1} or command.target_id is not None or command.include_self is not None):
+            return FamilyProcedureResult(rejection="Gravity Weapon requires its one-action self-only form.")
+        if hymn_of_healing and (command.actions not in {None, 2} or command.target_id is None):
+            return FamilyProcedureResult(rejection="Hymn of Healing requires its two-action targeted form.")
+        if hymn_of_healing and command.temporary_hp_choice not in {None, "keep_existing", "gain_new"}:
+            return FamilyProcedureResult(rejection="Hymn of Healing temporary HP choice must be keep_existing or gain_new.")
+        if hymn_of_healing and command.target_id is not None:
+            target = context.state.creatures.get(command.target_id)
+            if (
+                target is not None
+                and target.temporary_hp > 0
+                and command.temporary_hp_choice is None
+            ):
+                return FamilyProcedureResult(rejection="Hymn of Healing requires an explicit temporary HP choice before resolving.")
+    elif command.temporary_hp_choice is not None:
+        return FamilyProcedureResult(rejection="Only Hymn of Healing accepts a temporary HP choice.")
     if spell.spell_id == "ignition":
         if command.spell_mode not in {"ranged", "melee"}:
             return FamilyProcedureResult(rejection="Ignition requires an explicit ranged or melee spell-attack form.")
@@ -576,7 +599,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             or grid_distance_feet(context.actor.position, item_positions[0]) > (reach_spell_effective_range_ft or 30)
         ):
             return FamilyProcedureResult(rejection="Telekinetic Projectile requires a supported loose unattended object of at most 1 Bulk within 30 feet.")
-    if not electric_arc and not gale_blast and not shield and not breathe_fire and not force_barrage and not forbidding_ward and not detect_magic and not sigil and not runic_weapon and not light and not courageous_anthem and not weapon_surge and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
+    if not electric_arc and not gale_blast and not shield and not breathe_fire and not force_barrage and not forbidding_ward and not detect_magic and not sigil and not runic_weapon and not light and not courageous_anthem and not weapon_surge and not gravity_weapon and spell.spell_id != "angelic_halo" and (spell.spell_id != "heal" or actions != 3):
         if (
             command.target_id is not None
             and spell.spell_id in {"divine_lance", "void_warp"}
@@ -711,6 +734,7 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
         spell_area_direction=command.area_direction if breathe_fire else None,
         widen_spell_area_length_ft=committed_widen_spell_area_length_ft,
         spell_mode=command.spell_mode,
+        temporary_hp_choice=command.temporary_hp_choice if hymn_of_healing else None,
     )
     events = [Event(
         "cast_started",

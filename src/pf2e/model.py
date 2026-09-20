@@ -219,6 +219,10 @@ class Stride:
 @dataclass(frozen=True)
 class Step:
     destination: Position
+    # Tiger Stance may spend the Step's two-square horizontal allowance.  The
+    # legacy destination-only constructor remains the ordinary one-square
+    # Step, while a supplied path makes every traversed square explicit.
+    path: tuple[Position, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -304,6 +308,9 @@ class Cast:
     # Finite printed attack-profile choice for cantrips such as Ignition and
     # Gouging Claw. ``None`` is only valid for spells without such a choice.
     spell_mode: str | None = None
+    # Hymn of Healing may replace an existing temporary-HP pool.  Keep the
+    # choice explicit and appended so legacy Cast construction remains valid.
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -327,6 +334,7 @@ class Sustain:
     orb_id: str
     point: Position | None = None
     attachment_actor_id: str | None = None
+    temporary_hp_choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -711,6 +719,7 @@ class EffectView:
     value: int
     expires_at_source_start: int
     expires_at_world_time: int | None = None
+    effect_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -749,6 +758,8 @@ class CreatureState:
     spontaneous_slots: list["SpontaneousSlotState"] = field(default_factory=list)
     focus_points: int = 0
     focus_capacity: int = 0
+    gravity_weapon_used_round: int = 0
+    gravity_weapon_bonus_attack_id: str | None = None
     flourish_used_round: int = 0
     # Composition's once-per-turn limit belongs to the source turn, not to an
     # active effect. The marker is persisted because an extended composition
@@ -913,6 +924,7 @@ class PendingChoice:
     damage_type: str | None = None
     nonlethal: bool = False
     damage_bonus_dice: int = 0
+    gravity_weapon_bonus: bool = False
     attack_actions_cost: int = 1
     attack_count_cost: int = 1
     ranged_penalty: int = 0
@@ -965,6 +977,7 @@ class ActionContinuation:
     damage_type: str | None = None
     nonlethal: bool = False
     damage_bonus_dice: int = 0
+    gravity_weapon_bonus: bool = False
     attack_actions_cost: int = 1
     attack_count_cost: int = 1
     attack_penalty: int = 0
@@ -994,6 +1007,7 @@ class ActionContinuation:
     # by Widen Spell; it is never recomputed from a transient marker.
     widen_spell_area_length_ft: int | None = None
     spell_mode: str | None = None
+    temporary_hp_choice: str | None = None
     # Hunter's Aim is a Ranger-procedure-only attack intent.  It remains
     # typed through reaction and saved-decision continuations.
     hunter_aim_intent: "HunterAimIntent | None" = None

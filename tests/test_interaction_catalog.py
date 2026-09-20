@@ -55,6 +55,9 @@ from pf2e.content import (
     BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
     BOMBER_ALCHEMIST_LEVEL_2_SETUP,
     W4_OFFENSIVE_SETUPS,
+    W5_ARMS_SETUPS,
+    W5_FOCUS_SETUPS,
+    W5_STANCE_SETUPS,
     get_setup,
 )
 from pf2e.investigator_content import INVESTIGATOR_SETUPS
@@ -148,6 +151,7 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
             BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_NEXT_SETUP.setup_id,
         }
     )
+    w5_ids = set(W5_ARMS_SETUPS) | set(W5_STANCE_SETUPS) | set(W5_FOCUS_SETUPS)
 
     assert len(S2_INTERACTION_SETUPS) == 8
     assert len(S3_INTERACTION_SETUPS) == 8
@@ -165,6 +169,7 @@ def test_catalog_keeps_existing_entries_and_admits_each_completed_setup_family()
             | l2_horizontal_ids | l2_ranger_ids | l2_reach_ids
             | w3_caster_ids | w4_caster_ids | w4_offensive_ids | l2_expanded_ids | remaining_l2_ids | content_w1_spell_ids
             | {setup.setup_id for setup in W4_DEFENSIVE_SETUPS}
+            | w5_ids
         ) == SETUPS.keys()
 
     for setup in (*S2_INTERACTION_SETUPS, *S3_INTERACTION_SETUPS):

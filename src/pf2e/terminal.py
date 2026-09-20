@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from pf2e.model import Cackle, EnergyAblation, Position
+from pf2e.w5_focus_terminal import W5_FOCUS_ACTION_LABELS
 
 if TYPE_CHECKING:
     from pf2e.encounter import Encounter
@@ -61,9 +62,14 @@ _ACTION_LABELS = {
     "brutish_shove": "Brutish Shove",
     "sudden_charge": "Sudden Charge",
     "dueling_parry": "Dueling Parry",
+    "extravagant_parry": "Extravagant Parry",
     "crane_stance": "Crane Stance",
     "dismiss_crane_stance": "Dismiss Crane Stance",
     "point_blank_stance": "Point Blank Stance",
+    "tiger_stance": "Tiger Stance",
+    "wolf_stance": "Wolf Stance",
+    "dismiss_tiger_stance": "Dismiss Tiger Stance",
+    "dismiss_wolf_stance": "Dismiss Wolf Stance",
     "flurry_of_blows": "Flurry of Blows",
     "hunt_prey": "Hunt Prey",
     "hunted_shot": "Hunted Shot",
@@ -115,6 +121,7 @@ _ACTION_LABELS = {
     "daily_prepare": "Daily Preparation",
     "spell_substitution": "Spell Substitution (10 minutes)",
     "interrupt_spell_substitution": "Interrupt Spell Substitution",
+    **W5_FOCUS_ACTION_LABELS,
 }
 
 PROTOTYPE_NOTICE = (
@@ -393,6 +400,14 @@ def render_actor_lines(actors: Sequence[Mapping[str, object]]) -> str:
 
 def render_support_summary(setup_id: str = "s1_duel") -> str:
     """Explain the admitted boundary for a known setup."""
+    if setup_id in {
+        "w5_raging_thrower_vs_guard",
+        "w5_extravagant_parry_vs_guard",
+        "w5_strong_arm_vs_guard",
+    }:
+        from .w5_arms_terminal import W5_ARMS_SCOPE_NOTICE
+
+        return W5_ARMS_SCOPE_NOTICE
     if setup_id.startswith("s3_"):
         from pf2e.content import S3_READY
 
@@ -1650,7 +1665,7 @@ def _choose_cast_inputs(
             return None
         spell_mode = ("visible", "invisible")[mode_index]
 
-    if spell.spell_id in {"shield", "sure_strike", "angelic_halo", "courageous_anthem", "detect_magic"}:
+    if spell.spell_id in {"shield", "sure_strike", "angelic_halo", "courageous_anthem", "detect_magic", "gravity_weapon"}:
         return spell.spell_id, None, target_mode.actions, slot_id, None
 
     target_id: str | None = None
@@ -1677,6 +1692,23 @@ def _choose_cast_inputs(
             return None
     if spell_mode is not None:
         return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {"spell_mode": spell_mode}
+    if spell.spell_id == "hymn_of_healing" and target_id is not None:
+        recipient = next(
+            (actor for actor in inspection.actors if actor.actor_id == target_id),
+            None,
+        )
+        if recipient is not None and getattr(recipient, "temporary_hp", 0) > 0:
+            choice_index = _choose_index(
+                "Hymn temporary HP:",
+                ("Keep existing temporary HP", "Gain 2 temporary HP"),
+                input_fn,
+                output_fn,
+            )
+            if choice_index is None:
+                return None
+            return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {
+                "temporary_hp_choice": ("keep_existing", "gain_new")[choice_index],
+            }
     if use_arcane_bond:
         return spell.spell_id, target_id, target_mode.actions, slot_id, include_self, {"use_arcane_bond": True}
     return spell.spell_id, target_id, target_mode.actions, slot_id, include_self
@@ -1743,14 +1775,48 @@ def _choose_light_sustain_inputs(
     output_fn: Callable[[str], object],
 ) -> tuple[str, Position | None, str | None] | None:
     """Collect one orb and optional Sustain point/carrier intent."""
-    orb_id = _choose_light_orb(
-        inspection,
-        input_fn,
-        output_fn,
-        prompt="Light orb to Sustain:",
-    )
-    if orb_id is None:
+    light_choices = _light_orb_choices(inspection, getattr(inspection, "turn_actor_id", None))
+    choices = list(light_choices)
+    hymn_target_id = None
+    for actor in getattr(inspection, "actors", ()):
+        for effect in getattr(actor, "effects", ()):
+            if (
+                getattr(effect, "kind", None) == "hymn_of_healing"
+                and getattr(effect, "source_actor_id", None) == getattr(inspection, "turn_actor_id", None)
+                and getattr(effect, "effect_id", None)
+            ):
+                choices.append((effect.effect_id, f"{effect.effect_id} (Hymn of Healing)"))
+                hymn_target_id = effect.target_actor_id
+    if not choices:
+        output_fn("The engine did not provide an active Light orb or Hymn of Healing owned by this actor.")
         return None
+    sustain_prompt = (
+        "Light or composition to Sustain:"
+        if any("Hymn of Healing" in label for _id, label in choices)
+        else "Light orb to Sustain:"
+    )
+    index = _choose_index(sustain_prompt, [label for _id, label in choices], input_fn, output_fn)
+    if index is None:
+        return None
+    orb_id = choices[index][0]
+    if any(item_id == orb_id for item_id, _label in choices if item_id == orb_id and "Hymn of Healing" in _label):
+        target = next((actor for actor in getattr(inspection, "actors", ()) if actor.actor_id == hymn_target_id), None)
+        choice = None
+        if (
+            target is not None
+            and getattr(target, "temporary_hp", 0) > 0
+            and getattr(target, "temporary_hp_source_id", None) != orb_id
+        ):
+            choice_index = _choose_index(
+                "Hymn temporary HP:",
+                ("Keep existing temporary HP", "Gain 2 temporary HP"),
+                input_fn,
+                output_fn,
+            )
+            if choice_index is None:
+                return None
+            choice = ("keep_existing", "gain_new")[choice_index]
+        return orb_id, None, None, choice
     raw_point = _read_line(
         "Sustain point (press Enter to keep current point or detach carrier):",
         input_fn,
@@ -1789,7 +1855,7 @@ def _choose_light_sustain_inputs(
                 return None
             if carrier_index > 0:
                 attachment_actor_id = carriers[carrier_index - 1].actor_id
-    return orb_id, point, attachment_actor_id
+    return orb_id, point, attachment_actor_id, None
 
 
 def _choose_light_inputs(
@@ -1970,7 +2036,8 @@ def run_terminal(
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
     from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
     from pf2e.w4_offensive import DoubleSlice, ExactingStrike, TwinFeint, TwinTakedown
-    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, PointBlankStance
+    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, ExtravagantParry, PointBlankStance
+    from pf2e.monk_stances import TigerStance, WolfStance, DismissTigerStance, DismissWolfStance
 
     if input_fn is None:
         input_fn = input
@@ -2216,17 +2283,38 @@ def run_terminal(
                 if destinations:
                     output_fn(f"Step destinations from engine: {destinations}")
                 try:
-                    raw_destination = _read_line(
-                        "Step destination:",
-                        input_fn,
-                        output_fn,
-                    )
-                    x, y = parse_coordinate(
-                        raw_destination,
-                        width=inspection.map_width,
-                        height=inspection.map_height,
-                    )
-                    _run_command(game, Step(destination=Position(x=x, y=y)), output_fn)
+                    from pf2e.monk_stances import tiger_stance_is_active
+                    actor = game._state.creatures.get(engine_options.actor_id or "")
+                    if actor is not None and tiger_stance_is_active(game._state, actor.actor_id):
+                        raw_path = _read_line(
+                            "Tiger Step path (one or two squares, for example B2 C2):",
+                            input_fn,
+                            output_fn,
+                        )
+                        points = parse_path(
+                            raw_path,
+                            width=inspection.map_width,
+                            height=inspection.map_height,
+                        )
+                        if not points:
+                            raise ValueError("Tiger Step needs at least one destination square.")
+                        _run_command(
+                            game,
+                            Step(destination=Position(*points[-1]), path=tuple(Position(*point) for point in points)),
+                            output_fn,
+                        )
+                    else:
+                        raw_destination = _read_line(
+                            "Step destination:",
+                            input_fn,
+                            output_fn,
+                        )
+                        x, y = parse_coordinate(
+                            raw_destination,
+                            width=inspection.map_width,
+                            height=inspection.map_height,
+                        )
+                        _run_command(game, Step(destination=Position(x=x, y=y)), output_fn)
                 except ValueError as exc:
                     output_fn(str(exc))
             elif action_id == "strike":
@@ -2776,12 +2864,22 @@ def run_terminal(
                 )
                 if index is not None:
                     _run_command(game, DuelingParry(choices[index].attack_id), output_fn)
+            elif action_id == "extravagant_parry":
+                _run_command(game, ExtravagantParry(), output_fn)
             elif action_id == "crane_stance":
                 _run_command(game, CraneStance(), output_fn)
             elif action_id == "dismiss_crane_stance":
                 _run_command(game, DismissCraneStance(), output_fn)
             elif action_id == "point_blank_stance":
                 _run_command(game, PointBlankStance(), output_fn)
+            elif action_id == "tiger_stance":
+                _run_command(game, TigerStance(), output_fn)
+            elif action_id == "wolf_stance":
+                _run_command(game, WolfStance(), output_fn)
+            elif action_id == "dismiss_tiger_stance":
+                _run_command(game, DismissTigerStance(), output_fn)
+            elif action_id == "dismiss_wolf_stance":
+                _run_command(game, DismissWolfStance(), output_fn)
             elif action_id == "flurry_of_blows":
                 strike_inputs = _choose_strike_inputs(
                     tuple(
@@ -3064,13 +3162,14 @@ def run_terminal(
                     output_fn,
                 )
                 if sustain_inputs is not None:
-                    orb_id, point, attachment_actor_id = sustain_inputs
+                    orb_id, point, attachment_actor_id, temporary_hp_choice = sustain_inputs
                     _run_command(
                         game,
                         Sustain(
                             orb_id=orb_id,
                             point=point,
                             attachment_actor_id=attachment_actor_id,
+                            temporary_hp_choice=temporary_hp_choice,
                         ),
                         output_fn,
                     )
@@ -3119,6 +3218,7 @@ def run_terminal(
                     area_direction = None
                     use_arcane_bond = False
                     spell_mode = None
+                    temporary_hp_choice = None
                     if len(cast_inputs) == 10:
                         (
                             spell_id,
@@ -3166,6 +3266,8 @@ def run_terminal(
                         elif isinstance(special_input, dict) and special_input.get("spell_mode") in {"ranged", "melee", "piercing", "slashing", "visible", "invisible"}:
                             spell_mode = special_input["spell_mode"]
                             item_id = special_input.get("item_id")
+                        elif isinstance(special_input, dict) and "temporary_hp_choice" in special_input:
+                            temporary_hp_choice = special_input["temporary_hp_choice"]
                         elif special_input == {"use_arcane_bond": True}:
                             use_arcane_bond = True
                         else:
@@ -3189,6 +3291,7 @@ def run_terminal(
                             area_direction=area_direction,
                             use_arcane_bond=use_arcane_bond,
                             spell_mode=spell_mode,
+                            temporary_hp_choice=temporary_hp_choice,
                         ),
                         output_fn,
                     )
