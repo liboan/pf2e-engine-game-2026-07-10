@@ -33,14 +33,14 @@ EXTRAVAGANT_PARRY_SWASHBUCKLER = replace(
 def _strong_arm_attacks() -> tuple[AttackDefinition, ...]:
     dagger = AttackDefinition(
         "dagger", "Dagger", 8, 5,
-        frozenset({"attack", "melee", "agile", "finesse", "thrown", "weapon"}),
+        frozenset({"attack", "melee", "agile", "finesse", "thrown", "weapon", "versatile-s"}),
         "piercing", (4,), 4, item_id="dagger", attack_attribute="dexterity",
         damage_attribute="dexterity", range_increment_ft=10, max_range_ft=60,
     )
     thrown = replace(
         dagger, attack_id="dagger_thrown", name="Dagger (Thrown)", reach_ft=0,
         damage_modifier=0, damage_attribute="strength",
-        traits=frozenset({"attack", "ranged", "agile", "finesse", "thrown", "weapon"}),
+        traits=frozenset({"attack", "ranged", "agile", "finesse", "thrown", "weapon", "versatile-s"}),
     )
     return dagger, thrown, THIEF_ROGUE_LEVEL_2.attacks[1]
 

@@ -78,16 +78,19 @@ def test_strong_arm_profile_is_shared_by_menu_and_maximum_range() -> None:
     melee = next(item for item in get_definition(actor.definition_id).attacks if item.attack_id == "dagger")
     assert (melee.damage_modifier, melee.damage_attribute) == (4, "dexterity")
     assert (attack.damage_modifier, attack.damage_attribute) == (0, "strength")
-    assert "strong_arm_guard" in game.options().strikes[1].targets
+    thrown_option = next(option for option in game.options().strikes if option.attack_id == "dagger_thrown")
+    assert "strong_arm_guard" in thrown_option.targets
+    assert "slashing" in thrown_option.damage_types
 
     actual = Encounter.start(get_setup("w5_strong_arm_vs_guard"), rolls=(20, 1, 20, 4))
     _settle(actual)
-    result = actual.execute(Strike("strong_arm_guard", "dagger_thrown", item_id="dagger"))
+    result = actual.execute(Strike("strong_arm_guard", "dagger_thrown", item_id="dagger", damage_type="slashing"))
     assert result.status is ResultStatus.PAUSED
     result = _choose(actual, "keep")
     damage_event = next(event for event in result.events if event.damage is not None)
     assert damage_event.damage.total == 8
     assert damage_event.damage.components[0].modifier == 0
+    assert damage_event.damage.components[0].damage_type == "slashing"
 
 
 def test_extravagant_parry_has_saved_guard_resolved_miss_panache_and_expiry(tmp_path: Path) -> None:

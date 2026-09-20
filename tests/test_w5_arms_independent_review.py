@@ -59,6 +59,7 @@ def test_raging_thrower_public_grant_and_authorized_damage() -> None:
     assert [item.item_id for item in loadout.items] == ["breastplate", "dagger_1", "dagger_2", "dagger_3"]
     assert loadout.remaining_money_sp == 64
     melee, thrown, _fist = definition.attacks
+    assert "versatile-s" in melee.traits and "versatile-s" in thrown.traits
     assert (melee.modifier, melee.damage_modifier, melee.attack_attribute) == (7, 4, "strength")
     assert (thrown.modifier, thrown.damage_modifier, thrown.attack_attribute) == (4, 4, "dexterity")
 
@@ -75,6 +76,7 @@ def test_strong_arm_exact_range_boundary_pending_save_and_bounded_menu(
 ) -> None:
     definition = get_definition("rogue_thief_warrior_level_2_strong_arm")
     melee, ranged, _fist = definition.attacks
+    assert "versatile-s" in melee.traits and "versatile-s" in ranged.traits
     assert (melee.damage_modifier, melee.damage_attribute) == (4, "dexterity")
     assert (ranged.damage_modifier, ranged.damage_attribute) == (0, "strength")
     base = get_setup("w5_strong_arm_vs_guard")
@@ -262,6 +264,8 @@ def test_numbered_terminal_throws_new_family_daggers(setup_id: str, target: str)
             return number("Dagger (Thrown)")
         if prompt == "Target number:":
             return number(target)
+        if prompt == "Damage type:":
+            return number("Slashing")
         if prompt == "Damage intent:":
             return number("Use attack default")
         if prompt == "Item number:":
@@ -274,3 +278,4 @@ def test_numbered_terminal_throws_new_family_daggers(setup_id: str, target: str)
     ) == 0
     rendered = "\n".join(transcript)
     assert "Dagger (Thrown)" in rendered and "lands at" in rendered
+    assert "slashing" in rendered.lower()
