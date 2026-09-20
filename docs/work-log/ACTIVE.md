@@ -1,6 +1,6 @@
 # Content W5 recovery
 
-Status: **W4 fully accepted and published; W5 plan adopted; fresh implementation/review team dispatch is in progress.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
+Status: **W4 fully accepted and published; W5 plan adopted; Arms implementation is active, while six remaining task creations are blocked by an app config/read error.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
 
 Read [working model](../plan/04-delivery-and-checks.md) and [accepted-W4 handoff](../plan/08-content-w5-handoff.md). W4 accepted code/tests `1f4d09315a86f6fc9d71e51eef607e83eb68967c`, evidence child `ed8e86fe4d02b4e4e3bace40918d3fc3f9b86c8d`. Accepted W2 `a58424b0f9e0e515e302c149500624580c925780` and W3 `832d44b6816cd42d2c9cc9d3cfc2753d906774d1` verified ancestors. Coordinator merge preserves exact accepted src/tests/tools.
 
@@ -14,7 +14,17 @@ Planner **PF2e Content W5 — Planning**, `01a0bef4-dfe3-7903-bb8c-a41606cc4770`
 
 Adopted [bounded plan](w5-planning.md): eight genuinely new feats across seven classes—Tiger Stance, Wolf Stance, Raging Thrower, Extravagant Parry, Initiate Warden, Harming Hands, Hymn of Healing (seven L1), plus explicitly L2 Strong Arm. New spells Gravity Weapon and Hymn of Healing; no new items required. No credit for existing configurations/incidental unplayed grants. Dragon Stance/Acute Vision deferred. Planner reports no substantial unresolved P1; fresh Sol reviewers independently verify all assumptions.
 
-Dispatch three fresh Luna/high owners A Monk stances, B Arms and parry/integration, C Focus and font; three fresh Sol/high group reviewers plus a fourth fresh Sol/high final assembled reviewer. All new full tasks and isolated worktrees from published accepted W4 plus adopted plan/guidance; no W4 conversations/forks. Exact identities/checkouts will be recorded after creation.
+Dispatch three fresh Luna/high owners A Monk stances, B Arms and parry/integration, C Focus and font; three fresh Sol/high group reviewers plus a fourth fresh Sol/high final assembled reviewer. All new full tasks and isolated worktrees from published accepted W4 plus adopted plan/guidance; no W4 conversations/forks. One task created; six calls failed before creating tasks, confirmed by read-only task metadata.
+
+| Exact title / role | Task ID | Model / effort | Fresh checkout / baseline | Next action |
+|---|---|---|---|---|
+| PF2e Content W5 — Arms integration | `01a0beff-6744-78c1-8f9a-25863d30b3b0` | Luna high (`gpt-5.6-luna`) | `/Users/andrewlee/.codex/worktrees/d6c4/pf2e-engine-game-2026-07-10`; initial HEAD verified `5cc757833ddac041992f78e5bb518c85df936196` | Implement B family and shared Strike contract; preserve ready work until fresh reviewer exists. |
+
+Requested/observed model/effort match. Initial compact cursor `1aea962b-a6c3-4cf4-b215-19b279a90e37:1`; observed active. Arms owner received the concrete missing-peer dependency once and can continue independent implementation. It must not self-accept.
+
+Pending fresh full tasks (none created): Luna/high **PF2e Content W5 — Monk stances**, **PF2e Content W5 — Focus and font**; Sol/high **PF2e Content W5 — Monk review**, **PF2e Content W5 — Arms review**, **PF2e Content W5 — Focus review**, **PF2e Content W5 — Assembly review**. Preserve these roles/models/title prefix, baseline and plan; do not replace the existing Arms task or reuse W4 conversations.
+
+Creation blocker: app tool returns `failed to resolve feature override precedence: No such file or directory (os error 2)`. One isolated retry after verifying metadata failed identically. App log confirms `config/read` failure before task creation; no missing path is identified. Official troubleshooting supplied no specific repair for this error. No app settings, session metadata or feature flags were altered. Recover task-creation capability before dispatching remaining peers; avoid repeated identical retries/status pings. Once creation succeeds, record exact IDs/checkouts, send each task one concrete peer-map assignment and continue normal routing. Existing heartbeat remains the sole fallback; no new schedule.
 
 B owns the shared Strike notification contract and single save-version decision, integrates accepted B→A→C families, and runs final canonical gate after separate assembled acceptance. A owns stance/Step/Trip/persistent helpers; C owns composition/sustain/typed-status helpers. Narrow shared call sites only; B integrates semantic overlap. Planner note supplies exact verified symbols, analogous tests, source decisions and review cases. Every assignment reads it plus the accepted-W4 handoff. No replacement tasks through ordinary repairs.
 
