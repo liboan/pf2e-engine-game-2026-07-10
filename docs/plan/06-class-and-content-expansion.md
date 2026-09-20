@@ -30,13 +30,9 @@ The coordinator paused the W3 heartbeat and completed the explicitly authorized 
 
 ## Content W4: broad level-1 feat reuse
 
-W4 is authorized from the published W3 checkpoint. Use the existing Astra/high coordinator and fresh full Luna/high implementation tasks plus fresh full Sol/high reviewers, each in a fresh isolated worktree. Fresh teams per substantial milestone are now the default; retain owners/reviewers throughout the milestone's ordinary repairs. This supersedes historical Terra routing and retained-W1-worker rules.
+W4 is fully accepted: eleven genuinely new feats across offense, defense and caster/support. Exacting Strike, Double Slice, Twin Takedown, Twin Feint; Reactive Shield, Point Blank Stance, Overextending Feint, You’re Next; Energy Ablation, Domain Initiate, Cackle. Existing Widen earns no new-name credit. Dangerous Sorcery and the illegal Divine Breathe Fire alternate are excluded. Independent repaired assembly and final canonical gate passed1,496 tests; accepted117/94, staged24/12, save18. [Acceptance](../work-log/archive/content-w4-accepted.md) and [fresh-team handoff](08-content-w5-handoff.md) preserve evidence and limits. Published head and W5 dispatch state live in ACTIVE.
 
-Prioritize substantially broader new playable class feats, especially level1, grouped across classes by actual shared mechanics; include similarly inexpensive new spells/items. Brief feasibility chooses the actual roster and owners then implement without routine approval. Target materially beyond W3's five distinct feat names and two items; existing configurations do not pad the count. Three substantial coherent lanes cover offense, defense/mobility/skill-linked feats, and caster/support feats with integration. Preserve proportional simplification, source/legal-grant correctness, runtime/terminal/persistence/play evidence, independent group review and separate final assembled review/canonical gate.
-
-Current assignments and scope are in [ACTIVE](../work-log/ACTIVE.md), [working model](04-delivery-and-checks.md) and [startup handoff](07-content-w4-handoff.md). Strongly minimize traffic and coordinator activations. Publish accepted W4 through the established non-force codex/ workflow, preserve accepted history and leave a compact next-team checkpoint. All remaining supported boundaries below still apply.
-
-## Content W5: authorized after W4 closure
+## Content W5: authorized fresh planning and delivery
 
 The user authorizes W5 after W4 full independent assembled acceptance, final validation and publication. Retain W4 owners through ordinary repairs. W5 uses the same Astra/high coordinator but entirely new full Luna/high implementers and Sol/high reviewers in new isolated worktrees based on accepted W4; do not carry or fork W4 conversations. Prefix new tasks `PF2e Content W5 — `.
 
