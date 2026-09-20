@@ -1161,6 +1161,49 @@ class Encounter:
                 )
             ):
                 raise ValueError("save has an unavailable or inconsistent Reactive Shield choice")
+            check = pending.check
+            if check is None:
+                raise ValueError("save has a Reactive Shield choice without its committed hit check")
+            if (
+                check.attack_id != attack.attack_id
+                or check.attack_count != pending.attack_count
+                or check.map_penalty != pending.attack_penalty
+                or check.traits != tuple(sorted(attack.traits))
+                or pending.attack_penalty != continuation.attack_penalty
+                or pending.attack_count != continuation.attack_count
+            ):
+                raise ValueError("save has an inconsistent Reactive Shield attack context")
+            expected_modifiers = _strike_modifier_breakdown_full(
+                attack,
+                pending.attack_penalty,
+                pending.nonlethal,
+                attacker.prone and not attacker.unconscious,
+                ranged_penalty=pending.ranged_penalty,
+                guidance_bonus=pending.guidance_bonus,
+                enfeebled=self._enfeebled_value(state, attacker.actor_id),
+                lethal_penalty_exempt=self._powerful_fist_lethal_penalty_exempt(
+                    attacker, attack, pending.nonlethal
+                ),
+            )
+            item_modifier = self._attack_item_potency_modifier(
+                state, attacker, attack, item_id=pending.item_id
+            )
+            if item_modifier is not None:
+                expected_modifiers = (*expected_modifiers, item_modifier)
+            expected_modifiers = (
+                *expected_modifiers,
+                *self._strike_condition_modifiers(state, attacker, attack),
+                *self._mutagen_modifiers(state, attacker, "attack", attack_traits=attack.traits),
+            )
+            if check.modifier_breakdown != expected_modifiers or check.modifier != combine_modifiers(expected_modifiers):
+                raise ValueError("save has forged Reactive Shield attack modifiers")
+            actual_continuation = continuation.parent_continuation
+            if check.dc != self._attack_dc(
+                state, attacker, target, attack,
+                target_off_guard=pending.attack_target_off_guard,
+                nimble_dodge=(actual_continuation.nimble_dodge_used if actual_continuation is not None else False),
+            ):
+                raise ValueError("save has forged Reactive Shield target AC")
             return
         if pending.kind == "concealment_hero_reroll":
             self._validate_concealment_pending(state, pending)
@@ -6662,8 +6705,8 @@ class Encounter:
 
         if (
             check.degree in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS}
-            and continuation is None
             and not is_reaction
+            and not (continuation is not None and continuation.reactive_shield_decided)
             and "melee" in attack.traits
             and "ranged" not in attack.traits
             and self._reactive_shield_available(state, actor, target)
@@ -6678,6 +6721,7 @@ class Encounter:
                 investigator_strategic_strike=investigator_strategic_strike,
                 investigator_use_intelligence=investigator_use_intelligence,
                 bomber_only_primary_splash=bomber_only_primary_splash,
+                parent_continuation=continuation,
             )
             events.append(Event(
                 "reactive_shield_choice",
@@ -8816,8 +8860,10 @@ class Encounter:
         self, state, attacker, target, attack, check, *, damage_type,
         nonlethal, damage_bonus_dice, attack_target_off_guard, item_id,
         investigator_strategic_strike, investigator_use_intelligence,
-        bomber_only_primary_splash,
+        bomber_only_primary_splash, parent_continuation,
     ) -> None:
+        if parent_continuation is not None:
+            parent_continuation.reactive_shield_decided = True
         continuation = ActionContinuation(
             kind="reactive_shield",
             actor_id=attacker.actor_id,
@@ -8825,6 +8871,8 @@ class Encounter:
             attack_id=attack.attack_id,
             attack_penalty=check.map_penalty,
             attack_count=check.attack_count or 1,
+            reactive_shield_decided=True,
+            parent_continuation=parent_continuation,
         )
         self._set_pending(
             state,
@@ -15710,7 +15758,7 @@ class Encounter:
                 damage_bonus_dice=pending.damage_bonus_dice,
                 attack_target_off_guard=pending.attack_target_off_guard,
                 is_reaction=pending.is_reaction,
-                continuation=None,
+                continuation=continuation.parent_continuation,
                 item_id=pending.item_id,
                 bomber_only_primary_splash=pending.damage_context == "bomber_only_primary",
             ))
