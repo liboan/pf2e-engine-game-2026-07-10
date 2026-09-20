@@ -14,16 +14,16 @@ All five substantive W3 dispatches carried exact baseline, working-model path, s
 
 Cwd entries expand to `/Users/andrewlee/.codex/worktrees/<directory>/pf2e-engine-game-2026-07-10`. Baseline interpreter remains `/Library/Frameworks/Python.framework/Versions/3.11/bin/python3`3.11.1, pytest8.4.2, `PYTHONPATH=src`, timeout `/opt/homebrew/bin/timeout`; verify once per actual cwd, no readiness ceremony.
 
-| Exact lineage title | Exact task ID / model | Cwd / pre-W3 branch or head | W3 ownership / actionable peers | Checkpoint / next action |
+| Exact lineage title | Exact task ID / model | Cwd / current branch | W3 ownership / actionable peers | Checkpoint / next action |
 |---|---|---|---|---|
 | PF2e Content W1 — Coordination | `01a0bc89-010f-7f33-8ea1-e359e6ed6a93` / Astra high | d438 / codex/pf2e-content-w1-coordination | guidance/scope/acceptance/publication; integration lead | W3 guidance committed and five assignments dispatched; end while owners/reviewers execute |
 | PF2e Content W1 — Spells and integration | `01a0bc8d-f040-7c81-b59c-7edb1c1b0487` / Terra high | d4ce / codex/content-w3-spellshape-preparation | cross-class caster feats + integration; spell reviewer, other owners | W2 accepted; larger family assessment/implementation from common baseline |
-| PF2e Content W1 — Combat feats | `01a0bc8e-3447-7b60-bbe6-d561d824d0f8` / Terra high | c57e / codex/content-w2-martial-defense | Strike-result/rider feats; feat/item reviewer, integration lead | W2 accepted; larger family assessment/implementation |
-| PF2e Content W1 — Finite items pilot | `01a0bc8e-a45d-76b2-9f72-30c02d579e07` / Luna high | 99a6 / codex/content-w2-items | finite bomb-condition family; feat/item reviewer, integration lead | W2 accepted; candidate check and actual rider adopters |
+| PF2e Content W1 — Combat feats | `01a0bc8e-3447-7b60-bbe6-d561d824d0f8` / Terra high | c57e / codex/content-w3-strike-riders | Strike-result/rider feats; feat/item reviewer, integration lead | W2 accepted; larger family assessment/implementation |
+| PF2e Content W1 — Finite items pilot | `01a0bc8e-a45d-76b2-9f72-30c02d579e07` / Luna high | 99a6 / codex/content-w3-items | finite bomb-condition family; feat/item reviewer, integration lead | W2 accepted; candidate check and actual rider adopters |
 | PF2e Content W1 — Spell and integration review | `01a0bc8d-0a0d-7952-b0a1-3a1506d1eaf5` / Sol high | dbbb / codex/content-w3-caster-assembled-review | caster family and assembled review; integration lead | retain tests; useful bounded prep then end until concrete delivery |
-| PF2e Content W1 — Feat and item review | `01a0bc8d-49aa-7072-a253-35fc9635cce1` / Sol high | 7404 / detached386e0e8 | independent martial/bomb reviews; respective owner, integration lead | preserve HEAD/tests; useful bounded prep then end until delivery |
+| PF2e Content W1 — Feat and item review | `01a0bc8d-49aa-7072-a253-35fc9635cce1` / Sol high | 7404 / codex/content-w3-feat-item-review | independent martial/bomb reviews; respective owner, integration lead | prior HEAD/tests preserved; useful bounded prep then end until delivery |
 
-At 2026-09-20 06:59 UTC, the one dispatch metadata snapshot confirmed caster owner and caster reviewer at `af415fa` in their retained checkouts/W3 branches. Other three task checkout advances had not yet appeared in that snapshot; they are explicitly required before edits and will be checked at a later meaningful/fallback checkpoint, without a readiness ping. No W3 public test is yet claimed.
+At 2026-09-20 07:05 UTC, the fallback metadata snapshot confirmed all five retained task checkouts at common baseline `af415fa`, each on its W3 branch listed above. Owners and reviewers handle implementation and source/grant corrections directly; no coordinator decision or assembled acceptance is pending. No W3 public test is yet claimed.
 
 ## Routing, closure and publication
 
