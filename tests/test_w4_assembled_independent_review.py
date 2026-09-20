@@ -10,7 +10,7 @@ from pf2e.encounter import Encounter
 from pf2e.martial_defense import PointBlankStance
 from pf2e.model import (
     Cackle, Cast, CreaturePlacement, EncounterSetup, EndTurn, EnergyAblation,
-    PairedStrikeSelection, Position, ResultStatus, Strike,
+    PairedStrikeSelection, Position, ResultStatus, Strike, WidenSpell,
 )
 from pf2e.w4_offensive import DoubleSlice
 from pf2e.terminal import run_terminal
@@ -27,10 +27,11 @@ def _assembled_setup(monkeypatch) -> EncounterSetup:
         (
             CreaturePlacement("slice", "w4_fighter_double_slice_level_1", "Slice Fighter", "blue", Position(3, 1)),
             CreaturePlacement("point", "w4_fighter_point_blank_stance_level_1", "Point Blank Fighter", "blue", Position(2, 2)),
-            CreaturePlacement("wizard", "wizard_battle_magic_level_2_energy_ablation", "Energy Wizard", "blue", Position(1, 2)),
+            CreaturePlacement("wizard", "wizard_battle_magic_level_2_energy_ablation", "Energy Wizard", "blue", Position(0, 2)),
             CreaturePlacement("cleric", "warpriest_c_domain_initiate_weapon_surge", "Domain Cleric", "blue", Position(2, 3)),
             CreaturePlacement("witch", "faiths_flamekeeper_witch_level_1_cackle", "Cackle Witch", "blue", Position(1, 3)),
             CreaturePlacement("fox", "faiths_flamekeeper_fox", "Fox", "blue", Position(1, 3)),
+            CreaturePlacement("druid", "storm_druid_level_1_widen_spell", "Widen Druid", "blue", Position(1, 2)),
             CreaturePlacement("dog", dog.definition_id, "Tough Guard Dog", "red", Position(3, 2)),
         ),
     )
@@ -85,17 +86,27 @@ def test_w4_cross_family_play_reaches_a_winner_after_saved_choices(monkeypatch, 
                 "wizard": (EnergyAblation("fire"), Cast("electric_arc", target_ids=("dog",))),
                 "cleric": (Cast("weapon_surge"), Strike("dog", item_id="longsword")),
                 "witch": (Cast("stoke_the_heart", "slice"),),
+                "druid": (WidenSpell(), Cast("breathe_fire", actions=2, area_direction=Position(1, 0), slot_id="druid_breathe_fire_two")),
                 "dog": (Strike("point", "jaws"),),
             }[actor]
             for command in commands:
+                dog_hp_before = game._state.creatures["dog"].hp
                 result = game.execute(command)
                 assert result.status in {ResultStatus.PAUSED, ResultStatus.COMPLETED}, result.message
+                if actor == "wizard" and isinstance(command, Cast):
+                    assert any(effect.kind == "energy_ablation" for effect in game._state.active_effects)
+                    assert any(event.kind == "spell_damage" and event.target_id == "dog" for event in result.events)
+                if actor == "cleric" and isinstance(command, Cast):
+                    assert any(effect.kind == "weapon_surge" for effect in game._state.active_effects)
                 game, choices = _settle(game, save_path)
                 seen_choices.update(choices)
+                if actor == "druid" and isinstance(command, Cast):
+                    assert game._state.creatures["dog"].hp < dog_hp_before
             first_actions.add(actor)
         elif actor == "witch" and not cackled:
             result = game.execute(Cackle())
             assert result.status in {ResultStatus.PAUSED, ResultStatus.COMPLETED}, result.message
+            assert any(event.kind == "cackle" for event in result.events)
             game, choices = _settle(game, save_path)
             seen_choices.update(choices)
             cackled = True
@@ -107,6 +118,10 @@ def test_w4_cross_family_play_reaches_a_winner_after_saved_choices(monkeypatch, 
             game.execute(Cast("electric_arc", target_ids=("dog",)))
             game, choices = _settle(game, save_path)
             seen_choices.update(choices)
+        elif actor == "druid":
+            game.execute(Cast("divine_lance", target_id="dog"))
+            game, choices = _settle(game, save_path)
+            seen_choices.update(choices)
         elif actor != "witch":
             attack = "shortbow" if actor == "point" else "longsword"
             game.execute(Strike("dog", attack))
@@ -115,10 +130,12 @@ def test_w4_cross_family_play_reaches_a_winner_after_saved_choices(monkeypatch, 
         if game.inspect().winner_team is not None:
             break
         assert game.execute(EndTurn()).status is ResultStatus.COMPLETED
-    assert {"slice", "point", "wizard", "cleric", "witch", "dog"} <= first_actions
+    assert {"slice", "point", "wizard", "cleric", "witch", "druid", "dog"} <= first_actions
     assert cackled
     assert "family_action" in seen_choices
     assert game.inspect().winner_team == "blue"
+    game.save(save_path)
+    assert Encounter.load(save_path).inspect().winner_team == "blue"
 
 
 def test_double_slice_into_reactive_shield_resumes_second_strike_after_load(monkeypatch, tmp_path) -> None:
@@ -161,6 +178,53 @@ def test_double_slice_into_reactive_shield_resumes_second_strike_after_load(monk
     assert "family_action" in seen
     assert game.inspect().choice is None
     assert game._state.creatures["attacker"].strikes_this_turn == 2
+
+
+def test_terminal_can_commit_weapon_surge_focus_cast() -> None:
+    transcript = BoundedTranscript(max_lines=180, max_chars=28_000)
+    state = {"menu": "", "prompt": "", "phase": "cast"}
+
+    def output(line: str) -> None:
+        transcript.append(line)
+        if line.startswith("1. "):
+            state["menu"] = line
+        if line.endswith((":", "?")):
+            state["prompt"] = line
+
+    def number(label: str) -> str:
+        for row in state["menu"].splitlines():
+            value, text = row.split(". ", 1)
+            if label in text:
+                return value
+        raise AssertionError(f"missing {label!r} in {state['menu']!r}")
+
+    def scripted_input() -> str:
+        prompt = state["prompt"]
+        if prompt == "Choice prompt action:":
+            return number("Resolve this choice")
+        if prompt == "Choice option number:":
+            return number("Keep")
+        if prompt == "Choice:":
+            if state["phase"] == "cast":
+                state["phase"] = "quit"
+                return number("Cast")
+            return number("Quit")
+        if prompt == "Spell number:":
+            return number("Weapon Surge")
+        if prompt == "Casting mode:":
+            return number("1 action")
+        if prompt == "Held item:":
+            return "1"
+        raise AssertionError(f"unexpected terminal prompt: {prompt!r}")
+
+    assert run_terminal(
+        setup=content.get_setup("w4_weapon_surge_vs_guard_dog"),
+        rolls=(20, 1),
+        input_fn=BoundedInput(scripted_input, max_calls=20), output_fn=output,
+    ) == 0
+    rendered = "\n".join(transcript)
+    assert "commits Weapon Surge" in rendered
+    assert "Rejected:" not in rendered
 
 
 def test_terminal_selects_energy_type_then_casts_electric_arc() -> None:
@@ -215,4 +279,59 @@ def test_terminal_selects_energy_type_then_casts_electric_arc() -> None:
     rendered = "\n".join(transcript)
     assert "shapes the next qualifying spell against fire energy" in rendered
     assert "commits Electric Arc" in rendered
+    assert "Rejected:" not in rendered
+
+
+def test_terminal_cackles_on_the_turn_after_stoke() -> None:
+    transcript = BoundedTranscript(max_lines=370, max_chars=55_000)
+    state = {"menu": "", "prompt": "", "phase": "stoke", "end_turns": 0}
+
+    def output(line: str) -> None:
+        transcript.append(line)
+        if line.startswith("1. "):
+            state["menu"] = line
+        if line.endswith((":", "?")):
+            state["prompt"] = line
+
+    def number(label: str) -> str:
+        for row in state["menu"].splitlines():
+            value, text = row.split(". ", 1)
+            if label in text:
+                return value
+        raise AssertionError(f"missing {label!r} in {state['menu']!r}")
+
+    def scripted_input() -> str:
+        prompt = state["prompt"]
+        if prompt == "Choice prompt action:":
+            return number("Resolve this choice")
+        if prompt == "Choice option number:":
+            for label in ("Keep", "After", "Willing", "Hex Ally"):
+                if label in state["menu"]:
+                    return number(label)
+            return "1"
+        if prompt == "Choice:":
+            if state["phase"] == "stoke":
+                state["phase"] = "seek_cackle"
+                return number("Cast")
+            if state["phase"] == "seek_cackle":
+                if state["end_turns"] > 0 and "Cackle" in state["menu"]:
+                    state["phase"] = "quit"
+                    return number("Cackle")
+                state["end_turns"] += 1
+                return number("End Turn")
+            return number("Quit")
+        if prompt == "Spell number:":
+            return number("Stoke the Heart")
+        if prompt == "Casting mode:":
+            return number("1 action")
+        if prompt == "Target number:":
+            return number("Hex Ally")
+        raise AssertionError(f"unexpected terminal prompt: {prompt!r}")
+
+    assert run_terminal(
+        setup=content.get_setup("w4_cackle_witch"), rolls=(20, 1, 1, 1, 1, 1, 1),
+        input_fn=BoundedInput(scripted_input, max_calls=60), output_fn=output,
+    ) == 0
+    rendered = "\n".join(transcript)
+    assert "Cackles, extending Stoke the Heart" in rendered
     assert "Rejected:" not in rendered

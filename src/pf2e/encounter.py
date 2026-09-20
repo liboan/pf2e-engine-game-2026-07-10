@@ -14725,6 +14725,10 @@ class Encounter:
         )
         active_teams.update(affected_living)
         if len(active_teams) <= 1 and not affected_living:
+            # A victory can occur exactly on an absolute effect deadline. Clear
+            # elapsed effects before the terminal state becomes saveable so the
+            # persistence validator never receives a stale combat effect.
+            self._expire_elapsed_spell_effects(state)
             state.in_progress = False
             state.winner_team = next(iter(active_teams), None)
             for creature in state.creatures.values():

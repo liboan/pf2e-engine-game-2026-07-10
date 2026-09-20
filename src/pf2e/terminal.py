@@ -1543,6 +1543,12 @@ def _choose_cast_inputs(
         # eligibility, range, commitment, and willingness checks.
         return spell.spell_id, None, target_mode.actions, slot_id, None, item_id
 
+    if spell.spell_id == "weapon_surge":
+        item_id = _choose_held_item(inspection, input_fn, output_fn)
+        if item_id is None:
+            return None
+        return spell.spell_id, None, target_mode.actions, slot_id, None, item_id
+
     if spell.spell_id == "sigil":
         kind = _choose_index(
             "Sigil target:", ("Creature", "Carried or worn item"), input_fn, output_fn,
