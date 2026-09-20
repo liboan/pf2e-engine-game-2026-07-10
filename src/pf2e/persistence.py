@@ -2438,9 +2438,9 @@ def _state_from_data(data: Any) -> EncounterState:
             or any(not isinstance(value, str) or not value for value in row[:5])
             or not isinstance(row[5], list) or any(type(value) is not int or value < 2 for value in row[5])
             or type(row[6]) is not int or row[6] < 0
-            # The admitted spell sources author a one-minute expiration.  A
-            # save may retain only its remaining portion, never extend it or
-            # replace it with an unbounded GM condition.
+            # The admitted spell and Bomber bomb sources author a one-minute
+            # expiration. A save may retain only its remaining portion, never
+            # extend it or replace it with an unbounded GM condition.
             or type(row[7]) is not int or not world_time_seconds < row[7] <= world_time_seconds + 60
             or row[1] not in expected_ids or row[2] not in expected_ids
             or row[4] not in {"acid", "bleed", "fire"}
@@ -2451,6 +2451,8 @@ def _state_from_data(data: Any) -> EncounterState:
                 ("gouging_claw", "bleed", (), 4),
                 # Ignition's adjacent melee profile persists with d6s.
                 ("ignition", "fire", (6,), 0),
+                ("alchemists_fire_lesser", "fire", (), 1),
+                ("acid_flask_lesser", "acid", (6,), 0),
             }
             or (not row[5] and row[6] < 1)
             or row[0] in persistent_ids or (row[2], row[4]) in persistent_keys
@@ -2458,7 +2460,20 @@ def _state_from_data(data: Any) -> EncounterState:
             raise ValueError("save has invalid persistent damage effect")
         source = creatures[row[1]]
         source_definition = get_definition(source.definition_id)
-        if not (
+        if row[3] in {"alchemists_fire_lesser", "acid_flask_lesser"}:
+            alchemy_state = alchemy_states.get(row[1])
+            if (
+                alchemy_state is None
+                or alchemy_state.character_level != 2
+                or not any(
+                    item.formula_id == row[3]
+                    and item.creator_actor_id == row[1]
+                    and item_id in consumed_infused_item_ids
+                    for item_id, item in infused_alchemy_items.items()
+                )
+            ):
+                raise ValueError("save has a persistent damage source without consumed Bomber formula provenance")
+        elif not (
             any(slot.spell_id == row[3] for slot in source.prepared_slots)
             or any(access.spell_id == row[3] for access in source_definition.spontaneous_spells)
         ):

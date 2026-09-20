@@ -4206,7 +4206,10 @@ class Encounter:
                 ("activate_alchemy", can_act and activate_alchemy_available),
                 ("quick_bomber", can_act and "quick_bomber" in definition.abilities and any(
                     state.item_instances.get(item) is not None
-                    and self._admitted_bomber_bomb_facts(state.item_instances[item].definition_id) is not None
+                    and self._admitted_bomber_bomb_facts(
+                        state.item_instances[item].definition_id,
+                        character_level=state.alchemy_states[actor.actor_id].character_level,
+                    ) is not None
                     for item in actor.held_items + actor.stowed_items
                 )),
                 ("confident_finisher", can_finisher),
@@ -5197,7 +5200,10 @@ class Encounter:
         definition = get_definition(actor.definition_id)
         if "quick_bomber" not in definition.abilities:
             raise _Unsupported("Quick Bomber is not admitted for this creature.")
-        if self._admitted_bomber_bomb_facts(command.formula_id) is None:
+        if self._admitted_bomber_bomb_facts(
+            command.formula_id,
+            character_level=state.alchemy_states[actor.actor_id].character_level,
+        ) is None:
             raise _Rejected("Quick Bomber requires one selected prepared Bomber formula.")
         if type(command.only_primary_splash) is not bool:
             raise _Rejected("Quick Bomber splash restriction must be true or false.")
@@ -5881,7 +5887,10 @@ class Encounter:
             landing = self._land_thrown_item(state, actor, target, attack, item_id)
             if landing is not None:
                 events.append(landing)
-            bomb_facts = self._admitted_bomber_bomb_facts(attack.item_id)
+            bomb_facts = self._admitted_bomber_bomb_facts(
+                attack.item_id,
+                character_level=get_definition(actor.definition_id).level,
+            )
             if (
                 check.degree is DegreeOfSuccess.FAILURE
                 and bomb_facts is not None
@@ -5927,7 +5936,10 @@ class Encounter:
             use_intelligence=investigator_use_intelligence,
             finisher=finisher,
         )
-        bomb_facts = self._admitted_bomber_bomb_facts(attack.item_id)
+        bomb_facts = self._admitted_bomber_bomb_facts(
+            attack.item_id,
+            character_level=get_definition(actor.definition_id).level,
+        )
         if bomb_facts is not None and bomb_facts.splash_damage:
             damage = self._bomb_damage_with_primary_splash(damage, attack.attack_id, bomb_facts)
         resolution = DamageResolution(
@@ -7239,6 +7251,25 @@ class Encounter:
         if resolution.check is not None and resolution.check.degree in {
             DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS,
         } and not target.defeated:
+            if facts.persistent_damage_type is not None:
+                bomb_formula_id = next(
+                    (attack.item_id for attack in get_definition(attacker.definition_id).attacks
+                     if attack.attack_id == attack_id),
+                    None,
+                )
+                self._apply_persistent_effect(
+                    state,
+                    attacker,
+                    target,
+                    bomb_formula_id or "bomber_bomb",
+                    facts.persistent_damage_type,
+                    dice=facts.persistent_damage_dice,
+                    flat=facts.persistent_damage_flat,
+                )
+                events.append(Event(
+                    "persistent_applied", attacker.actor_id, target.actor_id,
+                    f"{target.label} takes persistent {facts.persistent_damage_type} damage.",
+                ))
             if facts.on_hit_effect == "off_guard":
                 kind, value = "off_guard", 1
                 text = f"{target.label} is off-guard until {attacker.label}'s next turn."
@@ -7266,10 +7297,10 @@ class Encounter:
         return events
 
     @staticmethod
-    def _admitted_bomber_bomb_facts(formula_id):
+    def _admitted_bomber_bomb_facts(formula_id, *, character_level=1):
         from .alchemist_content import admitted_bomber_bomb_facts
 
-        return admitted_bomber_bomb_facts(formula_id)
+        return admitted_bomber_bomb_facts(formula_id, character_level=character_level)
 
     def _admitted_bomber_bomb_facts_for_attack(self, actor, attack_id):
         if not isinstance(attack_id, str):
@@ -7278,7 +7309,9 @@ class Encounter:
             (candidate for candidate in get_definition(actor.definition_id).attacks if candidate.attack_id == attack_id),
             None,
         )
-        return None if attack is None else self._admitted_bomber_bomb_facts(attack.item_id)
+        return None if attack is None else self._admitted_bomber_bomb_facts(
+            attack.item_id, character_level=get_definition(actor.definition_id).level,
+        )
 
     def _damage_modifier(self, state, actor, attack):
         if attack.damage_attribute is None:
@@ -7313,7 +7346,9 @@ class Encounter:
             return attack.range_increment_ft, attack.max_range_ft
         alchemy_state = state.alchemy_states.get(actor.actor_id)
         if (
-            self._admitted_bomber_bomb_facts(attack.item_id) is None
+            self._admitted_bomber_bomb_facts(
+                attack.item_id, character_level=get_definition(actor.definition_id).level,
+            ) is None
             or alchemy_state is None
         ):
             return attack.range_increment_ft, attack.max_range_ft

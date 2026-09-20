@@ -78,6 +78,7 @@ from .alchemist_content import (
     BOMBER_ALCHEMIST_NEXT_SETUP,
     BOMBER_ALCHEMIST_SETUP,
     BOMBER_FORMULA_IDS,
+    BOMBER_LEVEL_2_BOMB_ATTACKS,
 )
 from .witch_content import (
     COMMAND_TARGET,
@@ -903,7 +904,7 @@ BOMBER_ALCHEMIST_LEVEL_2 = replace(
     ac=18,
     perception=5,
     level=2,
-    attacks=tuple(replace(attack, modifier=attack.modifier + 1) for attack in BOMBER_ALCHEMIST.attacks),
+    attacks=tuple(replace(attack, modifier=attack.modifier + 1) for attack in BOMBER_ALCHEMIST.attacks) + BOMBER_LEVEL_2_BOMB_ATTACKS,
     skills=tuple((name, rank, modifier + 1) for name, rank, modifier in BOMBER_ALCHEMIST.skills),
     saves=tuple((name, rank, modifier + 1) for name, rank, modifier in BOMBER_ALCHEMIST.saves),
     class_dc=18,

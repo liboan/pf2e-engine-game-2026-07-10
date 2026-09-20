@@ -2324,25 +2324,25 @@ def run_terminal(
                 except ValueError as exc:
                     output_fn(str(exc))
             elif action_id == "quick_alchemy":
-                from pf2e.alchemist_content import BOMBER_FORMULA_IDS
                 from pf2e.alchemy_content import FORMULAS_BY_ID
 
+                known_formula_ids = game._state.alchemy_states[engine_options.actor_id].known_formula_ids
                 formula_index = _choose_index(
                     "Quick Alchemy formula:",
-                    tuple(FORMULAS_BY_ID[formula_id].name for formula_id in BOMBER_FORMULA_IDS),
+                    tuple(FORMULAS_BY_ID[formula_id].name for formula_id in known_formula_ids),
                     input_fn, output_fn,
                 )
                 if formula_index is not None:
-                    _run_command(game, QuickAlchemy("create_consumable", BOMBER_FORMULA_IDS[formula_index]), output_fn)
+                    _run_command(game, QuickAlchemy("create_consumable", known_formula_ids[formula_index]), output_fn)
             elif action_id == "activate_alchemy":
-                from pf2e.alchemist_content import BOMBER_FIELD_FORMULA_IDS
+                from pf2e.alchemy_content import FORMULAS_BY_ID
 
                 actor = game._state.creatures[engine_options.actor_id]
                 held = tuple(
                     item_id for item_id in actor.held_items
                     if item_id in game._state.infused_alchemy_items
-                    and game._state.infused_alchemy_items[item_id].formula_id
-                    not in BOMBER_FIELD_FORMULA_IDS
+                    and game._state.infused_alchemy_items[item_id].formula_id in FORMULAS_BY_ID
+                    and FORMULAS_BY_ID[game._state.infused_alchemy_items[item_id].formula_id].category != "bomb"
                 )
                 item_index = _choose_index(
                     "Held alchemy item:",
@@ -2369,19 +2369,28 @@ def run_terminal(
                             _run_command(game, ActivateAlchemy(item_id, recipient_id), output_fn)
             elif action_id == "quick_bomber":
                 from pf2e.alchemy import bomber_bomb_range_increment
-                from pf2e.alchemist_content import BOMBER_FIELD_FORMULA_IDS
+                from pf2e.alchemist_content import admitted_bomber_bomb_facts
                 from pf2e.alchemy_content import FORMULAS_BY_ID
                 from pf2e.content import get_definition
                 from pf2e.space import grid_distance_feet
 
                 actor = game._state.creatures[engine_options.actor_id]
+                available_formula_ids = tuple(dict.fromkeys(
+                    game._state.item_instances[item_id].definition_id
+                    for item_id in actor.held_items + actor.stowed_items
+                    if item_id in game._state.item_instances
+                    and admitted_bomber_bomb_facts(
+                        game._state.item_instances[item_id].definition_id,
+                        character_level=game._state.alchemy_states[actor.actor_id].character_level,
+                    ) is not None
+                ))
                 formula_index = _choose_index(
                     "Prepared bomb:", tuple(
-                        FORMULAS_BY_ID[formula_id].name for formula_id in BOMBER_FIELD_FORMULA_IDS
+                        FORMULAS_BY_ID[formula_id].name for formula_id in available_formula_ids
                     ), input_fn, output_fn,
                 )
                 if formula_index is not None:
-                    formula_id = BOMBER_FIELD_FORMULA_IDS[formula_index]
+                    formula_id = available_formula_ids[formula_index]
                     attack = next(
                         candidate for candidate in get_definition(actor.definition_id).attacks
                         if candidate.item_id == formula_id
