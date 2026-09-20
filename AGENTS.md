@@ -1,6 +1,6 @@
 # Working rules
 
-Content W4 is fully accepted and published; the W5 plan is adopted and fresh execution tasks are being dispatched. Read [the current working model](docs/plan/04-delivery-and-checks.md), [compact recovery](docs/work-log/ACTIVE.md) and [accepted-W4/W5 startup handoff](docs/plan/08-content-w5-handoff.md) first. They replace conflicting W1–W4 routing; archived instructions are historical.
+Content W4 is fully accepted and published; the W5 plan is adopted and all seven execution tasks are dispatched. Read [the current working model](docs/plan/04-delivery-and-checks.md), [compact recovery](docs/work-log/ACTIVE.md) and [accepted-W4/W5 startup handoff](docs/plan/08-content-w5-handoff.md) first. They replace conflicting W1–W4 routing; archived instructions are historical.
 
 - Build the local Python terminal PF2e engine; no browser/server/distributed machinery.
 - Retain the existing Astra/high coordinator. Use fresh full Luna/high implementation tasks and fresh full Sol/high reviewer tasks with fresh isolated worktrees from published accepted W4 plus guidance. Current task title prefix: `PF2e Content W5 — `. W5 must use entirely new full Luna/high implementation tasks and Sol/high review tasks in new isolated worktrees, without forking or carrying W4 conversations, with prefix `PF2e Content W5 — ` for all new tasks, including planning. Fresh teams per substantial milestone are the future default; retain each owner/reviewer through this milestone's ordinary repairs. No automatic model replacement after a failed check.
