@@ -56,11 +56,12 @@ def build_state(field=FIELD_BOMBER, *, intelligence=4, feat=None):
     )
 
 
-def test_catalog_is_the_selected_eleven_level_one_formulas_with_source_links():
-    assert len(ALCHEMIST_FORMULAS) == 11
-    assert len(ALCHEMIST_FORMULAS_BY_ID) == 11
-    assert all(formula.level == 1 and formula.source_url.startswith("https://2e.aonprd.com/") for formula in ALCHEMIST_FORMULAS)
-    assert {formula.category for formula in ALCHEMIST_FORMULAS} == {"bomb", "healing_elixir", "mutagen", "poison"}
+def test_catalog_is_the_selected_w2_formula_catalog_with_source_links():
+    assert len(ALCHEMIST_FORMULAS) == 14
+    assert len(ALCHEMIST_FORMULAS_BY_ID) == 14
+    assert all(formula.source_url.startswith("https://2e.aonprd.com/") for formula in ALCHEMIST_FORMULAS)
+    assert {formula.level for formula in ALCHEMIST_FORMULAS} == {1, 2}
+    assert {formula.category for formula in ALCHEMIST_FORMULAS} == {"bomb", "healing_elixir", "elixir", "mutagen", "poison"}
     assert set(ALCHEMIST_LEVEL_1_FEAT_MENU) == {"quick_bomber", "far_lobber"}
     quick_bomber = ALCHEMIST_LEVEL_1_FEATS_BY_ID["quick_bomber"]
     far_lobber = ALCHEMIST_LEVEL_1_FEATS_BY_ID["far_lobber"]

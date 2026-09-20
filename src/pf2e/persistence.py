@@ -371,9 +371,9 @@ def _infused_item_to_data(value: object) -> dict[str, Any]:
 
 
 def _load_alchemy_records(data: Any, setup) -> tuple[dict[str, AlchemyState], dict[str, InfusedAlchemyItem], set[str]]:
-    from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS
+    from .alchemist_content import BOMBER_FIELD_FORMULA_IDS, BOMBER_FORMULA_IDS, BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
     from .alchemy import FAR_LOBBER
-    from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+    from .content import BOMBER_ALCHEMIST_LEVEL_2, BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS, BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT
 
     raw_states = data.get("alchemy_states", {})
     raw_items = data.get("infused_alchemy_items", {})
@@ -387,17 +387,22 @@ def _load_alchemy_records(data: Any, setup) -> tuple[dict[str, AlchemyState], di
         try:
             state = AlchemyState(_required_int(raw,"character_level"), _required_int(raw,"intelligence_modifier"), _required_str(raw,"research_field"), tuple(_required_str_list(raw,"field_formula_ids")), tuple(_required_str_list(raw,"known_formula_ids")), raw.get("selected_level_1_feat"), _required_str(raw,"daily_preparation_id"), _required_int(raw,"stored_vials"), _required_int(raw,"vial_capacity"), _required_int(raw,"exploration_seconds_toward_vial_recovery"), _required_int(raw,"next_creation_sequence"), _required_int(raw,"mutagen_temp_hp_available_at_seconds"), raw.get("selected_level_2_feat"))
         except (TypeError, ValueError) as e: raise ValueError("save has invalid Bomber Alchemy state") from e
-        level_two = (
-            next(
-                placement.definition_id
-                for placement in setup.placements
-                if placement.actor_id == actor_id
-            )
-            == BOMBER_ALCHEMIST_LEVEL_2.definition_id
+        definition_id = next(
+            placement.definition_id
+            for placement in setup.placements
+            if placement.actor_id == actor_id
         )
+        level_two = definition_id in {
+            BOMBER_ALCHEMIST_LEVEL_2.definition_id,
+            BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id,
+        }
         expected_level = 2 if level_two else 1
         expected_formulas = (
-            BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS if level_two else BOMBER_FORMULA_IDS
+            BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+            if definition_id == BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id
+            else BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
+            if level_two
+            else BOMBER_FORMULA_IDS
         )
         expected_level_two_feat = FAR_LOBBER if level_two else None
         if (
@@ -682,27 +687,37 @@ def _valid_alchemy_elixir_effect(
     row: list[Any], creatures: dict[str, CreatureState], starts: dict[str, int],
     world_time_seconds: int, infused_items: dict[str, Any], consumed_item_ids: set[str],
 ) -> bool:
-    """Validate the three finite Bomber elixir effects and their consumed origin."""
+    """Validate the finite Bomber elixir effects and their consumed origin."""
     from .alchemy_content import ElixirFacts, FORMULAS_BY_ID
 
     kind_to_formula = {
         "alchemy_elixir_of_life_minor": "elixir_of_life_minor",
         "alchemy_antidote_lesser": "antidote_lesser",
         "alchemy_antiplague_lesser": "antiplague_lesser",
+        "alchemy_cheetahs_elixir_lesser": "cheetahs_elixir_lesser",
+        "alchemy_bravos_brew_lesser": "bravos_brew_lesser",
     }
     formula_id = kind_to_formula[row[1]]
     formula = FORMULAS_BY_ID[formula_id]
     facts = formula.facts
-    if not isinstance(facts, ElixirFacts) or not facts.save_bonuses:
+    if not isinstance(facts, ElixirFacts) or facts.duration_seconds is None:
         return False
-    bonus = facts.save_bonuses[0]
+    expected_value = (
+        facts.speed_bonus_ft
+        if facts.effect == "speed_bonus"
+        else facts.save_bonuses[0].bonus
+        if facts.save_bonuses
+        else None
+    )
+    if expected_value is None or expected_value <= 0:
+        return False
     source = creatures[row[2]]
     target = creatures[row[3]]
     if (
-        row[4] != bonus.bonus
+        row[4] != expected_value
         or row[5] != starts[row[2]] + 1
         or type(row[6]) is not int
-        or not world_time_seconds < row[6] <= world_time_seconds + bonus.duration_seconds
+        or not world_time_seconds < row[6] <= world_time_seconds + facts.duration_seconds
         or row[0] not in {f"alchemy:{item_id}" for item_id in consumed_item_ids}
         or "bomber_alchemist" not in get_definition(source.definition_id).abilities
         or target.dead
@@ -712,7 +727,7 @@ def _valid_alchemy_elixir_effect(
     item = infused_items.get(item_id)
     if item is None or item.formula_id != formula_id or item.creator_actor_id != row[2]:
         return False
-    maximum = 600 if item.creation_kind == "quick_alchemy" else bonus.duration_seconds
+    maximum = 600 if item.creation_kind == "quick_alchemy" else facts.duration_seconds
     return row[6] <= world_time_seconds + maximum
 
 
@@ -728,7 +743,7 @@ def _valid_alchemy_mutagen_effect(
     item_id = row[0].removeprefix("alchemy:")
     item = infused_items.get(item_id)
     source = creatures[row[2]]
-    return (
+    valid = (
         row[0] == f"alchemy:{item_id}" and row[3] == row[2] and row[4] == 1
         and row[5] == starts[row[2]] + 1 and type(row[6]) is int
         and world_time_seconds < row[6] <= world_time_seconds + formula.facts.duration_seconds
@@ -736,6 +751,15 @@ def _valid_alchemy_mutagen_effect(
         and item.formula_id == formula_id and item.creator_actor_id == row[2]
         and "bomber_alchemist" in get_definition(source.definition_id).abilities
     )
+    if not valid:
+        return False
+    if formula_id == "juggernaut_mutagen_lesser" and source.temporary_hp_source_id == row[0]:
+        return (
+            0 < source.temporary_hp <= formula.facts.temporary_hp
+            and source.temporary_hp_expires_at_seconds == row[6]
+            and source.temporary_hp_expires_at_source_start == 0
+        )
+    return True
 
 
 def _valid_alchemy_venom_coating(
@@ -2061,14 +2085,14 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(row[9]) is not int or row[9] < 0
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating"}
                 and row[6] is not None
             )
             or (
@@ -2084,14 +2108,14 @@ def _state_from_data(data: Any) -> EncounterState:
                 )
             )
             or (
-                row[1] in {"alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser"}
+                row[1] in {"alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser"}
                 and not _valid_alchemy_elixir_effect(
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
                 )
             )
             or (
-                row[1] in {"alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser"}
+                row[1] in {"alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser"}
                 and not _valid_alchemy_mutagen_effect(
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,

@@ -80,6 +80,7 @@ from .alchemist_content import (
     BOMBER_ALCHEMIST_NEXT_SETUP,
     BOMBER_ALCHEMIST_SETUP,
     BOMBER_FORMULA_IDS,
+    BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS,
     BOMBER_LEVEL_2_BOMB_ATTACKS,
 )
 from .witch_content import (
@@ -901,6 +902,7 @@ BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS = (
     "alchemists_fire_lesser",
     "acid_flask_lesser",
 )
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS = BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
 BOMBER_ALCHEMIST_LEVEL_2 = replace(
     BOMBER_ALCHEMIST,
     definition_id="bomber_alchemist_level_2_far_lobber",
@@ -919,6 +921,15 @@ BOMBER_ALCHEMIST_LEVEL_2 = replace(
         "Level 2: HP rises by 9 (Alchemist 8 + Constitution 1), and level-based statistics rise by one.",
         "Far Lobber is the selected level-2 class feat. Its 30-foot bomb range increment is applied only through the selected Bomber alchemy state.",
         "The formula book adds lesser Alchemist's Fire and Acid Flask. Poison additions, including Black Adder Venom, remain outside this finite Bomber build.",
+    ),
+)
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT = replace(
+    BOMBER_ALCHEMIST_LEVEL_2,
+    definition_id="bomber_alchemist_level_2_item_support",
+    name="Level 2 Bomber Alchemist (Item Support)",
+    sheet_notes=(*BOMBER_ALCHEMIST_LEVEL_2.sheet_notes,
+        "W2 item-support variant: the accepted W1 sheet remains unchanged while this finite ten-formula book adds Cheetah's Elixir, Juggernaut Mutagen, and Bravo's Brew.",
+        "The item-support menu uses only common consumables at or below level 2; it does not add poison, affliction, or unsupported exploration effects.",
     ),
 )
 BOMBER_ALCHEMIST_LEVEL_2_SETUP = EncounterSetup(
@@ -956,6 +967,16 @@ BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP = EncounterSetup(
     (
         CreaturePlacement("alchemist", BOMBER_ALCHEMIST_LEVEL_2.definition_id, "Level 2 Bomber Alchemist", "blue", Position(1, 1)),
         CreaturePlacement("long_range_dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(1, 26)),
+    ),
+)
+BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP = EncounterSetup(
+    "l2_bomber_item_support_vs_guard_dog",
+    "Level 2 Item-Support Bomber versus Guard Dog",
+    15,
+    3,
+    (
+        CreaturePlacement("alchemist", BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id, "Level 2 Item-Support Bomber", "blue", Position(1, 1)),
+        CreaturePlacement("dog", GUARD_DOG.definition_id, "Guard Dog", "red", Position(7, 1)),
     ),
 )
 
@@ -1021,6 +1042,7 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
         # level-1 recovery, preparation, venom, and terminal route is admitted.
         BOMBER_ALCHEMIST.definition_id: BOMBER_ALCHEMIST,
         BOMBER_ALCHEMIST_LEVEL_2.definition_id: BOMBER_ALCHEMIST_LEVEL_2,
+        BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT,
         # Selected L2 progression bundles retain explicit, finite public
         # sheets and encounters; no class/subclass discovery is implied.
         **L2_HORIZONTAL_DEFINITIONS,
@@ -1416,6 +1438,7 @@ SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
         BOMBER_ALCHEMIST_LEVEL_2_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_SETUP,
         BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_NEXT_SETUP,
         BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_LONG_RANGE_SETUP,
+        BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP.setup_id: BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT_SETUP,
         **L2_HORIZONTAL_SETUPS,
         RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP.setup_id: RANGER_PRECISION_LEVEL_2_HUNTERS_AIM_SETUP,
         **{setup.setup_id: setup for setup in L2_REACH_SETUPS},

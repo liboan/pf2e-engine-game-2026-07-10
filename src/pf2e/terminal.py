@@ -2360,7 +2360,7 @@ def run_terminal(
                 if item_index is not None:
                     item_id = held[item_index]
                     formula_id = game._state.infused_alchemy_items[item_id].formula_id
-                    if formula_id in {"bestial_mutagen_lesser", "cognitive_mutagen_lesser", "giant_centipede_venom"}:
+                    if formula_id in {"bestial_mutagen_lesser", "cognitive_mutagen_lesser", "juggernaut_mutagen_lesser", "giant_centipede_venom"}:
                         _run_command(game, ActivateAlchemy(item_id), output_fn)
                     else:
                         recipient_id = _choose_target(
