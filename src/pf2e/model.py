@@ -1095,6 +1095,8 @@ class DamageResolution:
     life_link_source_actor_id: str | None = None
     life_link_transfer: int = 0
     bomber_only_primary_splash: bool = False
+    # Exact consumed alchemical item provenance for a saved bomb rider.
+    item_id: str | None = None
 
 
 @dataclass(frozen=True)

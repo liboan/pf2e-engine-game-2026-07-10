@@ -7,7 +7,8 @@ from .alchemy_content import BombFacts, FORMULAS_BY_ID
 
 BOMBER_FIELD_FORMULA_IDS = ("bottled_lightning_lesser", "frost_vial_lesser")
 BOMBER_LEVEL_2_BOMB_FORMULA_IDS = ("alchemists_fire_lesser", "acid_flask_lesser")
-BOMBER_COMBAT_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, *BOMBER_LEVEL_2_BOMB_FORMULA_IDS)
+BOMBER_CONDITION_BOMB_FORMULA_IDS = ("dread_ampoule_lesser", "glue_bomb_lesser")
+BOMBER_COMBAT_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, *BOMBER_LEVEL_2_BOMB_FORMULA_IDS, *BOMBER_CONDITION_BOMB_FORMULA_IDS)
 BOMBER_FORMULA_IDS = (*BOMBER_FIELD_FORMULA_IDS, "elixir_of_life_minor", "antidote_lesser", "antiplague_lesser", "bestial_mutagen_lesser", "cognitive_mutagen_lesser", "giant_centipede_venom")
 # W2 keeps the accepted W1 Bomber book intact and adds a separate legal level-2
 # item-support menu.  It has the same ten-formula book size as every level-2
@@ -22,6 +23,16 @@ BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS = (
     "antiplague_lesser",
     "bestial_mutagen_lesser",
     "cognitive_mutagen_lesser",
+)
+BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS = (
+    *BOMBER_FIELD_FORMULA_IDS,
+    "elixir_of_life_minor",
+    "cheetahs_elixir_lesser",
+    "bravos_brew_lesser",
+    "antidote_lesser",
+    "antiplague_lesser",
+    "bestial_mutagen_lesser",
+    *BOMBER_CONDITION_BOMB_FORMULA_IDS,
 )
 
 
@@ -46,9 +57,12 @@ def _bomber_bomb_attack(attack_id: str, name: str, formula_id: str, *, modifier:
     facts = admitted_bomber_bomb_facts(formula_id, character_level=character_level)
     if facts is None:  # The selected sheet and its finite field pair must agree.
         raise ValueError(f"Bomber attack {attack_id!r} lacks admitted bomb facts.")
+    traits = {"attack", "ranged", "thrown", "bomb"}
+    if facts.splash_damage:
+        traits.add("splash")
     return AttackDefinition(
         attack_id, name, modifier, facts.range_increment_ft,
-        frozenset({"attack", "ranged", "thrown", "bomb", "splash"}),
+        frozenset(traits),
         facts.damage_type, facts.initial_damage_dice, facts.initial_damage_flat,
         item_id=formula_id, attack_attribute="dexterity", damage_attribute=None,
         range_increment_ft=facts.range_increment_ft,
@@ -59,6 +73,11 @@ def _bomber_bomb_attack(attack_id: str, name: str, formula_id: str, *, modifier:
 BOMBER_LEVEL_2_BOMB_ATTACKS = (
     _bomber_bomb_attack("alchemists_fire", "Alchemist's Fire", "alchemists_fire_lesser", modifier=7, character_level=2),
     _bomber_bomb_attack("acid_flask", "Acid Flask", "acid_flask_lesser", modifier=7, character_level=2),
+)
+
+BOMBER_LEVEL_2_CONDITION_BOMB_ATTACKS = (
+    _bomber_bomb_attack("dread_ampoule", "Dread Ampoule", "dread_ampoule_lesser", modifier=7, character_level=2),
+    _bomber_bomb_attack("glue_bomb", "Glue Bomb", "glue_bomb_lesser", modifier=7, character_level=2),
 )
 
 

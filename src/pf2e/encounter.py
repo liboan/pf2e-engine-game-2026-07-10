@@ -5261,11 +5261,13 @@ class Encounter:
         from .alchemist_content import (
             BOMBER_FIELD_FORMULA_IDS,
             BOMBER_FORMULA_IDS,
+            BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS,
             BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS,
         )
         from .content import (
             BOMBER_ALCHEMIST_LEVEL_2,
             BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS,
+            BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS,
             BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT,
         )
         for actor in state.creatures.values():
@@ -5275,9 +5277,12 @@ class Encounter:
             level_two = definition.definition_id in {
                 BOMBER_ALCHEMIST_LEVEL_2.definition_id,
                 BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id,
+                BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id,
             }
             formula_ids = (
-                BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
+                BOMBER_LEVEL_2_CONDITION_BOMB_FORMULA_IDS
+                if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2_CONDITION_BOMBS.definition_id
+                else BOMBER_LEVEL_2_ITEM_SUPPORT_FORMULA_IDS
                 if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2_ITEM_SUPPORT.definition_id
                 else BOMBER_ALCHEMIST_LEVEL_2_FORMULA_IDS
                 if definition.definition_id == BOMBER_ALCHEMIST_LEVEL_2.definition_id
@@ -6379,6 +6384,7 @@ class Encounter:
             is_reaction=is_reaction,
             continuation=continuation,
             bomber_only_primary_splash=bomber_only_primary_splash,
+            item_id=item_id,
         )
         if finisher:
             from .swashbuckler import ConfidentFinisher
@@ -7692,31 +7698,96 @@ class Encounter:
                     "persistent_applied", attacker.actor_id, target.actor_id,
                     f"{target.label} takes persistent {facts.persistent_damage_type} damage.",
                 ))
-            if facts.on_hit_effect == "off_guard":
-                kind, value = "off_guard", 1
-                text = f"{target.label} is off-guard until {attacker.label}'s next turn."
-            elif facts.on_hit_effect == "speed_minus_5":
-                kind, value = "speed_penalty", 5
-                text = f"{target.label} takes a -5-foot status penalty to all Speeds until its next turn ends."
-            else:
-                return events
-            if facts.on_hit_effect_deadline == "thrower_next_turn_start":
-                anchor, boundary = attacker.actor_id, "start"
-            elif facts.on_hit_effect_deadline == "target_next_turn_end":
-                anchor, boundary = target.actor_id, "end"
-            else:
-                return events
+            events.extend(self._apply_bomber_bomb_rider(
+                state, resolution, attacker, target, facts,
+            ))
+        return events
+
+    @staticmethod
+    def _apply_bomber_bomb_rider(state, resolution, attacker, target, facts):
+        """Apply the finite bomb riders through their shared sourced lifecycles."""
+        if (
+            resolution.check is None
+            or resolution.check.degree not in {DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS}
+            or target.defeated
+            or facts.on_hit_effect is None
+        ):
+            return []
+        critical = resolution.attacker_critical
+        effect_id = f"{resolution.attack_id}:{attacker.actor_id}:{target.actor_id}:{state.next_choice_id}"
+        if facts.on_hit_effect == "off_guard":
+            kind, value = "off_guard", facts.on_hit_effect_value or 1
+            text = f"{target.label} is off-guard until {attacker.label}'s next turn."
+            anchor, boundary = attacker.actor_id, "start"
+            occurrence = state.actor_start_counts.get(anchor, 0) + 1
             state.condition_effects[:] = [
                 effect for effect in state.condition_effects
                 if not (effect.kind == kind and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
             ]
             state.condition_effects.append(ActiveConditionEffect(
-                f"{attack_id}:{attacker.actor_id}:{target.actor_id}:{state.next_choice_id}", kind,
-                attacker.actor_id, target.actor_id, value,
-                EffectExpiration(anchor, boundary, (state.actor_start_counts if boundary == "start" else state.actor_end_counts).get(anchor, 0) + 1),
+                effect_id, kind, attacker.actor_id, target.actor_id, value,
+                EffectExpiration(anchor, boundary, occurrence),
             ))
-            events.append(Event("bomb_rider", attacker.actor_id, target.actor_id, text))
-        return events
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
+        if facts.on_hit_effect == "speed_minus_5":
+            kind, value = "speed_penalty", facts.on_hit_effect_value or 5
+            text = f"{target.label} takes a -{value}-foot status penalty to all Speeds until its next turn ends."
+            anchor, boundary = target.actor_id, "end"
+            occurrence = state.actor_end_counts.get(anchor, 0) + 1
+            state.condition_effects[:] = [
+                effect for effect in state.condition_effects
+                if not (effect.kind == kind and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+            ]
+            state.condition_effects.append(ActiveConditionEffect(
+                effect_id, kind, attacker.actor_id, target.actor_id, value,
+                EffectExpiration(anchor, boundary, occurrence),
+            ))
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
+        if facts.on_hit_effect == "frightened":
+            value = facts.on_critical_hit_value if critical and facts.on_critical_hit_value is not None else facts.on_hit_effect_value or 1
+            state.condition_effects[:] = [
+                effect for effect in state.condition_effects
+                if not (effect.kind == "frightened" and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+            ]
+            state.condition_effects.append(ActiveConditionEffect(
+                f"dread_ampoule:{attacker.actor_id}:{target.actor_id}:{state.next_choice_id}",
+                "frightened", attacker.actor_id, target.actor_id, value,
+                EffectExpiration(target.actor_id, "end", state.actor_end_counts.get(target.actor_id, 0) + value),
+            ))
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, f"{target.label} is frightened {value}.")]
+        if facts.on_hit_effect == "glue_speed_penalty":
+            duration = facts.on_hit_effect_duration_seconds
+            value = facts.on_hit_effect_value
+            if duration is None or value is None or facts.on_hit_effect_dc is None:
+                return []
+            state.active_effects[:] = [
+                effect for effect in state.active_effects
+                if not (effect.kind == "alchemy_glue_bomb_lesser" and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+            ]
+            if resolution.item_id is None:
+                return []
+            glue_id = f"glue_bomb:{resolution.item_id}"
+            state.active_effects.append(ActiveSpellEffect(
+                glue_id, "alchemy_glue_bomb_lesser", attacker.actor_id, target.actor_id,
+                value, state.actor_start_counts.get(attacker.actor_id, 0) + 1,
+                state.world_time_seconds + duration,
+            ))
+            if critical and facts.on_critical_hit_effect == "glue_immobilized":
+                state.condition_effects[:] = [
+                    effect for effect in state.condition_effects
+                    if not (effect.effect_id.startswith("glue_bomb:") and effect.source_actor_id == attacker.actor_id and effect.target_actor_id == target.actor_id)
+                ]
+                state.condition_effects.append(ActiveConditionEffect(
+                    f"{glue_id}:immobilized", "immobilized", attacker.actor_id, target.actor_id,
+                    facts.on_critical_hit_value or 1,
+                    EffectExpiration(target.actor_id, "end", state.actor_end_counts.get(target.actor_id, 0) + 1),
+                    facts.on_hit_effect_dc,
+                ))
+                text = f"{target.label} takes a -{value}-foot status penalty and is stuck to the solid ground until its next turn ends."
+            else:
+                text = f"{target.label} takes a -{value}-foot status penalty to all Speeds for {duration} seconds."
+            return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
+        return []
 
     @staticmethod
     def _admitted_bomber_bomb_facts(formula_id, *, character_level=1):
@@ -13202,6 +13273,12 @@ class Encounter:
             for effect in state.active_effects
             if effect.target_actor_id == actor.actor_id
             and effect.kind == "alchemy_cheetahs_elixir_lesser"
+        )
+        conditions.extend(
+            ConditionValue("speed_penalty", effect.value, effect.effect_id)
+            for effect in state.active_effects
+            if effect.target_actor_id == actor.actor_id
+            and effect.kind == "alchemy_glue_bomb_lesser"
         )
         from .alchemy_content import FORMULAS_BY_ID
         for effect in state.giant_centipede_venom_afflictions:
