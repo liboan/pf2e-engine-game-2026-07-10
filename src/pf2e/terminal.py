@@ -51,6 +51,10 @@ _ACTION_LABELS = {
     "devise_stratagem": "Devise a Stratagem",
     "known_weaknesses": "Known Weaknesses + Devise",
     "vicious_swing": "Vicious Swing",
+    "exacting_strike": "Exacting Strike",
+    "double_slice": "Double Slice",
+    "twin_takedown": "Twin Takedown",
+    "twin_feint": "Twin Feint",
     "intimidating_strike": "Intimidating Strike",
     "snagging_strike": "Snagging Strike",
     "combat_grab": "Combat Grab",
@@ -1958,6 +1962,7 @@ def run_terminal(
     from pf2e.swashbuckler import ConfidentFinisher
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
     from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
+    from pf2e.w4_offensive import DoubleSlice, ExactingStrike, TwinFeint, TwinTakedown
     from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry
 
     if input_fn is None:
@@ -2270,6 +2275,41 @@ def run_terminal(
                             ),
                             output_fn,
                         )
+            elif action_id in {"exacting_strike", "double_slice", "twin_takedown", "twin_feint"}:
+                from pf2e.content import get_definition
+                from pf2e.model import PairedStrikeSelection
+
+                actor = game._state.creatures.get(engine_options.actor_id or "")
+                definition = get_definition(actor.definition_id) if actor is not None else None
+                choices = tuple(
+                    option for option in engine_options.strikes
+                    if definition is not None and any(
+                        attack.attack_id == option.attack_id
+                        and "melee" in attack.traits
+                        and (
+                            action_id == "exacting_strike"
+                            or action_id != "double_slice"
+                            or attack.hands_required == 1
+                        )
+                        and (
+                            action_id != "twin_feint"
+                            or bool({"agile", "finesse"} & attack.traits)
+                        )
+                        for attack in definition.attacks
+                    )
+                )
+                strike_inputs = _choose_strike_inputs(choices, inspection, input_fn, output_fn)
+                if strike_inputs is not None:
+                    attack_id, target_id, damage_type, nonlethal = strike_inputs
+                    selection = PairedStrikeSelection(target_id, attack_id, damage_type, nonlethal)
+                    if action_id == "exacting_strike":
+                        _run_command(game, ExactingStrike(target_id, attack_id, damage_type, nonlethal), output_fn)
+                    elif action_id == "double_slice":
+                        _run_command(game, DoubleSlice(selection), output_fn)
+                    elif action_id == "twin_takedown":
+                        _run_command(game, TwinTakedown(selection), output_fn)
+                    else:
+                        _run_command(game, TwinFeint(selection), output_fn)
             elif action_id == "sudden_charge":
                 try:
                     first_raw = _read_line(

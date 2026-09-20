@@ -1923,10 +1923,17 @@ class Encounter:
                 and pending.attack_count_cost == 1
                 and "melee" in attack.traits
             )
+            paired_strike_subordinate = (
+                continuation is not None
+                and continuation.kind == "paired_strike"
+                and continuation.paired_strike is not None
+                and pending.attack_actions_cost == 0
+                and pending.attack_count_cost == 1
+            )
             if (
-                pending.attack_actions_cost not in ((0, 1, 2) if sudden_charge_strike else (1, 2))
+                pending.attack_actions_cost not in ((0, 1, 2) if (sudden_charge_strike or paired_strike_subordinate) else (1, 2))
                 or pending.attack_count_cost not in (1, 2)
-                or (not hunter_aim and not sudden_charge_strike and not intimidating_strike and pending.attack_count_cost != pending.attack_actions_cost)
+                or (not hunter_aim and not sudden_charge_strike and not intimidating_strike and not paired_strike_subordinate and pending.attack_count_cost != pending.attack_actions_cost)
                 or (hunter_aim and pending.attack_actions_cost != 2)
             ):
                 raise ValueError("save has inconsistent pending Strike costs")
@@ -4101,6 +4108,37 @@ class Encounter:
             and actor.flourish_used_round != state.round_number
             and self._action_permitted(state, actor, "sudden_charge", frozenset({"flourish", "move"}))
         )
+        melee_pair_attacks = tuple(
+            attack for attack in usable
+            if "melee" in attack.traits and self._strike_targets(actor, state, attack)
+        )
+        can_exacting_strike = (
+            can_act and actor.strikes_this_turn >= 1 and not actor.must_leave_occupied and "exacting_strike" in definition.abilities
+            and bool(melee_pair_attacks)
+            and self._action_permitted(state, actor, "exacting_strike", frozenset({"attack"}))
+        )
+        can_double_slice = (
+            can_act and actions >= 2 and not actor.must_leave_occupied
+            and "double_slice" in definition.abilities
+            and sum(attack.hands_required == 1 for attack in melee_pair_attacks) >= 2
+            and self._action_permitted(state, actor, "double_slice", frozenset({"attack"}))
+        )
+        hunted_prey = actor.hunted_prey
+        can_twin_takedown = (
+            can_act and not actor.must_leave_occupied and "twin_takedown" in definition.abilities
+            and hunted_prey is not None and hunted_prey.target_actor_id in state.creatures
+            and sum(attack.attack_id != "shortbow" for attack in melee_pair_attacks) >= 2
+            and hunted_prey.target_actor_id in {
+                target_id for attack in melee_pair_attacks
+                for target_id in self._strike_targets(actor, state, attack)
+            }
+            and self._action_permitted(state, actor, "twin_takedown", frozenset({"flourish"}))
+        )
+        can_twin_feint = (
+            can_act and actions >= 2 and not actor.must_leave_occupied and "twin_feint" in definition.abilities
+            and sum(bool({"agile", "finesse"} & attack.traits) for attack in melee_pair_attacks) >= 2
+            and self._action_permitted(state, actor, "twin_feint", frozenset({"attack"}))
+        )
         from .monk import is_flurry_strike
 
         can_flurry = (
@@ -4381,6 +4419,10 @@ class Encounter:
             can_combat_grab = False
             can_brutish_shove = False
             can_sudden_charge = False
+            can_exacting_strike = False
+            can_double_slice = False
+            can_twin_takedown = False
+            can_twin_feint = False
             can_flurry = False
             can_hunt_prey = False
             can_hunted_shot = False
@@ -4429,6 +4471,10 @@ class Encounter:
                 ("combat_grab", can_combat_grab),
                 ("brutish_shove", can_brutish_shove),
                 ("sudden_charge", can_sudden_charge),
+                ("exacting_strike", can_exacting_strike),
+                ("double_slice", can_double_slice),
+                ("twin_takedown", can_twin_takedown),
+                ("twin_feint", can_twin_feint),
                 ("dueling_parry", can_dueling_parry),
                 ("crane_stance", can_crane_stance),
                 ("dismiss_crane_stance", can_dismiss_crane_stance),
@@ -5585,6 +5631,29 @@ class Encounter:
             return FamilyProcedureResult(rejection="Intimidating Strike needs its fighter command.")
         return self._start_committed_strike_rider(context, command, "intimidating_strike")
 
+    def _start_w4_exacting_strike(self, context, command):
+        """Commit Exacting Strike to the ordinary melee Strike pipeline."""
+        from .w4_offensive import ExactingStrike
+
+        if not isinstance(command, ExactingStrike):
+            return FamilyProcedureResult(rejection="Exacting Strike needs its typed command.")
+        attack = self._select_attack(context.state, context.actor, command.attack_id, item_id=command.item_id)
+        target = context.state.creatures.get(command.target_id)
+        if attack is None or target is None or "melee" not in attack.traits:
+            return FamilyProcedureResult(rejection="Exacting Strike requires an available melee Strike and active target.")
+        parent = ActionContinuation(
+            kind="exacting_strike", actor_id=context.actor.actor_id,
+            target_id=command.target_id, attack_id=command.attack_id,
+        )
+        events = self._start_strike(
+            context.state, context.dice, context.actor,
+            command.target_id, command.attack_id, command.item_id,
+            command.damage_type, command.nonlethal,
+            actions_cost=1, attack_count_cost=1, vicious_swing=False,
+            melee_required=True, parent=parent,
+        )
+        return FamilyProcedureResult(events=tuple(events))
+
     def _start_committed_strike_rider(self, context, command, kind):
         """Commit the finite Fighter result-rider family to one Strike path."""
         from .fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike
@@ -5720,7 +5789,7 @@ class Encounter:
                 events.append(Event("brutish_shove_follow", actor.actor_id, target.actor_id, f"{actor.label} follows the Shoved target without triggering reactions.", position=follow))
         return events
 
-    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None):
+    def _start_strike(self, state, dice, actor, target_id, attack_id, item_id, damage_type, nonlethal, *, actions_cost, attack_count_cost, vicious_swing, melee_required=False, use_intelligence=None, finisher=False, parent=None, bomber_only_primary_splash=False, hunter_aim_intent=None, attack_penalty_adjustment=0, target_off_guard_override=None):
         if not isinstance(target_id, str):
             raise _Rejected("Strike target id must be text.")
         if actions_cost > actor.actions_remaining:
@@ -5878,15 +5947,20 @@ class Encounter:
 
         feint_off_guard_applied = self._commit_feint_strike(state, actor, target, attack)
         tumble_behind_off_guard = self._commit_tumble_behind_strike(state, actor, target)
-        target_off_guard = self._attacker_off_guard(
-            state,
-            actor,
-            target,
-            attack,
-            feint_off_guard=feint_off_guard_applied,
-            tumble_behind_off_guard=tumble_behind_off_guard,
+        target_off_guard = (
+            target_off_guard_override
+            if target_off_guard_override is not None
+            else self._attacker_off_guard(
+                state,
+                actor,
+                target,
+                attack,
+                feint_off_guard=feint_off_guard_applied,
+                tumble_behind_off_guard=tumble_behind_off_guard,
+            )
         )
         penalty = multiple_attack_penalty(actor.strikes_this_turn, attack.traits)
+        penalty += attack_penalty_adjustment
         actor.actions_remaining -= actions_cost
         state.taking_cover.discard(actor.actor_id)
         if not is_ranged:
@@ -5946,6 +6020,14 @@ class Encounter:
         if len(paired.selections) != paired.next_index + 1 or len(paired.outcomes) != paired.next_index:
             return FamilyProcedureResult(rejection="The paired Strike stage is inconsistent.")
         selection = paired.selections[paired.next_index]
+        if paired.activity_id == "fighter:double_slice" and paired.next_index == 1:
+            # Double Slice makes both one-handed Strikes at the same current
+            # MAP, then counts as two attacks for later actions.
+            context.actor.strikes_this_turn = paired.initial_attack_count
+        selected_attack = next(
+            attack for attack in get_definition(context.actor.definition_id).attacks
+            if attack.attack_id == selection.attack_id
+        )
         parent = ActionContinuation(
             kind="paired_strike",
             actor_id=context.actor.actor_id,
@@ -5956,6 +6038,18 @@ class Encounter:
             selection.target_id, selection.attack_id, None,
             selection.damage_type, selection.nonlethal,
             actions_cost=0, attack_count_cost=1, vicious_swing=False,
+            attack_penalty_adjustment=(
+                -2
+                if paired.activity_id == "fighter:double_slice"
+                and paired.next_index == 1
+                and "agile" not in selected_attack.traits
+                else 0
+            ),
+            target_off_guard_override=(
+                True
+                if paired.activity_id == "rogue:twin_feint" and paired.next_index == 1
+                else None
+            ),
             parent=parent,
         )
         return FamilyProcedureResult(events=tuple(events))
@@ -6360,6 +6454,16 @@ class Encounter:
                         nonlethal=nonlethal,
                         hit=False,
                     )
+                if check.degree is DegreeOfSuccess.FAILURE:
+                    current = continuation
+                    while current is not None and current.kind != "exacting_strike":
+                        current = current.parent_continuation
+                    if current is not None and actor.strikes_this_turn > 0:
+                        actor.strikes_this_turn -= 1
+                        events.append(Event(
+                            "exacting_strike_exact", actor.actor_id, target.actor_id,
+                            f"{actor.label}'s Exacting Strike misses without increasing its multiple attack penalty.",
+                        ))
                 events.extend(self._resume_continuation(
                     state, dice, continuation,
                     critical=check.degree is DegreeOfSuccess.CRITICAL_FAILURE,
@@ -12176,7 +12280,7 @@ class Encounter:
                 "sudden_charge_complete", actor.actor_id, continuation.target_id,
                 f"{actor.label} completes Sudden Charge.",
             )], dice=dice)
-        if continuation.kind in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove"}:
+        if continuation.kind in {"intimidating_strike", "snagging_strike", "combat_grab", "brutish_shove", "exacting_strike"}:
             return self._complete_action(state, actor, [Event(
                 f"{continuation.kind}_complete", actor.actor_id, continuation.target_id,
                 f"{actor.label} completes {continuation.kind.replace('_', ' ')}.",

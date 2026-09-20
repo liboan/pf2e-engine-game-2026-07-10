@@ -1110,6 +1110,19 @@ CREATURES: Mapping[str, CreatureDefinition] = MappingProxyType(
     }
 )
 
+# W4 offensive lane: four source-selected level-1 feats with finite weapon
+# fixtures.  The builder is kept separate so the central catalog remains the
+# only admission point and the lane can own its source/fixture notes.
+from .w4_offensive_content import build_w4_offensive_content
+
+W4_OFFENSIVE_DEFINITIONS, W4_OFFENSIVE_SETUPS = build_w4_offensive_content(
+    fighter=MELEE_FIGHTER_M,
+    ranger=RANGER_PRECISION,
+    rogue=ROGUE_THIEF_PLAYABLE,
+    enemy_definition_id=GUARD_DOG.definition_id,
+)
+CREATURES = MappingProxyType({**CREATURES, **W4_OFFENSIVE_DEFINITIONS})
+
 ROGUE_THIEF_SETUP = EncounterSetup(
     setup_id="rogue_thief_vs_guard_dog",
     name="Thief Rogue's Observed Social Ambush",
@@ -1446,6 +1459,7 @@ WEAPON_IDENTITY_SHORTSWORD_SETUP = EncounterSetup(
 SETUPS: Mapping[str, EncounterSetup] = MappingProxyType(
     {
         ROGUE_THIEF_SETUP.setup_id: ROGUE_THIEF_SETUP,
+        **{setup.setup_id: setup for setup in W4_OFFENSIVE_SETUPS},
         ROGUE_THIEF_FIGHTER_SETUP.setup_id: ROGUE_THIEF_FIGHTER_SETUP,
         ROGUE_THIEF_WARPRIEST_SETUP.setup_id: ROGUE_THIEF_WARPRIEST_SETUP,
         BARBARIAN_TEST_SETUP.setup_id: BARBARIAN_TEST_SETUP,
