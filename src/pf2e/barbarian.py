@@ -49,6 +49,7 @@ SPIRIT_INSTINCT = "spirit"
 SUPERSTITION_INSTINCT = "superstition"
 RAGING_INTIMIDATION = "raging_intimidation"
 MOMENT_OF_CLARITY = "moment_of_clarity"
+NO_ESCAPE = "no_escape"
 BARBARIAN_FEAT_IDS = frozenset({RAGING_INTIMIDATION, MOMENT_OF_CLARITY})
 KEEP_EXISTING_TEMP_HP = "keep_existing"
 GAIN_NEW_RAGE_TEMP_HP = "gain_new"
@@ -929,6 +930,31 @@ def action_traits_with_instinct_features(
     ):
         return traits | {"rage"}
     return traits
+
+
+def no_escape_is_eligible(
+    *,
+    abilities: tuple[str, ...],
+    rage_active: bool,
+    reaction_available: bool,
+    enemy_started_in_reach: bool,
+    enemy_is_moving_away: bool,
+) -> bool:
+    """Check No Escape's local trigger facts without moving either creature.
+
+    The shared movement transaction owns the exact maintained-reach proof,
+    path validation, reaction cost, interruption, and saved continuation.
+    This predicate prevents the reaction from being offered to a non-raging
+    Barbarian or for movement that never leaves its reach.
+    """
+
+    return (
+        "no_escape" in abilities
+        and rage_active
+        and reaction_available
+        and enemy_started_in_reach
+        and enemy_is_moving_away
+    )
 
 
 def quick_tempered_eligible(

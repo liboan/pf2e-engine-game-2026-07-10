@@ -76,7 +76,10 @@ def _resolve_lay(context: FamilyProcedureContext, continuation: ActionContinuati
     amount = 0 if target.oracle_life_mode == "death" else 6
     if amount and "life_oracle" in get_definition(target.definition_id).abilities:
         from .oracle import healing_after_curse
-        amount = healing_after_curse(amount, target.oracle_cursebound)
+        amount = healing_after_curse(
+            amount, target.oracle_cursebound,
+            level=get_definition(target.definition_id).level,
+        )
     if amount and target.health_mode.value == "pc":
         transition = pc_healing(encounter._health_state(target), amount)
         encounter._apply_health_transition(state, target, transition)

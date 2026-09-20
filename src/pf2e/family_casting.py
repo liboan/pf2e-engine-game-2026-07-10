@@ -175,12 +175,22 @@ def begin_cast(context: FamilyProcedureContext, command: Cast) -> FamilyProcedur
             return FamilyProcedureResult(rejection="Sigil requires exactly one touched creature or physical item.")
         if command.target_id is not None:
             target = context.state.creatures.get(command.target_id)
-            if target is None or target.dead or grid_distance_feet(context.actor.position, target.position) > 5:
+            if (
+                target is None
+                or target.dead
+                or grid_distance_feet(context.actor.position, target.position)
+                > reach_spell_effective_range_ft
+            ):
                 return FamilyProcedureResult(rejection="Sigil requires one living creature within touch range.")
         else:
             item_id = command.item_id
             position = context.encounter._item_position(context.state, item_id or "")
-            if item_id not in context.state.item_instances or position is None or grid_distance_feet(context.actor.position, position) > 5:
+            if (
+                item_id not in context.state.item_instances
+                or position is None
+                or grid_distance_feet(context.actor.position, position)
+                > reach_spell_effective_range_ft
+            ):
                 return FamilyProcedureResult(rejection="Sigil requires one physical item within touch range.")
     if detect_magic:
         if command.target_id is not None or command.target_ids is not None or command.item_id is not None:

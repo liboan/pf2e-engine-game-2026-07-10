@@ -22,7 +22,7 @@ from .spells import SpellDefinition
 # two-action forms are target spells, while the three-action form is an
 # emanation.  The encounter integration supplies a mode-normalized spell to
 # ``effective_spell_range`` (touch=0, two-action Heal=30).
-_TOUCH_RANGE_SPELL_IDS = frozenset({"heal", "runic_weapon"})
+_TOUCH_RANGE_SPELL_IDS = frozenset({"heal", "runic_weapon", "runic_body"})
 
 
 def can_shape_spell(spell: SpellDefinition, *, spell_actions: int) -> bool:
