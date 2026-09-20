@@ -1,5 +1,7 @@
 # Working rules
 
+Content W2 is accepted and closed; see ACTIVE for final evidence. Preserve these working rules for future authorized assignments. No automatic follow-on wave is authorized.
+
 ## Direction, ownership and checkouts
 
 - Build a local Python PF2e engine with a simple terminal interface. Keep literal local state; no browser, server, network or distributed-state machinery.

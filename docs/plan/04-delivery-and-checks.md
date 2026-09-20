@@ -1,5 +1,7 @@
 # Content W2 working model
 
+**W2 accepted and closed.** The existing execution heartbeat is paused. These instructions preserve the operating model for future authorized work; no automatic next wave is authorized. Final evidence is in [ACTIVE](../work-log/ACTIVE.md).
+
 This working model supersedes the historical Terra-only, native-subagent-only and completed-generalization-only execution rules. The user authorized Content W2 now, reusing the existing six tasks, roles/models and worktrees, with broader coherent families and corrected routing. W1 is accepted; W2 is a new assignment, not replacement tasks. No further planning approval is needed. Historical evidence is preserved in [the previous recovery snapshot](../work-log/archive/active-before-content-w1-2026-09-20.md) and [previous workflow](../work-log/archive/working-model-before-content-w1-2026-09-20.md); their execution instructions are not current.
 
 ## Team and checkouts
