@@ -1295,6 +1295,9 @@ class ActiveSpellEffect:
     # each encounter round.  A round marker belongs to the literal link, not
     # the target, so save/load cannot accidentally replay its reduction.
     life_link_used_round: int = 0
+    # Glue Bomb's printed removal option counts one-action Interacts across
+    # turns and actors; other effects leave this at zero.
+    glue_removal_actions: int = 0
 
 
 @dataclass(frozen=True)

@@ -300,7 +300,7 @@ BOMBER_W3_FORMULAS: tuple[AlchemyFormula, ...] = (
             on_critical_hit_value=2,
         ),
         traits=frozenset({"alchemical", "consumable", "bomb", "emotion", "fear", "mental", "poison", "splash", "thrown"}), bulk="L", hands_required=1,
-        activation_actions=1, activation_kind="strike", source_url="https://2e.aonprd.com/Equipment.aspx?ID=2877",
+        activation_actions=1, activation_kind="strike", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3292",
     ),
     AlchemyFormula(
         formula_id="glue_bomb_lesser",
@@ -311,7 +311,7 @@ BOMBER_W3_FORMULAS: tuple[AlchemyFormula, ...] = (
             on_critical_hit_effect="glue_immobilized", on_critical_hit_value=1,
         ),
         traits=frozenset({"alchemical", "consumable", "bomb", "thrown"}), bulk="L", hands_required=1,
-        activation_actions=1, activation_kind="strike", source_url="https://2e.aonprd.com/Sources.aspx?ID=227",
+        activation_actions=1, activation_kind="strike", source_url="https://2e.aonprd.com/Equipment.aspx?ID=3295",
     ),
 )
 

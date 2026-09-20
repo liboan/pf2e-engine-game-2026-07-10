@@ -7744,6 +7744,21 @@ class Encounter:
             ))
             return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
         if facts.on_hit_effect == "frightened":
+            from .opponent_content import PUBLISHED_OPPONENT_PROFILES
+
+            dynamic_immunity = any(
+                immunity.target_actor_id == target.actor_id
+                and immunity.expires_at_seconds > state.world_time_seconds
+                and immunity.kind in {"mental", "poison", "fear", "emotion", "frightened"}
+                for immunity in state.condition_immunities
+            )
+            published = PUBLISHED_OPPONENT_PROFILES.get(target.definition_id)
+            printed_immunity = published is not None and bool(
+                {"mental", "poison", "fear", "emotion", "frightened"}
+                & set(published.condition_immunities)
+            )
+            if dynamic_immunity or printed_immunity:
+                return []
             value = facts.on_critical_hit_value if critical and facts.on_critical_hit_value is not None else facts.on_hit_effect_value or 1
             state.condition_effects[:] = [
                 effect for effect in state.condition_effects
@@ -7780,10 +7795,10 @@ class Encounter:
                 state.condition_effects.append(ActiveConditionEffect(
                     f"{glue_id}:immobilized", "immobilized", attacker.actor_id, target.actor_id,
                     facts.on_critical_hit_value or 1,
-                    EffectExpiration(target.actor_id, "end", state.actor_end_counts.get(target.actor_id, 0) + 1),
+                    EffectExpiration(attacker.actor_id, "start", state.actor_start_counts.get(attacker.actor_id, 0) + 1),
                     facts.on_hit_effect_dc,
                 ))
-                text = f"{target.label} takes a -{value}-foot status penalty and is stuck to the solid ground until its next turn ends."
+                text = f"{target.label} takes a -{value}-foot status penalty and is stuck to the solid ground for 1 round, until {attacker.label}'s next turn starts."
             else:
                 text = f"{target.label} takes a -{value}-foot status penalty to all Speeds for {duration} seconds."
             return [Event("bomb_rider", attacker.actor_id, target.actor_id, text)]
@@ -8354,6 +8369,15 @@ class Encounter:
             and effect.expires_at_world_time > state.world_time_seconds
             and effect.target_actor_id in state.creatures
             and grid_distance_feet(actor.position, state.creatures[effect.target_actor_id].position) <= 5
+        )
+        choices.extend(
+            ("remove_glue", effect.effect_id)
+            for effect in state.active_effects
+            if effect.kind == "alchemy_glue_bomb_lesser"
+            and effect.target_actor_id in state.creatures
+            and not state.creatures[effect.target_actor_id].dead
+            and grid_distance_feet(actor.position, state.creatures[effect.target_actor_id].position) <= 5
+            and effect.glue_removal_actions < 3
         )
         choices.extend(
             ("toggle_sigil", effect.effect_id)
@@ -12360,6 +12384,39 @@ class Encounter:
                 actor.worn_items.remove(item_id)
             actor.held_items.append(item_id)
             text = f"{actor.label} draws {item_id}."
+        elif mode == "remove_glue":
+            effect = next(
+                (current for current in state.active_effects
+                 if current.effect_id == item_id
+                 and current.kind == "alchemy_glue_bomb_lesser"
+                 and current.target_actor_id in state.creatures
+                 and not state.creatures[current.target_actor_id].dead
+                 and grid_distance_feet(actor.position, state.creatures[current.target_actor_id].position) <= 5),
+                None,
+            )
+            if effect is None:
+                raise _Rejected("The selected Glue Bomb effect is no longer in reach.")
+            count = effect.glue_removal_actions + 1
+            if count >= 3:
+                state.active_effects.remove(effect)
+                base_id = effect.effect_id
+                state.condition_effects[:] = [
+                    current for current in state.condition_effects
+                    if current.effect_id != f"{base_id}:immobilized"
+                ]
+                return Event(
+                    "glue_removed", actor.actor_id, effect.target_actor_id,
+                    f"{actor.label} completes the third careful action and removes the Glue Bomb effects.",
+                    position=actor.position,
+                )
+            state.active_effects[state.active_effects.index(effect)] = replace(
+                effect, glue_removal_actions=count,
+            )
+            return Event(
+                "glue_removal_progress", actor.actor_id, effect.target_actor_id,
+                f"{actor.label} carefully removes part of the Glue Bomb residue ({count}/3 actions).",
+                position=actor.position,
+            )
         elif mode == "stow" and item_id in actor.held_items:
             actor.held_items.remove(item_id)
             actor.stowed_items.append(item_id)

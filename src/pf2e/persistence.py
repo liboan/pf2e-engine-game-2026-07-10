@@ -629,7 +629,8 @@ def _state_to_data(state: EncounterState) -> dict[str, Any]:
              effect.target_actor_id, effect.value, effect.expires_at_source_start,
              effect.expires_at_world_time, effect.sustain_limit_source_start,
              effect.sustain_limit_world_time, effect.sustain_expires_at_source_end,
-             effect.selected_enemy_actor_id, effect.life_link_used_round]
+             effect.selected_enemy_actor_id, effect.life_link_used_round,
+             effect.glue_removal_actions]
             for effect in state.active_effects
         ],
         "persistent_effects": [
@@ -752,6 +753,7 @@ def _valid_alchemy_bomb_rider_effect(
         row[0].startswith("glue_bomb:")
         and row[1] == "alchemy_glue_bomb_lesser"
         and row[4] == facts.on_hit_effect_value == 10
+        and row[12] in {0, 1, 2}
         and row[5] == starts[row[2]] + 1
         and type(row[6]) is int
         and world_time_seconds < row[6] <= world_time_seconds + (facts.on_hit_effect_duration_seconds or 0)
@@ -767,6 +769,7 @@ def _valid_alchemy_bomb_rider_effect(
 def _valid_bomber_bomb_condition_effect(
     effect: ActiveConditionEffect,
     creatures: dict[str, CreatureState],
+    starts: dict[str, int],
     ends: dict[str, int],
     active_effects: list[ActiveSpellEffect],
 ) -> bool:
@@ -787,9 +790,9 @@ def _valid_bomber_bomb_condition_effect(
         return (
             effect.value == 1
             and effect.dc == 17
-            and effect.expiration.anchor_actor_id == effect.target_actor_id
-            and effect.expiration.boundary == "end"
-            and effect.expiration.occurrence == ends[effect.target_actor_id] + 1
+            and effect.expiration.anchor_actor_id == effect.source_actor_id
+            and effect.expiration.boundary == "start"
+            and effect.expiration.occurrence == starts[effect.source_actor_id] + 1
             and any(
                 current.effect_id == glue_id
                 and current.kind == "alchemy_glue_bomb_lesser"
@@ -2175,14 +2178,16 @@ def _state_from_data(data: Any) -> EncounterState:
         if not isinstance(raw_row, list):
             raise ValueError("save has invalid active spell effect")
         if len(raw_row) == 7:
-            row = [*raw_row, 0, None, 0, None, 0]
+            row = [*raw_row, 0, None, 0, None, 0, 0]
         elif len(raw_row) == 9:
-            row = [*raw_row, 0, None, 0]
+            row = [*raw_row, 0, None, 0, 0]
         elif len(raw_row) == 10:
-            row = [*raw_row, None, 0]
+            row = [*raw_row, None, 0, 0]
         elif len(raw_row) == 11:
-            row = [*raw_row, 0]
+            row = [*raw_row, 0, 0]
         elif len(raw_row) == 12:
+            row = [*raw_row, 0]
+        elif len(raw_row) == 13:
             row = raw_row
         else:
             raise ValueError("save has invalid active spell effect")
@@ -2195,6 +2200,7 @@ def _state_from_data(data: Any) -> EncounterState:
             or type(row[9]) is not int or row[9] < 0
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
+            or type(row[12]) is not int or row[12] < 0
             or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
@@ -2244,6 +2250,14 @@ def _state_from_data(data: Any) -> EncounterState:
                     row, creatures, starts_raw, world_time_seconds,
                     infused_alchemy_items, consumed_infused_item_ids,
                 )
+            )
+            or (
+                row[1] != "alchemy_glue_bomb_lesser"
+                and row[12] != 0
+            )
+            or (
+                row[1] == "alchemy_glue_bomb_lesser"
+                and row[12] > 2
             )
             or (
                 row[1] == "dueling_parry"
@@ -2811,7 +2825,7 @@ def _state_from_data(data: Any) -> EncounterState:
               or effect.expiration.anchor_actor_id != effect.target_actor_id or effect.expiration.boundary != "end"):
             raise ValueError("save has invalid Command effect")
         if effect.effect_id.startswith(("dread_ampoule:", "glue_bomb:")) and not _valid_bomber_bomb_condition_effect(
-            effect, creatures, ends_raw, effects,
+            effect, creatures, starts_raw, ends_raw, effects,
         ):
             raise ValueError("save has invalid Bomber bomb condition provenance")
         completed_count = starts_raw[expiration.anchor_actor_id] if expiration.boundary == "start" else ends_raw[expiration.anchor_actor_id]

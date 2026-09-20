@@ -1786,6 +1786,10 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
     if outcome.free_of_selected_impediment:
         linked_vine = effect.effect_id.startswith("tangle_vine:")
         linked_glue = effect.effect_id.startswith("glue_bomb:")
+        glue_base_id = (
+            effect.effect_id.removesuffix(":immobilized")
+            if linked_glue else None
+        )
         removed_effects = tuple(
             current for current in context.state.condition_effects
             if (
@@ -1796,7 +1800,7 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
                 )
                 or (
                     linked_glue
-                    and current.effect_id.startswith(effect.effect_id.rsplit(":", 1)[0])
+                    and current.effect_id == f"{glue_base_id}:immobilized"
                 )
             )
         )
@@ -1805,8 +1809,7 @@ def _finish_escape(context: FamilyProcedureContext, command: Escape, check_conte
         if linked_glue:
             context.state.active_effects = [
                 current for current in context.state.active_effects
-                if current.effect_id != effect.effect_id
-                and not current.effect_id.startswith(effect.effect_id.rsplit(":", 1)[0])
+                if current.effect_id != glue_base_id
             ]
         events.append(Event("condition_removed", context.actor.actor_id, source.actor_id, f"{context.actor.label} escapes the selected effect imposed by {source.label}.", check=outcome.check))
     if outcome.retry_blocked_until_next_turn:
