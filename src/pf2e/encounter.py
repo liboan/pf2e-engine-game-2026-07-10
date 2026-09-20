@@ -13852,10 +13852,16 @@ class Encounter:
         starts = state.actor_start_counts
         assert starts is not None
         starts[actor.actor_id] = starts.get(actor.actor_id, 0) + 1
+        hymn_sources = {
+            effect.effect_id: effect.source_actor_id
+            for effect in state.active_effects
+            if effect.kind == "hymn_of_healing"
+        }
         for recipient in state.creatures.values():
             if (
                 recipient.temporary_hp_source_id is not None
                 and recipient.temporary_hp_source_id.startswith("hymn_of_healing:")
+                and hymn_sources.get(recipient.temporary_hp_source_id) == actor.actor_id
                 and recipient.temporary_hp_expires_at_source_start
                 and recipient.temporary_hp_expires_at_source_start <= starts[actor.actor_id]
             ):
