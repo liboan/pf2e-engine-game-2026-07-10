@@ -3,7 +3,7 @@
 from .encounter import Encounter
 from .barbarian import Rage
 from .skill_actions import Feint
-from .martial_defense import CraneStance, DismissCraneStance, DuelingParry
+from .martial_defense import CraneStance, DismissCraneStance, DuelingParry, ExtravagantParry
 from .model import (
     ActionResult,
     ActionOptions,
@@ -76,6 +76,7 @@ __all__ = [
     "CraneStance",
     "DismissCraneStance",
     "DuelingParry",
+    "ExtravagantParry",
     "FamilyCommand",
     "FamilyProcedureContext",
     "FamilyProcedureResult",

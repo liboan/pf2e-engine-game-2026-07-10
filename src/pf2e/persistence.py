@@ -43,7 +43,7 @@ from .model import (
 from .conditions import CheckContext, ConditionValue, effective_condition_value
 from .health import HealthState, HealthTransition
 from .items import ItemInstance, STEEL_SHIELD, runtime_item_instance_id
-from .martial_defense import dueling_parry_requirements_met
+from .martial_defense import dueling_parry_requirements_met, extravagant_parry_requirements_met
 from .rune_content import ITEM_CATEGORIES, weapon_rune_profile_for_item
 from .checks import (
     CheckResult,
@@ -89,6 +89,7 @@ from .alchemy import AlchemyState, InfusedAlchemyItem
 from .alchemy_content import FORMULAS_BY_ID
 from .spells import CONCEALMENT_TARGETED_SPELL_IDS, SPELLS
 from .preparation import has_variable_preparations, prepared_slot_rejection
+from .w5_arms_persistence import W5_ARMS_ACTIVE_EFFECT_KINDS
 
 
 SAVE_VERSION = 18
@@ -2230,6 +2231,7 @@ def _state_from_data(data: Any) -> EncounterState:
     fleeing_pairs: set[tuple[str, str]] = set()
     life_link_sources: set[str] = set()
     dueling_parry_sources: set[str] = set()
+    extravagant_parry_sources: set[str] = set()
     for raw_row in effects_raw:
         # v17 saves before sustained-spell clocks stored the original seven
         # fields.  The appended Link round marker preserves all prior rows.
@@ -2259,14 +2261,14 @@ def _state_from_data(data: Any) -> EncounterState:
             or (row[10] is not None and (not isinstance(row[10], str) or not row[10]))
             or type(row[11]) is not int or row[11] < 0
             or type(row[12]) is not int or row[12] < 0
-            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+            or row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", *W5_ARMS_ACTIVE_EFFECT_KINDS, "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
             or row[2] not in expected_ids or row[3] not in expected_ids
             or (row[10] is not None and row[10] not in expected_ids)
             or row[0] in active_effect_ids
             or row[5] <= starts_raw[row[2]]
             or (row[6] is not None and type(row[6]) is not int)
             or (
-                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
+                row[1] not in {"guidance", "enfeebled", "frostbite_weakness", "runic_body", "blood_magic", "angelic_halo", "courageous_anthem", "fleeing", "sure_strike", "soothe", "protection", "lay_on_hands_ac", "stoke_the_heart", "forbidding_ward", "life_link", "sigil", "dueling_parry", "extravagant_parry", "energy_ablation", "weapon_surge", "alchemy_elixir_of_life_minor", "alchemy_antidote_lesser", "alchemy_antiplague_lesser", "alchemy_cheetahs_elixir_lesser", "alchemy_bravos_brew_lesser", "alchemy_bestial_mutagen_lesser", "alchemy_cognitive_mutagen_lesser", "alchemy_juggernaut_mutagen_lesser", "alchemy_giant_centipede_venom_coating", "alchemy_glue_bomb_lesser"}
                 and row[6] is not None
             )
             or (
@@ -2332,6 +2334,21 @@ def _state_from_data(data: Any) -> EncounterState:
                         get_definition(creatures[row[2]].definition_id),
                     )
                     or row[2] in dueling_parry_sources
+                )
+            )
+            or (
+                row[1] == "extravagant_parry"
+                and (
+                    row[4] not in {1, 2}
+                    or row[2] != row[3]
+                    or row[5] != starts_raw[row[2]] + 1
+                    or row[6] is not None
+                    or "Extravagant Parry" not in get_definition(creatures[row[2]].definition_id).feats
+                    or not extravagant_parry_requirements_met(
+                        item_instances, creatures[row[2]],
+                        get_definition(creatures[row[2]].definition_id),
+                    )[0]
+                    or row[2] in extravagant_parry_sources
                 )
             )
             or (
@@ -2651,6 +2668,8 @@ def _state_from_data(data: Any) -> EncounterState:
         active_effect_ids.add(row[0])
         if row[1] == "dueling_parry":
             dueling_parry_sources.add(row[2])
+        if row[1] == "extravagant_parry":
+            extravagant_parry_sources.add(row[2])
         if row[1] == "blood_magic":
             blood_magic_sources.add(row[2])
         if row[1] == "angelic_halo":

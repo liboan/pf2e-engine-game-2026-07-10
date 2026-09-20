@@ -2079,9 +2079,7 @@ class Encounter:
         distance = grid_distance_feet(actor.position, target.position)
         expected_ranged_penalty = 0
         if "ranged" in attack.traits:
-            range_increment_ft, max_range_ft = self._effective_ranged_profile(
-                state, actor, attack,
-            )
+            range_increment_ft, max_range_ft = self._effective_ranged_profile(state, actor, attack)
             if max_range_ft is None or range_increment_ft is None or distance > max_range_ft:
                 raise ValueError("save has an out-of-range pending Strike")
             expected_ranged_penalty = -2 * max(0, (distance - 1) // range_increment_ft)
@@ -4352,7 +4350,10 @@ class Encounter:
             )
             and self._action_permitted(state, actor, "cackle", frozenset({"auditory", "concentrate"}))
         )
-        from .martial_defense import crane_stance_is_active, dueling_parry_requirements_met
+        from .martial_defense import (
+            crane_stance_is_active, dueling_parry_requirements_met,
+            extravagant_parry_requirements_met,
+        )
         from .martial_defense import point_blank_stance_is_active
 
         can_dueling_parry = (
@@ -4360,6 +4361,12 @@ class Encounter:
             and "dueling_parry" in definition.abilities
             and dueling_parry_requirements_met(state.item_instances, actor, definition)
             and self._action_permitted(state, actor, "dueling_parry", frozenset())
+        )
+        can_extravagant_parry = (
+            can_act and actions >= 1 and not actor.must_leave_occupied
+            and "Extravagant Parry" in definition.feats
+            and extravagant_parry_requirements_met(state, actor, definition)[0]
+            and self._action_permitted(state, actor, "extravagant_parry", frozenset())
         )
         can_crane_stance = (
             can_act and actions >= 1 and not actor.must_leave_occupied
@@ -4557,6 +4564,7 @@ class Encounter:
             can_energy_ablation = False
             can_cackle = False
             can_dueling_parry = False
+            can_extravagant_parry = False
             can_crane_stance = False
             can_dismiss_crane_stance = False
             can_point_blank_stance = False
@@ -4602,6 +4610,7 @@ class Encounter:
                 ("twin_takedown", can_twin_takedown),
                 ("twin_feint", can_twin_feint),
                 ("dueling_parry", can_dueling_parry),
+                ("extravagant_parry", can_extravagant_parry),
                 ("crane_stance", can_crane_stance),
                 ("dismiss_crane_stance", can_dismiss_crane_stance),
                 ("point_blank_stance", can_point_blank_stance),
@@ -4922,10 +4931,14 @@ class Encounter:
         # requirement. Resolve every completed command first, then discard a
         # guard whose equipment facts no longer qualify; a later retrieve or
         # draw cannot reactivate that same use of the feat.
-        from .martial_defense import end_dueling_parries_with_broken_requirements
+        from .martial_defense import (
+            end_dueling_parries_with_broken_requirements,
+            end_extravagant_parries_with_broken_requirements,
+        )
         from .fighter import end_snagging_strikes_out_of_reach
 
         end_dueling_parries_with_broken_requirements(draft)
+        end_extravagant_parries_with_broken_requirements(draft)
         end_snagging_strikes_out_of_reach(draft)
 
         self._state = draft
@@ -6170,6 +6183,10 @@ class Encounter:
         state.taking_cover.discard(actor.actor_id)
         if not is_ranged:
             actor.strikes_this_turn += attack_count_cost
+        if attack.item_id is not None:
+            from .strike_hooks import committed_first_weapon_attempt
+
+            committed_first_weapon_attempt(state, actor=actor, attack=attack)
         if vicious_swing:
             actor.flourish_used_round = state.round_number
         selected_item_id = self._held_attack_item_id(state, actor, attack, item_id=item_id)
@@ -6587,6 +6604,11 @@ class Encounter:
         bomber_only_primary_splash=False,
     ) -> list[Event]:
         events = [self._attack_event(actor, target, check)]
+        from .strike_hooks import final_check_outcome
+
+        events.extend(final_check_outcome(
+            state, attacker=actor, target=target, attack=attack, check=check
+        ))
         weapon_surge = self._weapon_surge_applies(state, actor, attack, item_id)
         finisher = bool(continuation is not None and continuation.finisher)
         if check.degree not in (DegreeOfSuccess.SUCCESS, DegreeOfSuccess.CRITICAL_SUCCESS):
@@ -7922,6 +7944,19 @@ class Encounter:
             details=details,
             shield_block=outcome.shield_block,
         )]
+        if resolution.source_kind == "strike" and resolution.attacker_critical and damage.total > 0:
+            from .strike_hooks import post_mitigation_damaging_critical
+
+            hook_event = post_mitigation_damaging_critical(
+                state,
+                attacker=attacker,
+                target=target,
+                attack=self._find_attack(state, attacker, resolution.attack_id or ""),
+                damage=damage,
+                check=resolution.check,
+            )
+            if hook_event is not None:
+                events.append(hook_event)
         if health_choice is not None:
             event_kind = "heroic_recovery" if health_choice == "heroic_recovery" else "health_changed"
             events.append(Event(
@@ -8419,21 +8454,15 @@ class Encounter:
         )
 
     def _effective_ranged_profile(self, state, actor, attack):
-        """Return the finite selected-Bomber range profile for an attack."""
-        if attack.max_range_ft is None or attack.range_increment_ft is None:
-            return attack.range_increment_ft, attack.max_range_ft
-        alchemy_state = state.alchemy_states.get(actor.actor_id)
-        if (
-            self._admitted_bomber_bomb_facts(
-                attack.item_id, character_level=get_definition(actor.definition_id).level,
-            ) is None
-            or alchemy_state is None
-        ):
-            return attack.range_increment_ft, attack.max_range_ft
-        from .alchemy import bomber_bomb_range_increment
+        """Return the finite selected ranged profile for an attack."""
+        from .ranged_profiles import effective_ranged_profile
 
-        increment = bomber_bomb_range_increment(alchemy_state, attack.range_increment_ft)
-        return increment, increment * 6
+        bomber_facts = self._admitted_bomber_bomb_facts(
+            attack.item_id, character_level=get_definition(actor.definition_id).level,
+        )
+        return effective_ranged_profile(
+            state, actor, attack, bomber_facts=bomber_facts
+        )
 
     def _strike_targets(self, actor: CreatureState, state: EncounterState, attack=None) -> tuple[str, ...]:
         definition = get_definition(actor.definition_id)

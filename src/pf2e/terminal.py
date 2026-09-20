@@ -61,6 +61,7 @@ _ACTION_LABELS = {
     "brutish_shove": "Brutish Shove",
     "sudden_charge": "Sudden Charge",
     "dueling_parry": "Dueling Parry",
+    "extravagant_parry": "Extravagant Parry",
     "crane_stance": "Crane Stance",
     "dismiss_crane_stance": "Dismiss Crane Stance",
     "point_blank_stance": "Point Blank Stance",
@@ -393,6 +394,14 @@ def render_actor_lines(actors: Sequence[Mapping[str, object]]) -> str:
 
 def render_support_summary(setup_id: str = "s1_duel") -> str:
     """Explain the admitted boundary for a known setup."""
+    if setup_id in {
+        "w5_raging_thrower_vs_guard",
+        "w5_extravagant_parry_vs_guard",
+        "w5_strong_arm_vs_guard",
+    }:
+        from .w5_arms_terminal import W5_ARMS_SCOPE_NOTICE
+
+        return W5_ARMS_SCOPE_NOTICE
     if setup_id.startswith("s3_"):
         from pf2e.content import S3_READY
 
@@ -1970,7 +1979,7 @@ def run_terminal(
     from pf2e.ranger import HuntPrey, HuntedShot, HunterAim
     from pf2e.fighter import BrutishShove, CombatGrab, IntimidatingStrike, SnaggingStrike, SuddenCharge
     from pf2e.w4_offensive import DoubleSlice, ExactingStrike, TwinFeint, TwinTakedown
-    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, PointBlankStance
+    from pf2e.martial_defense import CraneStance, DismissCraneStance, DuelingParry, ExtravagantParry, PointBlankStance
 
     if input_fn is None:
         input_fn = input
@@ -2776,6 +2785,8 @@ def run_terminal(
                 )
                 if index is not None:
                     _run_command(game, DuelingParry(choices[index].attack_id), output_fn)
+            elif action_id == "extravagant_parry":
+                _run_command(game, ExtravagantParry(), output_fn)
             elif action_id == "crane_stance":
                 _run_command(game, CraneStance(), output_fn)
             elif action_id == "dismiss_crane_stance":
