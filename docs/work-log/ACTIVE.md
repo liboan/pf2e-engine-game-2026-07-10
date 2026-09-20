@@ -1,6 +1,8 @@
 # Content W5 recovery
 
-Status: **W4 fully accepted and published; W5 plan adopted; Arms has a runnable unreviewed delivery; all six remaining task creations remain blocked by an app config/read error.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
+Status: **W4 fully accepted and published; W5 plan adopted; Arms has a runnable unreviewed delivery; six remaining task creations are blocked by a confirmed stale model-catalog path.** Existing Astra/high coordinator `01a0bc89-010f-7f33-8ea1-e359e6ed6a93`, checkout `/Users/andrewlee/.codex/worktrees/d438/pf2e-engine-game-2026-07-10`, coordination branch `codex/content-w5-coordination`.
+
+User-requested [RCA](w5-task-creation-rca.md) supersedes the earlier unknown-error/restart advice: tracked `.codex/config.toml:1` points at a model catalog inside deleted old worktree `8bbe`. Automatic cleanup selected that worktree during Arms creation immediately before the first error. A fresh backend reproduces project config/read failure; a process-only override to the surviving byte-identical catalog makes it pass. No configuration changed during RCA. Next repair is the stale catalog dependency, preserving exact models, then verify config/read and resume pending assignments; restart alone is insufficient.
 
 Read [working model](../plan/04-delivery-and-checks.md) and [accepted-W4 handoff](../plan/08-content-w5-handoff.md). W4 accepted code/tests `1f4d09315a86f6fc9d71e51eef607e83eb68967c`, evidence child `ed8e86fe4d02b4e4e3bace40918d3fc3f9b86c8d`. Accepted W2 `a58424b0f9e0e515e302c149500624580c925780` and W3 `832d44b6816cd42d2c9cc9d3cfc2753d906774d1` verified ancestors. Coordinator merge preserves exact accepted src/tests/tools.
 
