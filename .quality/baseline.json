@@ -13,15 +13,15 @@
         "statements": 21718
       },
       "tests": {
-        "code_lines": 47644,
+        "code_lines": 47645,
         "definitions": 2126,
-        "statements": 32445
+        "statements": 32446
       }
     },
     "overall": {
-      "code_lines": 96904,
+      "code_lines": 96905,
       "definitions": 3303,
-      "statements": 55306
+      "statements": 55307
     }
   },
   "counting_convention": "token code lines; non-docstring ast.stmt; all sync/async function and method definitions",

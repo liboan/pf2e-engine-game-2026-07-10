@@ -196,16 +196,17 @@ def test_trusted_git_root_and_invalid_ref_fail_closed(
 ) -> None:
     trusted = tmp_path / "trusted"
     trusted.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=trusted, check=True)
+    git_env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    subprocess.run(["git", "init", "-q"], cwd=trusted, check=True, env=git_env)
     marker = trusted / "marker.txt"
     marker.write_text("trusted\n", encoding="utf-8")
-    subprocess.run(["git", "add", "marker.txt"], cwd=trusted, check=True)
+    subprocess.run(["git", "add", "marker.txt"], cwd=trusted, check=True, env=git_env)
     subprocess.run(
         ["git", "commit", "-q", "-m", "trusted"],
         cwd=trusted,
         check=True,
         env={
-            **os.environ,
+            **git_env,
             "GIT_AUTHOR_NAME": "Quality Test",
             "GIT_AUTHOR_EMAIL": "quality@example.invalid",
             "GIT_COMMITTER_NAME": "Quality Test",
