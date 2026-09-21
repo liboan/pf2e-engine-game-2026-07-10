@@ -31,13 +31,17 @@ jobs:
           cache-dependency-path: trusted/requirements-quality.txt
       - name: Install dependencies approved on the base
         run: python -m pip install -e trusted -r trusted/requirements-quality.txt
+      - name: Place trusted configs beside the proposed sources
+        run: |
+          cp trusted/.pylintrc proposed/.trusted-pylintrc
+          cp trusted/pyrightconfig.json proposed/.trusted-pyrightconfig.json
       - name: Run the base implementation against the proposed tree
         env:
           PF2E_REPO_ROOT: ${{ github.workspace }}/proposed
         run: >-
           python trusted/tools/quality_gate.py
           --trusted-ref ${{ github.event.pull_request.base.sha }}
-          --policy ${{ github.workspace }}/proposed/.quality/baseline.json
-          --pylint-config ${{ github.workspace }}/proposed/.pylintrc
-          --pyright-config ${{ github.workspace }}/proposed/pyrightconfig.json
+          --policy ${{ github.workspace }}/trusted/.quality/baseline.json
+          --pylint-config ${{ github.workspace }}/proposed/.trusted-pylintrc
+          --pyright-config ${{ github.workspace }}/proposed/.trusted-pyrightconfig.json
           --requirements ${{ github.workspace }}/trusted/requirements-quality.txt
