@@ -43,7 +43,7 @@ POLICY_FILES = (
     "tools/quality_gate.py",
 )
 COUNT_RE = re.compile(r"\((\d+)/(\d+)\)")
-DUPLICATE_RANGE_RE = re.compile(r":\[(\d+):(\d+)\]")
+DUPLICATE_HEADER_RE = re.compile(r"^==([\w.]+):\[(\d+):(\d+)\]$")
 
 
 def _run(command: list[str], *, env: Mapping[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -70,16 +70,59 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:20]
 
 
+def _significant_lines(path: Path, start: int = 0, end: int | None = None) -> list[str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()[start:end]
+    except OSError:
+        return []
+    return [" ".join(line.split()) for line in lines if line.strip() and not line.lstrip().startswith("#")]
+
+
+def _longest_common_block(sequences: Sequence[Sequence[str]]) -> tuple[str, ...]:
+    if not sequences or any(not sequence for sequence in sequences):
+        return ()
+    shortest = min(sequences, key=len)
+    for size in range(len(shortest), 5, -1):
+        for start in range(len(shortest) - size + 1):
+            candidate = tuple(shortest[start : start + size])
+            if all(
+                any(tuple(sequence[index : index + size]) == candidate for index in range(len(sequence) - size + 1))
+                for sequence in sequences
+            ):
+                return candidate
+    return ()
+
+
+def _duplicate_signature(item: Mapping[str, Any]) -> tuple[str, int]:
+    ranges: list[tuple[str, int, int]] = []
+    for line in str(item["message"]).splitlines():
+        match = DUPLICATE_HEADER_RE.match(line)
+        if match:
+            ranges.append((match.group(1), int(match.group(2)), int(match.group(3))))
+    sequences = [
+        _significant_lines(REPO_ROOT / (module.replace(".", "/") + ".py"), start, end)
+        for module, start, end in ranges
+    ]
+    common = _longest_common_block(sequences)
+    if common:
+        occurrences = 0
+        for path in (REPO_ROOT / "src").rglob("*.py"):
+            sequence = _significant_lines(path)
+            occurrences += sum(
+                tuple(sequence[index : index + len(common)]) == common
+                for index in range(len(sequence) - len(common) + 1)
+            )
+        return f"R0801:{_digest(chr(10).join(common))}", len(common) * max(occurrences - 1, 1)
+
+    modules = sorted(module for module, _start, _end in ranges)
+    spans = [end - start for _module, start, end in ranges]
+    return f"R0801:{_digest(':'.join(modules))}", min(spans, default=1) * max(len(ranges) - 1, 1)
+
+
 def pylint_fingerprint(item: Mapping[str, Any]) -> str:
     message_id = str(item["messageId"])
     if message_id == "R0801":
-        modules = sorted(
-            line.split(":", 1)[0].removeprefix("==")
-            for line in str(item["message"]).splitlines()
-            if line.startswith("==")
-        )
-        stable = ":".join(modules)
-        return f"{message_id}:{_digest(stable)}"
+        return _duplicate_signature(item)[0]
     return ":".join(
         (message_id, _relative(str(item["path"])), str(item.get("obj", "")))
     )
@@ -90,17 +133,7 @@ def pylint_debt(messages: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, An
     for item in messages:
         fingerprint = pylint_fingerprint(item)
         match = COUNT_RE.search(str(item["message"]))
-        duplicate_ranges = [
-            (int(found.group(1)), int(found.group(2)))
-            for line in str(item["message"]).splitlines()
-            if line.startswith("==") and (found := DUPLICATE_RANGE_RE.search(line))
-        ]
-        duplicate_size = (
-            min(end - start for start, end in duplicate_ranges)
-            * max(len(duplicate_ranges) - 1, 1)
-            if duplicate_ranges
-            else 1
-        )
+        duplicate_size = _duplicate_signature(item)[1]
         record = {
             "path": _relative(str(item["path"])),
             "symbol": str(item.get("obj", "")),
@@ -108,7 +141,7 @@ def pylint_debt(messages: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, An
             "actual": int(match.group(1)) if match else duplicate_size,
         }
         if fingerprint in debt and record["rule"] == "R0801":
-            record["actual"] += debt[fingerprint]["actual"]
+            record["actual"] = max(record["actual"], debt[fingerprint]["actual"])
         debt[fingerprint] = record
     return debt
 

@@ -3,9 +3,9 @@
   "budgets": {
     "groups": {
       "maintenance": {
-        "code_lines": 1497,
-        "definitions": 84,
-        "statements": 1145
+        "code_lines": 1523,
+        "definitions": 87,
+        "statements": 1174
       },
       "production": {
         "code_lines": 47768,
@@ -19,9 +19,9 @@
       }
     },
     "overall": {
-      "code_lines": 96910,
-      "definitions": 3304,
-      "statements": 55309
+      "code_lines": 96936,
+      "definitions": 3307,
+      "statements": 55338
     }
   },
   "counting_convention": "token code lines; non-docstring ast.stmt; all sync/async function and method definitions",
@@ -42,22 +42,22 @@
     "R0801:164b8ae99aee221d5752": 13,
     "R0801:1b60e528a6ff6a753a67": 7,
     "R0801:1d13bf4c035a31ee9b30": 13,
-    "R0801:32179c1f85ac6ad9b484": 27,
+    "R0801:32179c1f85ac6ad9b484": 10,
     "R0801:3cf42361216c09a2acbd": 8,
     "R0801:404db4cd46e386f9cafb": 16,
     "R0801:450f8384d3a516341086": 17,
     "R0801:4e90e8373245fc9c82b6": 9,
     "R0801:4fe99c5fe1b07714ecec": 7,
-    "R0801:5b9f10e91f9c5d097a02": 16,
+    "R0801:5b9f10e91f9c5d097a02": 9,
     "R0801:69019166c58116db5749": 7,
     "R0801:70f27b5963fef9669aa6": 14,
-    "R0801:8539f07a063a16f550fe": 25,
+    "R0801:8539f07a063a16f550fe": 15,
     "R0801:85b81295008d9080e740": 7,
     "R0801:b7ce9eda412a66e2a95e": 7,
     "R0801:b855f4132990287e7a7d": 8,
     "R0801:c1354652d463b02d1aa4": 15,
     "R0801:de1d61973f49e65aed08": 7,
-    "R0801:effbb3eb6325a243d5e9": 19,
+    "R0801:effbb3eb6325a243d5e9": 10,
     "R0904:src/pf2e/encounter.py:Encounter": 34,
     "R0904:src/pf2e/model.py:FamilyProcedureContext": 26,
     "R0912:src/pf2e/alchemy.py:AlchemyState.__post_init__": 20,
