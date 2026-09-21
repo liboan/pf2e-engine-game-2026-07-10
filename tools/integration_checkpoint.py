@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Run one bounded integration checkpoint with local health metrics.
+"""Run one bounded integration checkpoint with quality and health metrics.
 
-The checkpoint is deliberately serial: compile, the full pytest suite, and
-the whitespace check run as separate child processes.  The test child is
-timed and its peak resident set size is reported using ``resource``.
+The checkpoint is deliberately serial: the ratcheted quality gate, compile,
+the full pytest suite, and the whitespace check run as separate child
+processes. The test child is timed and its peak resident set size is reported
+using ``resource``.
 """
 
 from __future__ import annotations
@@ -32,6 +33,13 @@ def run(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
+    quality_command = [sys.executable, "tools/quality_gate.py"]
+    quality_result = run(quality_command)
+    print(f"quality_exit={quality_result.returncode}")
+    print(quality_result.stdout, end="")
+    if quality_result.returncode:
+        return quality_result.returncode
+
     compile_result = run([sys.executable, "-m", "compileall", "-q", "src"])
     print(f"compile_exit={compile_result.returncode}")
     if compile_result.returncode:

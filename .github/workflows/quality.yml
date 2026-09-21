@@ -1,0 +1,29 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-quality.txt
+      - name: Install pinned gate dependencies
+        run: python -m pip install -e . -r requirements-quality.txt
+      - name: Run complete integration gate
+        env:
+          PF2E_TRUSTED_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python tools/integration_checkpoint.py
