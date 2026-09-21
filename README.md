@@ -81,6 +81,20 @@ The 16 added encounter routes are split across five focused modules so a changed
 .venv/bin/python -m pytest -q
 ```
 
+Acceptance also requires the checked-in quality and size gate. Install its
+pinned dependencies and the worktree-local pre-push hook, then run the same
+complete checkpoint used by CI:
+
+```text
+.venv/bin/python -m pip install -r requirements-quality.txt
+.venv/bin/python tools/install_git_hooks.py
+PYTHONPATH=src .venv/bin/python tools/integration_checkpoint.py
+```
+
+See [code-size and quality enforcement](docs/quality-enforcement.md) for the
+measured budgets, trusted-policy ratchet, hook safety, and consolidation-target
+process.
+
 ## Current direction
 
 - [Product and interface](docs/plan/01-product-and-interface.md)

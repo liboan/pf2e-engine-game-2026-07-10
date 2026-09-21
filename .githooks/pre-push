@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+if [ -x .venv/bin/python ]; then
+    python=.venv/bin/python
+else
+    python=python3
+fi
+
+if ! "$python" -c 'import pylint, pyright, pytest' >/dev/null 2>&1; then
+    echo "pre-push: quality dependencies are missing" >&2
+    echo "run: $python -m pip install -r requirements-quality.txt" >&2
+    exit 1
+fi
+
+trusted_ref=${PF2E_TRUSTED_BASE:-origin/main}
+echo "pre-push: running complete integration gate against trusted policy $trusted_ref"
+PF2E_TRUSTED_BASE="$trusted_ref" "$python" tools/integration_checkpoint.py

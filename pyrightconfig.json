@@ -1,0 +1,14 @@
+{
+  "include": ["src", "tests", "tools"],
+  "exclude": [".venv", "build", "dist"],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "basic",
+  "reportPrivateUsage": "error",
+  "strict": [
+    "tools/quality_budget.py",
+    "tools/quality_gate.py",
+    "tools/install_git_hooks.py",
+    "tests/test_quality_budget.py"
+  ]
+}

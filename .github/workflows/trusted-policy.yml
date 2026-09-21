@@ -1,0 +1,63 @@
+name: trusted-policy
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  approved-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          path: trusted
+      - name: Check out proposed tree as data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          path: proposed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: trusted/requirements-quality.txt
+      - name: Install dependencies approved on the base
+        run: python -m pip install -e trusted -r trusted/requirements-quality.txt
+      - name: Place trusted configs beside the proposed sources
+        run: |
+          config_dir=$(mktemp -d "${{ github.workspace }}/proposed/.trusted-config.XXXXXX")
+          cp trusted/.pylintrc "$config_dir/.pylintrc"
+          TRUSTED_CONFIG_DIR="$config_dir" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          destination = Path(os.environ["TRUSTED_CONFIG_DIR"]) / "pyrightconfig.json"
+          payload = json.loads(Path("trusted/pyrightconfig.json").read_text())
+          for key in ("include", "exclude", "strict"):
+              if key in payload:
+                  payload[key] = [f"../{path}" for path in payload[key]]
+          payload["executionEnvironments"] = [{"root": "..", "extraPaths": ["../src"]}]
+          destination.write_text(json.dumps(payload))
+          PY
+          echo "TRUSTED_PYLINT_CONFIG=$config_dir/.pylintrc" >> "$GITHUB_ENV"
+          echo "TRUSTED_PYRIGHT_CONFIG=$config_dir/pyrightconfig.json" >> "$GITHUB_ENV"
+      - name: Run the base implementation against the proposed tree
+        env:
+          PF2E_REPO_ROOT: ${{ github.workspace }}/proposed
+          PF2E_TRUSTED_GIT_ROOT: ${{ github.workspace }}/trusted
+        run: >-
+          python trusted/tools/quality_gate.py
+          --trusted-ref ${{ github.event.pull_request.base.sha }}
+          --policy ${{ github.workspace }}/trusted/.quality/baseline.json
+          --pylint-config "$TRUSTED_PYLINT_CONFIG"
+          --pyright-config "$TRUSTED_PYRIGHT_CONFIG"
+          --requirements ${{ github.workspace }}/trusted/requirements-quality.txt

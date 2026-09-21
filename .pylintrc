@@ -1,0 +1,25 @@
+[MASTER]
+persistent=no
+
+[MESSAGES CONTROL]
+disable=all
+enable=too-many-lines,too-many-public-methods,too-many-statements,too-many-branches,duplicate-code
+
+[REPORTS]
+reports=no
+score=no
+
+[FORMAT]
+max-module-lines=600
+
+[DESIGN]
+max-public-methods=20
+max-statements=50
+max-branches=12
+
+[SIMILARITIES]
+min-similarity-lines=6
+ignore-comments=yes
+ignore-docstrings=yes
+ignore-imports=yes
+ignore-signatures=yes
