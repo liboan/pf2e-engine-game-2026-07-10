@@ -297,30 +297,27 @@ def run_trusted_gate(ref: str, *, allow_version_drift: bool) -> subprocess.Compl
             destination = root / path
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)
-        pyright_path = root / "pyrightconfig.json"
-        pyright_payload = json.loads(pyright_path.read_text(encoding="utf-8"))
-        for key in ("include", "exclude", "strict"):
-            if key in pyright_payload:
-                pyright_payload[key] = [
-                    str((REPO_ROOT / value).resolve()) for value in pyright_payload[key]
-                ]
-        pyright_path.write_text(json.dumps(pyright_payload), encoding="utf-8")
-        command = [
-            sys.executable,
-            str(root / "tools/quality_gate.py"),
-            "--no-trusted",
-            "--policy",
-            str(root / ".quality/baseline.json"),
-            "--pylint-config",
-            str(root / ".pylintrc"),
-            "--pyright-config",
-            str(pyright_path),
-            "--requirements",
-            str(root / "requirements-quality.txt"),
-        ]
-        if allow_version_drift:
-            command.append("--allow-version-drift")
-        return _run(command, env={**os.environ, "PF2E_REPO_ROOT": str(REPO_ROOT)})
+        with tempfile.NamedTemporaryFile(
+            dir=REPO_ROOT, prefix=".trusted-pyright-", suffix=".json"
+        ) as pyright_file:
+            pyright_file.write((root / "pyrightconfig.json").read_bytes())
+            pyright_file.flush()
+            command = [
+                sys.executable,
+                str(root / "tools/quality_gate.py"),
+                "--no-trusted",
+                "--policy",
+                str(root / ".quality/baseline.json"),
+                "--pylint-config",
+                str(root / ".pylintrc"),
+                "--pyright-config",
+                pyright_file.name,
+                "--requirements",
+                str(root / "requirements-quality.txt"),
+            ]
+            if allow_version_drift:
+                command.append("--allow-version-drift")
+            return _run(command, env={**os.environ, "PF2E_REPO_ROOT": str(REPO_ROOT)})
 
 
 def compare_debt(
