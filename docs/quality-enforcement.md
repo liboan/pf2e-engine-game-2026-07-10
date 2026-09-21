@@ -64,7 +64,8 @@ approved implementation disappear from the normal gate. The one-time bootstrap
 is allowed only when the trusted base has no baseline.
 
 Enforcement-code and configuration changes use two reviewable steps. First, a
-baseline-only change adds the exact SHA-256 of each intended future file to
+baseline-only change adds the exact SHA-256 of each intended future Git entry
+(canonical mode plus bytes) to
 `approved_policy_hashes`; it must pass the old gate and be independently
 reviewed. After that authorization is on the trusted base, a second change may
 apply exactly those bytes and should remove the spent authorization. Unapproved

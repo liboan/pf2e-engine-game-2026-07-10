@@ -10,6 +10,7 @@ import importlib.metadata
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ from typing import Any, cast
 
 SCRIPT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(os.environ.get("PF2E_REPO_ROOT", SCRIPT_ROOT)).resolve()
+TRUSTED_GIT_ROOT = Path(os.environ.get("PF2E_TRUSTED_GIT_ROOT", REPO_ROOT)).resolve()
 sys.path.insert(0, str(SCRIPT_ROOT))
 
 from tools.quality_budget import compare_metrics, load_policy, measure_repository  # noqa: E402
@@ -227,10 +229,10 @@ def collect_pair(
         return pylint_future.result(), pyright_future.result()
 
 
-def _git_show(ref: str, path: str) -> bytes | None:
+def git_show(ref: str, path: str) -> bytes | None:
     result = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
-        cwd=REPO_ROOT,
+        cwd=TRUSTED_GIT_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         check=False,
@@ -238,14 +240,60 @@ def _git_show(ref: str, path: str) -> bytes | None:
     return result.stdout if result.returncode == 0 else None
 
 
-def _content_hash(content: bytes | None) -> str:
-    return "<deleted>" if content is None else hashlib.sha256(content).hexdigest()
+def git_ref_exists(ref: str) -> bool:
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}^{{commit}}"],
+        cwd=TRUSTED_GIT_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _git_entry(ref: str, path: str) -> tuple[str, bytes] | None:
+    result = subprocess.run(
+        ["git", "ls-tree", ref, "--", path],
+        cwd=TRUSTED_GIT_ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if result.returncode or not result.stdout.strip():
+        return None
+    metadata, listed_path = result.stdout.rstrip("\n").split("\t", 1)
+    mode, object_type, _object_id = metadata.split()
+    if listed_path != path or object_type != "blob":
+        return mode, b""
+    return mode, git_show(ref, path) or b""
+
+
+def working_policy_entry(path: str) -> tuple[str, bytes] | None:
+    candidate = REPO_ROOT / path
+    try:
+        details = candidate.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(details.st_mode):
+        return "120000", os.readlink(candidate).encode("utf-8")
+    if not stat.S_ISREG(details.st_mode):
+        return "000000", b""
+    mode = "100755" if details.st_mode & 0o111 else "100644"
+    return mode, candidate.read_bytes()
+
+
+def policy_entry_hash(entry: tuple[str, bytes] | None) -> str:
+    if entry is None:
+        return "<deleted>"
+    mode, content = entry
+    return hashlib.sha256(mode.encode("ascii") + b"\0" + content).hexdigest()
 
 
 def approved_policy(ref: str | None) -> dict[str, Any] | None:
     if not ref:
         return None
-    baseline = _git_show(ref, ".quality/baseline.json")
+    baseline = git_show(ref, ".quality/baseline.json")
     if baseline is None:
         print(f"policy trust: {ref} has no baseline; allowing one-time bootstrap")
         return None
@@ -258,13 +306,12 @@ def policy_change_failures(ref: str, policy: Mapping[str, Any]) -> tuple[list[st
     approvals = cast(Mapping[str, str], policy.get("approved_policy_hashes", {}))
     changed: list[str] = []
     for path in POLICY_FILES:
-        base_content = _git_show(ref, path)
-        current_path = REPO_ROOT / path
-        current_content = current_path.read_bytes() if current_path.exists() else None
-        if base_content == current_content:
+        base_entry = _git_entry(ref, path)
+        current_entry = working_policy_entry(path)
+        if base_entry == current_entry:
             continue
         changed.append(path)
-        actual_hash = _content_hash(current_content)
+        actual_hash = policy_entry_hash(current_entry)
         if approvals.get(path) != actual_hash:
             failures.append(
                 f"unauthorized policy change {path}; first approve hash {actual_hash} in a separate baseline-only change"
@@ -289,7 +336,7 @@ def run_trusted_gate(ref: str, *, allow_version_drift: bool) -> subprocess.Compl
     with tempfile.TemporaryDirectory(prefix="pf2e-trusted-gate-") as directory:
         root = Path(directory)
         for path in required:
-            content = _git_show(ref, path)
+            content = git_show(ref, path)
             if content is None:
                 return subprocess.CompletedProcess(
                     args=[], returncode=2, stdout=f"trusted policy is missing {path}\n", stderr=""
@@ -390,7 +437,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--source-revision", help="named source revision for a new baseline")
     args = parser.parse_args(argv)
 
+    trusted_ref = None if args.no_trusted else args.trusted_ref
+    if trusted_ref and not git_ref_exists(trusted_ref):
+        print(f"ERROR: trusted ref does not resolve to a commit: {trusted_ref}")
+        return 2
     failures = version_failures(args.requirements, allow_drift=args.allow_version_drift)
+    hook_entry = working_policy_entry(".githooks/pre-push")
+    if hook_entry is None or hook_entry[0] != "100755":
+        failures.append(".githooks/pre-push must be a regular executable file (Git mode 100755)")
     pylint_result, pyright_result = collect_pair(args.pylint_config, args.pyright_config)
     pylint_exit, pylint_messages, pylint_error = pylint_result
     pyright_exit, pyright_messages, pyright_error = pyright_result
@@ -410,12 +464,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return bool(failures)
 
     policy = load_policy(args.policy)
-    trusted_ref = None if args.no_trusted else args.trusted_ref
     approved = approved_policy(trusted_ref)
     baseline_changed = bool(
         trusted_ref
         and approved is not None
-        and _git_show(trusted_ref, ".quality/baseline.json") != args.policy.read_bytes()
+        and git_show(trusted_ref, ".quality/baseline.json") != args.policy.read_bytes()
     )
     failures.extend(compare_debt(pylint_debt(pylint_messages), pyright_debt(pyright_messages), policy))
     failures.extend(
