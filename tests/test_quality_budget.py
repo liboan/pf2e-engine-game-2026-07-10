@@ -156,6 +156,49 @@ def test_duplicate_debt_measures_span_and_participant_growth() -> None:
     assert extra_participant["actual"] == 12
 
 
+def test_duplicate_fingerprint_uses_content_across_pylint_groupings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(quality_gate, "REPO_ROOT", tmp_path)
+    package = tmp_path / "src" / "pf2e"
+    package.mkdir(parents=True)
+    block = "\n".join(f"value_{index} = shared({index})" for index in range(6)) + "\n"
+    for name in ("alpha", "beta", "gamma"):
+        (package / f"{name}.py").write_text(block, encoding="utf-8")
+
+    def diagnostic(left: str, right: str) -> dict[str, Any]:
+        return {
+            "messageId": "R0801",
+            "message": (
+                "Similar lines in 2 files\n"
+                f"==pf2e.{left}:[0:6]\n"
+                f"==pf2e.{right}:[0:6]\n"
+                f"{block}"
+            ),
+            "path": f"src/pf2e/{left}.py",
+            "obj": "",
+        }
+
+    alpha_beta = pylint_debt([diagnostic("alpha", "beta")])
+    alpha_gamma = pylint_debt([diagnostic("alpha", "gamma")])
+    assert set(alpha_beta) == set(alpha_gamma)
+    assert next(iter(alpha_beta.values()))["actual"] == 12
+
+    (package / "delta.py").write_text(block, encoding="utf-8")
+    with_new_participant = pylint_debt([diagnostic("alpha", "beta")])
+    assert next(iter(with_new_participant.values()))["actual"] == 18
+
+
+def test_duplicate_common_block_tie_break_is_order_independent() -> None:
+    alpha = [f"alpha-{index}" for index in range(6)]
+    beta = [f"beta-{index}" for index in range(6)]
+    first = [*alpha, "first-only", *beta]
+    second = [*beta, "second-only", *alpha]
+
+    assert quality_gate.longest_common_block([first, second]) == tuple(alpha)
+    assert quality_gate.longest_common_block([second, first]) == tuple(alpha)
+
+
 def test_quality_requirements_require_exact_pins(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     requirements.write_text("pylint==4.0.8\npyright==1.1.414\n", encoding="utf-8")

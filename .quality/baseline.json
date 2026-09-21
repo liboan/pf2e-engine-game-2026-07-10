@@ -3,9 +3,9 @@
   "budgets": {
     "groups": {
       "maintenance": {
-        "code_lines": 1523,
+        "code_lines": 1532,
         "definitions": 87,
-        "statements": 1174
+        "statements": 1173
       },
       "production": {
         "code_lines": 47768,
@@ -13,15 +13,15 @@
         "statements": 21718
       },
       "tests": {
-        "code_lines": 47645,
-        "definitions": 2126,
-        "statements": 32446
+        "code_lines": 47680,
+        "definitions": 2129,
+        "statements": 32469
       }
     },
     "overall": {
-      "code_lines": 96936,
-      "definitions": 3307,
-      "statements": 55338
+      "code_lines": 96980,
+      "definitions": 3310,
+      "statements": 55360
     }
   },
   "counting_convention": "token code lines; non-docstring ast.stmt; all sync/async function and method definitions",
@@ -39,25 +39,29 @@
     "C0302:src/pf2e/persistence.py:": 5652,
     "C0302:src/pf2e/skill_actions.py:": 2853,
     "C0302:src/pf2e/terminal.py:": 3464,
-    "R0801:164b8ae99aee221d5752": 13,
-    "R0801:1b60e528a6ff6a753a67": 7,
-    "R0801:1d13bf4c035a31ee9b30": 13,
-    "R0801:32179c1f85ac6ad9b484": 10,
-    "R0801:3cf42361216c09a2acbd": 8,
-    "R0801:404db4cd46e386f9cafb": 16,
-    "R0801:450f8384d3a516341086": 17,
-    "R0801:4e90e8373245fc9c82b6": 9,
-    "R0801:4fe99c5fe1b07714ecec": 7,
-    "R0801:5b9f10e91f9c5d097a02": 9,
-    "R0801:69019166c58116db5749": 7,
-    "R0801:70f27b5963fef9669aa6": 14,
-    "R0801:8539f07a063a16f550fe": 15,
-    "R0801:85b81295008d9080e740": 7,
-    "R0801:b7ce9eda412a66e2a95e": 7,
-    "R0801:b855f4132990287e7a7d": 8,
-    "R0801:c1354652d463b02d1aa4": 15,
-    "R0801:de1d61973f49e65aed08": 7,
-    "R0801:effbb3eb6325a243d5e9": 10,
+    "R0801:088f6623e3d293667423": 10,
+    "R0801:0ec120139a96f63dd9e5": 7,
+    "R0801:0fd185cf2bc7be1d3aa0": 8,
+    "R0801:15d17587b192adb6439c": 30,
+    "R0801:1fcaa8f7a651c1edc53d": 15,
+    "R0801:3e731b23dc0f35934dea": 7,
+    "R0801:45b9c80cc946e685beb4": 8,
+    "R0801:6246540bab60231fef5a": 33,
+    "R0801:741f2f7e01a038bd6344": 10,
+    "R0801:794472fc953bebd4d6fb": 9,
+    "R0801:7a3830b839ff587146e5": 7,
+    "R0801:8062efb68949d403522d": 14,
+    "R0801:85c50d489461fbda4f3b": 7,
+    "R0801:9006078e5715fb174604": 18,
+    "R0801:b989a18dde8c505cabd3": 17,
+    "R0801:bbdf0a828369c7fb6e36": 7,
+    "R0801:c137dfe8738a322d8c96": 21,
+    "R0801:c74fbee6a762e5fe6f44": 32,
+    "R0801:ce3c4d1260bc5bffd136": 8,
+    "R0801:d4a3eb45208527ca71ce": 14,
+    "R0801:e6741c7d52d59f0af0ab": 26,
+    "R0801:f9067478922e9a9c2123": 9,
+    "R0801:fa5e36108a5efe71869c": 14,
     "R0904:src/pf2e/encounter.py:Encounter": 34,
     "R0904:src/pf2e/model.py:FamilyProcedureContext": 26,
     "R0912:src/pf2e/alchemy.py:AlchemyState.__post_init__": 20,

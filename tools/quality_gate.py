@@ -78,18 +78,25 @@ def _significant_lines(path: Path, start: int = 0, end: int | None = None) -> li
     return [" ".join(line.split()) for line in lines if line.strip() and not line.lstrip().startswith("#")]
 
 
-def _longest_common_block(sequences: Sequence[Sequence[str]]) -> tuple[str, ...]:
+def longest_common_block(sequences: Sequence[Sequence[str]]) -> tuple[str, ...]:
     if not sequences or any(not sequence for sequence in sequences):
         return ()
-    shortest = min(sequences, key=len)
-    for size in range(len(shortest), 5, -1):
-        for start in range(len(shortest) - size + 1):
-            candidate = tuple(shortest[start : start + size])
+    for size in range(min(map(len, sequences)), 5, -1):
+        candidates = {
+            tuple(sequence[start : start + size])
+            for sequence in sequences
+            for start in range(len(sequence) - size + 1)
+        }
+        shared = [
+            candidate
+            for candidate in candidates
             if all(
                 any(tuple(sequence[index : index + size]) == candidate for index in range(len(sequence) - size + 1))
                 for sequence in sequences
-            ):
-                return candidate
+            )
+        ]
+        if shared:
+            return min(shared)
     return ()
 
 
@@ -100,10 +107,12 @@ def _duplicate_signature(item: Mapping[str, Any]) -> tuple[str, int]:
         if match:
             ranges.append((match.group(1), int(match.group(2)), int(match.group(3))))
     sequences = [
-        _significant_lines(REPO_ROOT / (module.replace(".", "/") + ".py"), start, end)
+        _significant_lines(
+            REPO_ROOT / "src" / (module.replace(".", "/") + ".py"), start, end
+        )
         for module, start, end in ranges
     ]
-    common = _longest_common_block(sequences)
+    common = longest_common_block(sequences)
     if common:
         occurrences = 0
         for path in (REPO_ROOT / "src").rglob("*.py"):
