@@ -3,9 +3,9 @@
   "budgets": {
     "groups": {
       "maintenance": {
-        "code_lines": 1492,
-        "definitions": 83,
-        "statements": 1143
+        "code_lines": 1497,
+        "definitions": 84,
+        "statements": 1145
       },
       "production": {
         "code_lines": 47768,
@@ -19,9 +19,9 @@
       }
     },
     "overall": {
-      "code_lines": 96905,
-      "definitions": 3303,
-      "statements": 55307
+      "code_lines": 96910,
+      "definitions": 3304,
+      "statements": 55309
     }
   },
   "counting_convention": "token code lines; non-docstring ast.stmt; all sync/async function and method definitions",

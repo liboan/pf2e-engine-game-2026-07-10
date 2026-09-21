@@ -229,12 +229,19 @@ def collect_pair(
         return pylint_future.result(), pyright_future.result()
 
 
+def git_environment() -> dict[str, str]:
+    """Return an environment free of Git's caller/repository-local overrides."""
+
+    return {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+
+
 def git_show(ref: str, path: str) -> bytes | None:
     result = subprocess.run(
         ["git", "show", f"{ref}:{path}"],
         cwd=TRUSTED_GIT_ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
+        env=git_environment(),
         check=False,
     )
     return result.stdout if result.returncode == 0 else None
@@ -246,6 +253,7 @@ def git_ref_exists(ref: str) -> bool:
         cwd=TRUSTED_GIT_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=git_environment(),
         check=False,
     )
     return result.returncode == 0
@@ -258,6 +266,7 @@ def _git_entry(ref: str, path: str) -> tuple[str, bytes] | None:
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
+        env=git_environment(),
         check=False,
     )
     if result.returncode or not result.stdout.strip():
